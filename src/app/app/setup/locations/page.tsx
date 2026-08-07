@@ -1,0 +1,212 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import {
+  MapPin,
+  PencilSimple,
+  Plus,
+  Trash,
+} from "@phosphor-icons/react";
+import { useData } from "@/hooks/use-db";
+import { newUid } from "@/lib/mock/store";
+import type { Location } from "@/types";
+import { PageHeader } from "@/components/ui/page-header";
+import { RoleGuard } from "@/components/ui/role-guard";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Modal } from "@/components/ui/modal";
+import { Table, Td } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+
+export default function LocationsPage() {
+  const { db, insert, update, remove } = useData();
+  const [warehouseFilter, setWarehouseFilter] = useState("all");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Location | null>(null);
+  const [form, setForm] = useState({ code: "", name: "", warehouseId: "" });
+  const [error, setError] = useState("");
+
+  const locations = useMemo(() => {
+    return db.locations
+      .filter((l) => warehouseFilter === "all" || l.warehouseId === warehouseFilter)
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }, [db, warehouseFilter]);
+
+  const warehouseOf = (id: string) => db.warehouses.find((w) => w.id === id);
+  const branchOf = (branchId: string) => db.branches.find((b) => b.id === branchId);
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({
+      code: "",
+      name: "",
+      warehouseId: db.warehouses[0]?.id ?? "",
+    });
+    setError("");
+    setOpen(true);
+  };
+
+  const openEdit = (loc: Location) => {
+    setEditing(loc);
+    setForm({ code: loc.code, name: loc.name, warehouseId: loc.warehouseId });
+    setError("");
+    setOpen(true);
+  };
+
+  const save = async () => {
+    if (!form.code.trim() || !form.warehouseId) {
+      setError("Kode lokasi dan gudang wajib diisi.");
+      return;
+    }
+    if (
+      db.locations.some(
+        (l) =>
+          l.code.toLowerCase() === form.code.trim().toLowerCase() &&
+          l.id !== editing?.id
+      )
+    ) {
+      setError("Kode lokasi sudah digunakan.");
+      return;
+    }
+    const err = editing
+      ? await update("locations", editing.id, { ...form })
+      : await insert("locations", { ...form, id: newUid("loc") });
+    if (err) {
+      setError(err);
+      return;
+    }
+    setOpen(false);
+  };
+
+  const handleRemove = async (loc: Location) => {
+    if (!confirm(`Hapus lokasi "${loc.code}"?`)) return;
+    const err = await remove("locations", loc.id);
+    if (err) setError(err);
+  };
+
+  return (
+    <RoleGuard roles={["ADMIN"]}>
+      <PageHeader
+        eyebrow="Setup"
+        title="Lokasi Gudang"
+        description="Kode rak / bin yang dipakai saat sesi scan berlangsung, contoh: H1 AB1."
+        actions={
+          <Button variant="secondary" onClick={openCreate}>
+            <Plus size={15} weight="bold" />
+            Tambah Lokasi
+          </Button>
+        }
+      />
+
+      <div className="mb-5">
+        <Select
+          value={warehouseFilter}
+          onChange={(e) => setWarehouseFilter(e.target.value)}
+          className="sm:w-64"
+        >
+          <option value="all">Semua gudang</option>
+          {db.warehouses.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.code} — {w.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      {locations.length === 0 ? (
+        <EmptyState
+          icon={<MapPin size={26} weight="bold" />}
+          title="Belum ada lokasi"
+          description="Tambahkan lokasi rak/bin untuk menandai area pada sesi scan."
+        />
+      ) : (
+        <div className="rounded-2xl border border-zinc-200/70 bg-white">
+          <Table columns={["Kode Lokasi", "Nama", "Gudang", "Cabang", ""]}>
+            {locations.map((loc) => {
+              const wh = warehouseOf(loc.warehouseId);
+              return (
+                <tr key={loc.id} className="transition-colors hover:bg-zinc-50/60">
+                  <Td mono>{loc.code}</Td>
+                  <Td className="text-[13.5px]">{loc.name}</Td>
+                  <Td>
+                    <Badge tone="neutral">{wh?.code ?? "—"}</Badge>
+                  </Td>
+                  <Td className="text-[12.5px] text-zinc-500">
+                    {branchOf(wh?.branchId ?? "")?.name ?? "—"}
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => openEdit(loc)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+                      >
+                        <PencilSimple size={15} weight="bold" />
+                      </button>
+                      <button
+                        onClick={() => handleRemove(loc)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash size={15} weight="bold" />
+                      </button>
+                    </div>
+                  </Td>
+                </tr>
+              );
+            })}
+          </Table>
+        </div>
+      )}
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={editing ? "Edit Lokasi" : "Tambah Lokasi"}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Batal
+            </Button>
+            <Button variant="secondary" onClick={save}>
+              Simpan
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Kode lokasi"
+            placeholder="H1 AB1"
+            value={form.code}
+            onChange={(e) => setForm({ ...form, code: e.target.value })}
+          />
+          <Select
+            label="Gudang"
+            value={form.warehouseId}
+            onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
+          >
+            {db.warehouses.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.code} — {w.name}
+              </option>
+            ))}
+          </Select>
+          <div className="sm:col-span-2">
+            <Input
+              label="Nama lokasi (opsional)"
+              placeholder="Rak H1, Blok A, Lorong 1"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </div>
+        </div>
+        {error && (
+          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-[12.5px] text-red-600">
+            {error}
+          </p>
+        )}
+      </Modal>
+    </RoleGuard>
+  );
+}
