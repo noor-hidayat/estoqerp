@@ -15,7 +15,7 @@ export function PanelSkeleton() {
       {Array.from({ length: 3 }).map((_, i) => (
         <div
           key={i}
-          className="h-32 animate-pulse rounded-2xl bg-zinc-200/70"
+          className="h-32 animate-pulse rounded-lg bg-zinc-200/70"
         />
       ))}
     </div>

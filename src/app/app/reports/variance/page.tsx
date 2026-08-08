@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FilePdf, FileXls, Warning } from "@phosphor-icons/react";
+import { FileDown, FileSpreadsheet, TriangleAlert } from "lucide-react";
 import { useDB } from "@/hooks/use-db";
 import { projectCounted } from "@/lib/compute";
 import { formatNumber } from "@/lib/utils";
@@ -90,7 +90,7 @@ export default function VarianceReportPage() {
             <button
               onClick={() => setMode("diff")}
               className={cx(
-                "rounded-full px-4 py-2 text-[12.5px] font-medium transition-colors",
+                "rounded-md px-4 py-2 text-[12.5px] font-medium transition-colors",
                 mode === "diff"
                   ? "bg-zinc-900 text-white"
                   : "bg-white text-zinc-500 ring-1 ring-zinc-200 hover:text-zinc-800"
@@ -101,7 +101,7 @@ export default function VarianceReportPage() {
             <button
               onClick={() => setMode("all")}
               className={cx(
-                "rounded-full px-4 py-2 text-[12.5px] font-medium transition-colors",
+                "rounded-md px-4 py-2 text-[12.5px] font-medium transition-colors",
                 mode === "all"
                   ? "bg-zinc-900 text-white"
                   : "bg-white text-zinc-500 ring-1 ring-zinc-200 hover:text-zinc-800"
@@ -113,11 +113,11 @@ export default function VarianceReportPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
-            <FileXls size={15} weight="bold" className="text-emerald-600" />
+            <FileSpreadsheet size={15} strokeWidth={2.2} className="text-emerald-600" />
             Export Excel
           </Button>
           <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
-            <FilePdf size={15} weight="bold" className="text-red-500" />
+            <FileDown size={15} strokeWidth={2.2} className="text-red-500" />
             Export PDF
           </Button>
         </div>
@@ -125,12 +125,12 @@ export default function VarianceReportPage() {
 
       {rows.length === 0 ? (
         <EmptyState
-          icon={<Warning size={26} weight="bold" />}
+          icon={<TriangleAlert size={26} strokeWidth={2} />}
           title="Tidak ada selisih"
           description="Belum ada item dengan variance pada filter ini."
         />
       ) : (
-        <div className="rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="rounded-lg border border-zinc-200 bg-white">
           <Table columns={["Project", "Gudang", "Item", "Unit", "Qty Sistem", "Qty Hitung", "Selisih"]}>
             {rows.map((r, i) => (
               <tr key={i} className="transition-colors hover:bg-zinc-50/60">

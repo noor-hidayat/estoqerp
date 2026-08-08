@@ -8,7 +8,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   name text not null,
   email text not null unique,
-  role text not null default 'STAFF' check (role in ('ADMIN', 'STAFF', 'APPROVER')),
+  role text not null default 'STAFF' check (role in ('ADMINISTRATOR', 'ADMIN', 'STAFF')),
   branch_id text,
   warehouse_id text,
   active boolean not null default true,
@@ -78,7 +78,9 @@ create table if not exists public.items (
   category_id text not null references public.categories (id),
   system_stock jsonb not null default '{}'::jsonb,
   price bigint not null default 0,
-  hue int not null default 200
+  hue int not null default 200,
+  barcode_id text,
+  qty int
 );
 
 create table if not exists public.barcode_formats (
@@ -87,6 +89,7 @@ create table if not exists public.barcode_formats (
   description text,
   is_active boolean not null default true,
   qty_per_format boolean not null default true,
+  unique_barcode boolean not null default false,
   segments jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now()
 );
@@ -101,7 +104,7 @@ create table if not exists public.projects (
   warehouse_id text not null references public.warehouses (id),
   mode text not null check (mode in ('COMPARE', 'SCRATCH')),
   status text not null default 'DRAFT'
-    check (status in ('DRAFT', 'IN_PROGRESS', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'CANCELLED')),
+    check (status in ('DRAFT', 'IN_PROGRESS', 'APPROVED', 'CANCELLED')),
   created_at timestamptz not null default now(),
   deadline timestamptz,
   created_by uuid references public.profiles (id)
@@ -140,15 +143,6 @@ create table if not exists public.opname_entries (
   counted_qty int not null default 0
 );
 
-create table if not exists public.approvals (
-  id text primary key,
-  project_id text not null references public.projects (id) on delete cascade,
-  approved_by uuid references public.profiles (id),
-  status text not null check (status in ('APPROVED', 'REJECTED')),
-  note text,
-  at timestamptz not null default now()
-);
-
 create index if not exists idx_scan_records_session on public.scan_records (session_id);
 create index if not exists idx_scan_records_project on public.scan_records (project_id);
 create index if not exists idx_scan_sessions_project on public.scan_sessions (project_id);
@@ -157,7 +151,7 @@ create index if not exists idx_opname_entries_project on public.opname_entries (
 -- ---------------------------------------------------------------------------
 -- ROW LEVEL SECURITY
 -- MVP: semua user terautentikasi punya akses penuh.
--- (Tingkatkan ke policy berbasis role ADMIN/STAFF/APPROVER sesuai kebutuhan.)
+-- (Tingkatkan ke policy berbasis role ADMINISTRATOR/ADMIN/STAFF sesuai kebutuhan.)
 -- ---------------------------------------------------------------------------
 alter table public.profiles enable row level security;
 alter table public.branches enable row level security;
@@ -170,7 +164,6 @@ alter table public.projects enable row level security;
 alter table public.scan_sessions enable row level security;
 alter table public.scan_records enable row level security;
 alter table public.opname_entries enable row level security;
-alter table public.approvals enable row level security;
 
 do $$
 declare t text;
@@ -178,7 +171,7 @@ begin
   foreach t in array array[
     'profiles','branches','warehouses','locations','categories','items',
     'barcode_formats','projects','scan_sessions','scan_records',
-    'opname_entries','approvals'
+    'opname_entries'
   ] loop
     execute format('drop policy if exists "authenticated_all" on public.%I;', t);
     execute format(

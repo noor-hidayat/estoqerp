@@ -14,7 +14,6 @@ export const TABLE_MAP: Record<TableKey, string> = {
   scanSessions: "scan_sessions",
   scanRecords: "scan_records",
   opnameEntries: "opname_entries",
-  approvals: "approvals",
 };
 
 export function camelizeRow<T>(row: Record<string, unknown>): T {
@@ -47,6 +46,5 @@ export const EMPTY_DB: DB = {
   scanSessions: [],
   scanRecords: [],
   opnameEntries: [],
-  approvals: [],
   seq: 0,
 };

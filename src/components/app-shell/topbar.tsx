@@ -3,15 +3,16 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useEffect } from "react";
 import {
-  CaretDown,
-  SignOut,
-  Scan,
-  List,
-} from "@phosphor-icons/react";
+  ChevronDown,
+  LogOut,
+  ScanLine,
+  Menu,
+} from "lucide-react";
 import { useSession } from "@/lib/session";
 import { ROLE_LABELS } from "@/lib/session";
 import { hueBg, cx } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { BrandMark } from "./sidebar";
 import { NAV } from "./nav";
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
@@ -22,7 +23,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const current = useMemo(() => {
-    let found = { label: "StockOpname", group: "" };
+    let found = { label: "StockOps", group: "" };
     for (const group of NAV) {
       for (const item of group.items) {
         const match =
@@ -36,7 +37,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           break;
         }
       }
-      if (found.label !== "StockOpname") break;
+      if (found.label !== "StockOps") break;
     }
     return found;
   }, [pathname]);
@@ -54,39 +55,43 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   if (!user) return null;
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-zinc-200/70 bg-zinc-50/80 px-4 backdrop-blur-md sm:px-8">
+    <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-zinc-200 bg-[#f7f6f3]/80 px-4 backdrop-blur-md lg:pl-2 lg:pr-8 sm:px-8">
       <div className="flex items-center gap-3">
         <button
           onClick={onMenu}
           className="flex h-9 w-9 items-center justify-center rounded-xl text-zinc-500 transition-colors hover:bg-zinc-100 lg:hidden"
         >
-          <List size={20} weight="bold" />
+          <Menu size={20} strokeWidth={2} />
         </button>
-        <div className="hidden items-center gap-2 text-sm sm:flex">
-          <span className="text-zinc-400">{current.group}</span>
-          <span className="text-zinc-300">/</span>
-          <span className="font-medium text-zinc-900">{current.label}</span>
-        </div>
-        <div className="sm:hidden">
-          <span className="text-sm font-medium text-zinc-900">
-            {current.label}
+        <div className="mr-2 flex items-center">
+          <span className="flex h-9 w-11 shrink-0 items-center justify-center">
+            <BrandMark />
           </span>
         </div>
+        <span className="hidden h-6 w-px bg-zinc-200 md:block" />
+        <div className="hidden items-center gap-2 text-sm md:flex">
+          <span className="text-zinc-400">{current.group}</span>
+          <span className="text-zinc-300">&gt;</span>
+          <span className="font-medium text-zinc-900">{current.label}</span>
+        </div>
+        <span className="text-sm font-medium text-zinc-900 sm:hidden">
+          {current.label}
+        </span>
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
         <button
           onClick={() => router.push("/app/opname")}
-          className="hidden h-9 items-center gap-2 rounded-full bg-zinc-900 px-4 text-[13px] font-medium text-zinc-50 transition-all hover:bg-zinc-800 active:scale-[0.97] sm:inline-flex"
+          className="hidden h-9 items-center gap-2 rounded-md bg-zinc-900 px-4 text-[13px] font-medium text-zinc-50 transition-colors hover:bg-zinc-800 sm:inline-flex"
         >
-          <Scan size={15} weight="bold" />
+          <ScanLine size={15} strokeWidth={2.2} />
           Mulai Scan
         </button>
 
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2.5 rounded-full border border-zinc-200/80 bg-white py-1.5 pl-1.5 pr-3 transition-colors hover:border-zinc-300"
+            className="flex items-center gap-2.5 rounded-md border border-zinc-200 bg-white py-1.5 pl-1.5 pr-3 transition-colors hover:border-zinc-300"
           >
             <span
               className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold text-white"
@@ -106,9 +111,9 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
                 {ROLE_LABELS[user.role]}
               </span>
             </span>
-            <CaretDown
+            <ChevronDown
               size={12}
-              weight="bold"
+              strokeWidth={2.5}
               className={cx(
                 "text-zinc-400 transition-transform",
                 menuOpen && "rotate-180"
@@ -117,7 +122,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-[calc(100%+8px)] w-64 rounded-2xl border border-zinc-200/80 bg-white p-2 shadow-[0_24px_60px_-20px_rgb(24_24_27/0.25)]">
+            <div className="absolute right-0 top-[calc(100%+8px)] w-64 rounded-lg border border-zinc-200 bg-white p-2 shadow-[0_8px_24px_-8px_rgb(24_24_27/0.12)]">
               <div className="flex items-center gap-3 rounded-xl bg-zinc-50 px-3 py-3">
                 <span
                   className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white"
@@ -150,7 +155,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
                 }}
                 className="mt-1 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium text-red-600 transition-colors hover:bg-red-50"
               >
-                <SignOut size={16} weight="bold" />
+                <LogOut size={16} strokeWidth={2} />
                 Keluar
               </button>
             </div>

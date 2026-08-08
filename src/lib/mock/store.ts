@@ -1,5 +1,4 @@
 import type {
-  Approval,
   BarcodeFormat,
   Branch,
   Category,
@@ -25,7 +24,6 @@ export interface DB {
   scanSessions: ScanSession[];
   scanRecords: ScanRecord[];
   opnameEntries: OpnameEntry[];
-  approvals: Approval[];
   seq: number;
 }
 

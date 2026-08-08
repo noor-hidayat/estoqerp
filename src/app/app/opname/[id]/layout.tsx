@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { Outlet } from "react-router-dom";
-import { ArrowLeft } from "@phosphor-icons/react";
+import { ArrowLeft } from "lucide-react";
 import { useDB } from "@/hooks/use-db";
 import { useSession } from "@/lib/session";
 import {
@@ -19,14 +19,13 @@ const TABS = [
   { id: "", label: "Ringkasan" },
   { id: "scan", label: "Scan Session" },
   { id: "variance", label: "Variance Review" },
-  { id: "approval", label: "Approval" },
 ];
 
 export default function ProjectLayout() {
   const params = useParams<{ id: string }>();
   const pathname = usePathname();
   const db = useDB();
-  const { hasRole } = useSession();
+  const { user } = useSession();
 
   const project = db.projects.find((p) => p.id === params.id);
 
@@ -46,17 +45,29 @@ export default function ProjectLayout() {
     );
   }
 
+  if (user?.role === "ADMIN" && project.branchId !== user.branchId) {
+    return (
+      <div className="py-20 text-center">
+        <p className="text-lg font-semibold text-zinc-800">Akses terbatas</p>
+        <p className="mx-auto mt-2 max-w-sm text-sm text-zinc-500">
+          Project ini berada di luar plant Anda. Anda hanya dapat mengelola
+          project pada cabang yang di-setting pada akun Anda.
+        </p>
+        <Link
+          href="/app/opname"
+          className="mt-4 inline-block text-sm font-medium text-emerald-600 hover:text-emerald-700"
+        >
+          Kembali ke Projects
+        </Link>
+      </div>
+    );
+  }
+
   const wh = db.warehouses.find((w) => w.id === project.warehouseId);
   const branch = db.branches.find((b) => b.id === project.branchId);
   const progress = projectProgress(db, project);
 
   const isActive = pathname === `/app/opname/${project.id}`;
-
-  const tabs = TABS.filter((t) =>
-    t.id === "approval"
-      ? hasRole(["ADMIN", "APPROVER"])
-      : true
-  );
 
   return (
     <div>
@@ -64,7 +75,7 @@ export default function ProjectLayout() {
         href="/app/opname"
         className="mb-6 inline-flex items-center gap-2 text-[13px] font-medium text-zinc-500 transition-colors hover:text-zinc-800"
       >
-        <ArrowLeft size={15} weight="bold" />
+        <ArrowLeft size={15} strokeWidth={2.2} />
         Kembali ke Projects
       </Link>
 
@@ -86,7 +97,7 @@ export default function ProjectLayout() {
               {branch?.name} · {wh?.name}
             </p>
           </div>
-          <div className="shrink-0 rounded-2xl border border-zinc-200/70 bg-white px-5 py-4 text-right">
+          <div className="shrink-0 rounded-lg border border-zinc-200 bg-white px-5 py-4 text-right">
             <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
               Progress
             </p>
@@ -94,14 +105,14 @@ export default function ProjectLayout() {
               {progress.pct}%
             </p>
             <p className="mt-0.5 text-[11px] text-zinc-400">
-              {progress.counted}/{progress.total} item
+              {progress.counted}/{progress.total} lokasi
             </p>
           </div>
         </div>
       </div>
 
-      <div className="mb-8 flex gap-1 overflow-x-auto rounded-full border border-zinc-200/80 bg-white p-1">
-        {tabs.map((tab) => {
+      <div className="mb-8 flex gap-1 overflow-x-auto rounded-lg border border-zinc-200 bg-white p-1">
+        {TABS.map((tab) => {
           const href =
             tab.id === ""
               ? `/app/opname/${project.id}`
@@ -113,7 +124,7 @@ export default function ProjectLayout() {
               key={tab.id || "overview"}
               href={href}
               className={cx(
-                "shrink-0 rounded-full px-4 py-2 text-[13px] font-medium transition-colors",
+                "shrink-0 rounded-md px-4 py-2 text-[13px] font-medium transition-colors",
                 activeTab
                   ? "bg-zinc-900 text-white"
                   : "text-zinc-500 hover:text-zinc-800"

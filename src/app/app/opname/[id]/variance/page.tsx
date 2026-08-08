@@ -1,15 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   ArrowRight,
-  ArrowsLeftRight,
-  CheckCircle,
-} from "@phosphor-icons/react";
-import { useDB } from "@/hooks/use-db";
+  ArrowLeftRight,
+  CheckCircle2,
+} from "lucide-react";
+import { useDB, useData } from "@/hooks/use-db";
 import { useSession } from "@/lib/session";
+import { isManager } from "@/lib/roles";
 import { projectCounted } from "@/lib/compute";
 import { formatNumber } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,8 @@ import { cx } from "@/lib/utils";
 export default function ProjectVariancePage() {
   const params = useParams<{ id: string }>();
   const db = useDB();
-  const { hasRole } = useSession();
+  const { update } = useData();
+  const { user } = useSession();
   const [onlyDiff, setOnlyDiff] = useState(true);
 
   const project = db.projects.find((p) => p.id === params.id);
@@ -36,12 +37,17 @@ export default function ProjectVariancePage() {
   const totalSystem = rows.reduce((a, r) => a + r.systemQty, 0);
   const totalCounted = rows.reduce((a, r) => a + r.countedQty, 0);
   const diffItems = rows.filter((r) => r.diff !== 0).length;
-  const canSubmit = hasRole(["ADMIN", "APPROVER"]) && project.status === "IN_PROGRESS";
+  const canFinalize =
+    isManager(user?.role ?? "STAFF") && project.status === "IN_PROGRESS";
+
+  const finalize = async () => {
+    await update("projects", project.id, { status: "APPROVED" });
+  };
 
   return (
     <div>
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-5">
+        <div className="rounded-lg border border-zinc-200 bg-white p-5">
           <p className="text-[12px] font-medium text-zinc-400">Qty sistem</p>
           <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
             {formatNumber(totalSystem)}
@@ -50,7 +56,7 @@ export default function ProjectVariancePage() {
             Referensi stok di master item
           </p>
         </div>
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-5">
+        <div className="rounded-lg border border-zinc-200 bg-white p-5">
           <p className="text-[12px] font-medium text-zinc-400">Qty fisik terhitung</p>
           <p className="mt-1 font-mono text-2xl font-semibold text-emerald-600">
             {formatNumber(totalCounted)}
@@ -59,7 +65,7 @@ export default function ProjectVariancePage() {
             Dari hasil scan
           </p>
         </div>
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-5">
+        <div className="rounded-lg border border-zinc-200 bg-white p-5">
           <p className="text-[12px] font-medium text-zinc-400">Item berselisih</p>
           <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
             {diffItems}
@@ -68,7 +74,7 @@ export default function ProjectVariancePage() {
             </span>
           </p>
           <p className="mt-0.5 text-[11px] text-zinc-400">
-            Perlu review supervisor
+            Perlu pengecekan ulang
           </p>
         </div>
       </div>
@@ -78,7 +84,7 @@ export default function ProjectVariancePage() {
           <button
             onClick={() => setOnlyDiff(true)}
             className={cx(
-              "rounded-full px-4 py-2 text-[12.5px] font-medium transition-colors",
+              "rounded-md px-4 py-2 text-[12.5px] font-medium transition-colors",
               onlyDiff
                 ? "bg-zinc-900 text-white"
                 : "bg-white text-zinc-500 ring-1 ring-zinc-200 hover:text-zinc-800"
@@ -89,7 +95,7 @@ export default function ProjectVariancePage() {
           <button
             onClick={() => setOnlyDiff(false)}
             className={cx(
-              "rounded-full px-4 py-2 text-[12.5px] font-medium transition-colors",
+              "rounded-md px-4 py-2 text-[12.5px] font-medium transition-colors",
               !onlyDiff
                 ? "bg-zinc-900 text-white"
                 : "bg-white text-zinc-500 ring-1 ring-zinc-200 hover:text-zinc-800"
@@ -99,25 +105,23 @@ export default function ProjectVariancePage() {
           </button>
         </div>
 
-        {canSubmit && (
-          <Link href={`/app/opname/${project.id}/approval`}>
-            <Button variant="secondary">
-              Ajukan ke Approval
-              <ArrowRight size={15} weight="bold" />
-            </Button>
-          </Link>
+        {canFinalize && (
+          <Button variant="secondary" onClick={() => void finalize()}>
+            Tandai Final
+            <ArrowRight size={15} strokeWidth={2.2} />
+          </Button>
         )}
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState
-          icon={<CheckCircle size={26} weight="bold" />}
+          icon={<CheckCircle2 size={26} strokeWidth={2} />}
           title="Tidak ada selisih"
           description="Semua item tercatat sesuai stok sistem. Tambahkan sesi scan bila diperlukan."
           className="py-16"
         />
       ) : (
-        <div className="rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="rounded-lg border border-zinc-200 bg-white">
           <Table columns={["Item", "Qty Sistem", "Qty Fisik", "Selisih", "Status"]}>
             {filtered.map((row) => {
               const item = db.items.find((i) => i.id === row.itemId);
@@ -179,7 +183,7 @@ export default function ProjectVariancePage() {
 
       {filtered.length > 0 && (
         <p className="mt-4 flex items-center gap-2 text-[12px] text-zinc-400">
-          <ArrowsLeftRight size={14} weight="bold" />
+          <ArrowLeftRight size={14} strokeWidth={2.2} />
           Variance dihitung otomatis dari total scan per item vs stok sistem di
           master item.
         </p>

@@ -15,13 +15,13 @@ export function Stat({
   accent?: boolean;
 }) {
   return (
-    <div className="relative rounded-2xl border border-zinc-200/70 bg-white p-5 shadow-[0_20px_40px_-15px_rgb(24_24_27/0.05)]">
+    <div className="rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-[0_10px_30px_-12px_rgb(17_17_17/0.08)] transition-shadow duration-300 hover:shadow-[0_14px_36px_-12px_rgb(17_17_17/0.12)]">
       {icon && (
         <div
           className={cx(
-            "mb-4 inline-flex h-9 w-9 items-center justify-center rounded-xl",
+            "mb-4 inline-flex h-8 w-8 items-center justify-center rounded-md",
             accent
-              ? "bg-emerald-600/10 text-emerald-700"
+              ? "bg-emerald-50 text-emerald-700"
               : "bg-zinc-100 text-zinc-500"
           )}
         >

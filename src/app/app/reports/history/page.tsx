@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ClockCounterClockwise, FilePdf, FileXls } from "@phosphor-icons/react";
+import { FileDown, FileSpreadsheet, History } from "lucide-react";
 import { useDB } from "@/hooks/use-db";
 import { formatDateTime, formatNumber } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
@@ -117,11 +117,11 @@ export default function ScanHistoryPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
-            <FileXls size={15} weight="bold" className="text-emerald-600" />
+            <FileSpreadsheet size={15} strokeWidth={2.2} className="text-emerald-600" />
             Excel
           </Button>
           <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
-            <FilePdf size={15} weight="bold" className="text-red-500" />
+            <FileDown size={15} strokeWidth={2.2} className="text-red-500" />
             PDF
           </Button>
         </div>
@@ -129,12 +129,12 @@ export default function ScanHistoryPage() {
 
       {rows.length === 0 ? (
         <EmptyState
-          icon={<ClockCounterClockwise size={26} weight="bold" />}
+          icon={<History size={26} strokeWidth={2} />}
           title="Belum ada data scan"
           description="Sesuaikan filter atau mulai sesi scan untuk mencatat transaksi."
         />
       ) : (
-        <div className="rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="rounded-lg border border-zinc-200 bg-white">
           <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
             <p className="text-[13px] text-zinc-500">
               <span className="font-semibold text-zinc-900">{rows.length}</span>{" "}

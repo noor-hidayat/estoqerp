@@ -4,11 +4,11 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
-  Trash,
-  CaretUpDown,
-  CheckCircle,
+  Trash2,
+  ChevronsUpDown,
+  CheckCircle2,
   XCircle,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { useData } from "@/hooks/use-db";
 import type { BarcodeFormat, BarcodeSegment, SegmentField } from "@/types";
 import {
@@ -30,6 +30,7 @@ const FIELD_OPTIONS: SegmentField[] = [
   "CATEGORY",
   "DATE",
   "SEQUENCE",
+  "BARCODE_ID",
   "CUSTOM",
 ];
 
@@ -62,23 +63,35 @@ function SegmentRow({
         </Select>
         <div className="flex items-center gap-1.5">
           <Input
-            type="number"
-            min={1}
-            value={segment.start}
-            onChange={(e) =>
-              onChange({ ...segment, start: Number(e.target.value) || 1 })
-            }
+            type="text"
+            inputMode="numeric"
+            value={segment.start || ""}
+            onChange={(e) => {
+              const v = e.target.value.replace(/\D/g, "");
+              if (v === "") {
+                onChange({ ...segment, start: 0 });
+              } else {
+                const n = parseInt(v, 10);
+                if (!isNaN(n)) onChange({ ...segment, start: Math.max(1, n) });
+              }
+            }}
             className="h-9 w-20 text-center font-mono text-[13px]"
             aria-label="posisi mulai"
           />
           <span className="text-[11px] text-zinc-400">s/d</span>
           <Input
-            type="number"
-            min={1}
-            value={segment.end}
-            onChange={(e) =>
-              onChange({ ...segment, end: Number(e.target.value) || 1 })
-            }
+            type="text"
+            inputMode="numeric"
+            value={segment.end || ""}
+            onChange={(e) => {
+              const v = e.target.value.replace(/\D/g, "");
+              if (v === "") {
+                onChange({ ...segment, end: 0 });
+              } else {
+                const n = parseInt(v, 10);
+                if (!isNaN(n)) onChange({ ...segment, end: Math.max(1, n) });
+              }
+            }}
             className="h-9 w-20 text-center font-mono text-[13px]"
             aria-label="posisi akhir"
           />
@@ -89,7 +102,7 @@ function SegmentRow({
         onClick={onRemove}
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
       >
-        <Trash size={15} weight="bold" />
+        <Trash2 size={15} strokeWidth={2.2} />
       </button>
     </div>
   );
@@ -109,10 +122,12 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
   );
   const [qtyPerFormat, setQtyPerFormat] = useState(format.qtyPerFormat);
   const [isActive, setIsActive] = useState(format.isActive);
+  const [uniqueBarcode, setUniqueBarcode] = useState(format.uniqueBarcode ?? false);
   const [segments, setSegments] = useState<BarcodeSegment[]>(
     sortSegments(format.segments)
   );
   const [sample, setSample] = useState("");
+  const [saveError, setSaveError] = useState("");
 
   const validation = useMemo(
     () => validateSegments(length, segments),
@@ -126,6 +141,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
       name,
       qtyPerFormat,
       isActive,
+      uniqueBarcode,
       segments,
     };
     return parseWithFormat(sample, candidate, {
@@ -162,14 +178,18 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
       description: description.trim() || undefined,
       isActive,
       qtyPerFormat,
+      uniqueBarcode,
       segments: sortSegments(segments),
       updatedAt: new Date().toISOString(),
     };
     const err = format.id
       ? await update("barcodeFormats", id, next)
       : await insert("barcodeFormats", next);
-    if (err) return;
-    router.push("/app/setup/barcode-formats");
+    if (err) {
+      setSaveError(err);
+      return;
+    }
+    router.push("/app/settings/barcode-formats");
   };
 
   const fieldBadgeClass = (seg: BarcodeSegment) => {
@@ -184,7 +204,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
       <div className="space-y-6">
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-6">
+        <div className="rounded-lg border border-zinc-200 bg-white p-6">
           <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-wider text-zinc-500">
             Informasi format
           </h3>
@@ -197,11 +217,18 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
             />
             <Input
               label="Panjang barcode (digit)"
-              type="number"
-              min={1}
-              max={40}
-              value={length}
-              onChange={(e) => setLength(Number(e.target.value) || 1)}
+              type="text"
+              inputMode="numeric"
+              value={length || ""}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, "");
+                if (v === "") {
+                  setLength(1);
+                } else {
+                  const n = parseInt(v, 10);
+                  if (!isNaN(n)) setLength(Math.min(40, Math.max(1, n)));
+                }
+              }}
               hint="Total digit barcode aktif"
             />
           </div>
@@ -221,6 +248,12 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
               hint="Aktif: qty otomatis per barcode. Nonaktif: qty diinput manual tiap scan."
             />
             <Toggle
+              checked={uniqueBarcode}
+              onChange={setUniqueBarcode}
+              label="Barcode harus unik"
+              hint="Aktif: barcode yang sudah di-scan di sesi ini akan ditolak (tidak boleh duplikat)."
+            />
+            <Toggle
               checked={isActive}
               onChange={setIsActive}
               label="Format aktif"
@@ -229,13 +262,13 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-6">
+        <div className="rounded-lg border border-zinc-200 bg-white p-6">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">
               Definisi segmen
             </h3>
             <Button variant="outline" size="sm" onClick={addSegment}>
-              <Plus size={14} weight="bold" />
+              <Plus size={14} strokeWidth={2.2} />
               Tambah segmen
             </Button>
           </div>
@@ -268,7 +301,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
 
           {!validation.valid && (
             <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50/70 p-4">
-              <XCircle size={18} weight="bold" className="mt-0.5 shrink-0 text-red-500" />
+              <XCircle size={18} strokeWidth={2} className="mt-0.5 shrink-0 text-red-500" />
               <div>
                 <p className="text-[13px] font-semibold text-red-700">
                   Konfigurasi belum valid
@@ -285,7 +318,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
       </div>
 
       <div className="space-y-6">
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-6">
+        <div className="rounded-lg border border-zinc-200 bg-white p-6">
           <h3 className="mb-1 text-[13px] font-semibold uppercase tracking-wider text-zinc-500">
             Preview & uji parsing
           </h3>
@@ -297,7 +330,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
             placeholder={`${"0".repeat(Math.min(length, 13))}${length > 13 ? "…" : ""}`}
             value={sample}
             onChange={(e) => setSample(e.target.value.replace(/\D/g, ""))}
-            icon={<CaretUpDown size={15} weight="bold" />}
+            icon={<ChevronsUpDown size={15} strokeWidth={2.2} />}
             maxLength={length}
           />
           <div className="mt-4">
@@ -309,7 +342,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
               {parsed ? (
                 <div className="rounded-xl bg-zinc-950 p-4">
                   <div className="mb-3 flex items-center gap-2">
-                    <CheckCircle size={16} weight="bold" className="text-emerald-400" />
+                    <CheckCircle2 size={16} strokeWidth={2.2} className="text-emerald-400" />
                     <span className="text-[13px] font-semibold text-zinc-100">
                       Cocok dengan format “{name || "Format baru"}”
                     </span>
@@ -356,10 +389,15 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
           )}
         </div>
 
+        {saveError && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-[12.5px] text-red-600">
+            Gagal menyimpan: {saveError}
+          </p>
+        )}
         <div className="flex items-center justify-end gap-3">
           <Button
             variant="ghost"
-            onClick={() => router.push("/app/setup/barcode-formats")}
+            onClick={() => router.push("/app/settings/barcode-formats")}
           >
             Batal
           </Button>

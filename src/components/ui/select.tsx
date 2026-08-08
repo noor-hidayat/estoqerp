@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, type ReactNode, type SelectHTMLAttributes } from "react";
-import { CaretDown } from "@phosphor-icons/react";
+import { ChevronDown } from "lucide-react";
 import { cx } from "@/lib/utils";
 import type { FieldProps } from "./input";
 
@@ -34,8 +34,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           ref={ref}
           id={selectId}
           className={cx(
-            "h-10 w-full appearance-none rounded-xl border bg-white text-sm text-zinc-900 transition-colors",
-            "focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/60",
+            "h-10 w-full appearance-none rounded-md border bg-white text-sm text-zinc-900 transition-colors",
+            "focus:outline-none focus:ring-1 focus:ring-zinc-900/20 focus:border-zinc-400",
             error ? "border-red-400" : "border-zinc-300",
             icon ? "pl-10 pr-9" : "pl-3.5 pr-9",
             className
@@ -44,9 +44,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         >
           {children}
         </select>
-        <CaretDown
+        <ChevronDown
           size={14}
-          weight="bold"
+          strokeWidth={2.2}
           className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400"
         />
       </div>

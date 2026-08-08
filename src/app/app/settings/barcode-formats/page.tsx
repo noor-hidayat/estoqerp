@@ -4,9 +4,9 @@ import { useMemo } from "react";
 import Link from "next/link";
 import {
   Barcode,
-  PencilSimple,
+  Pencil,
   Plus,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { useData } from "@/hooks/use-db";
 import { formatDate } from "@/lib/utils";
 import { SEGMENT_FIELD_LABELS, sortSegments } from "@/lib/barcode/parser";
@@ -16,6 +16,7 @@ import { Table, Td } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { FIELD_COLORS, FIELD_LABEL_SHORT } from "@/components/barcode/segment-visualizer";
 import { cx } from "@/lib/utils";
@@ -59,15 +60,15 @@ export default function BarcodeFormatsPage() {
   };
 
   return (
-    <RoleGuard roles={["ADMIN"]}>
+    <RoleGuard roles={MANAGER_ROLES}>
       <PageHeader
-        eyebrow="Setup"
+        eyebrow="Settings"
         title="Format Barcode"
         description="Konfigurasi format barcode berbasis segmen. Perubahan langsung berlaku tanpa perlu perubahan kode program."
         actions={
-          <Link href="/app/setup/barcode-formats/new">
+          <Link href="/app/settings/barcode-formats/new">
             <Button variant="secondary">
-              <Plus size={15} weight="bold" />
+              <Plus size={15} strokeWidth={2.2} />
               Buat Format
             </Button>
           </Link>
@@ -76,17 +77,17 @@ export default function BarcodeFormatsPage() {
 
       {formats.length === 0 ? (
         <EmptyState
-          icon={<Barcode size={26} weight="bold" />}
+          icon={<Barcode size={26} strokeWidth={2} />}
           title="Belum ada format barcode"
           description="Buat format pertama Anda untuk mendefinisikan bagaimana barcode di-parse menjadi segmen data."
           action={
-            <Link href="/app/setup/barcode-formats/new">
+            <Link href="/app/settings/barcode-formats/new">
               <Button variant="secondary">Buat Format Baru</Button>
             </Link>
           }
         />
       ) : (
-        <div className="rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="rounded-lg border border-zinc-200 bg-white">
           <Table
             columns={["Format", "Definisi Segmen", "Qty", "Status", "Diperbarui", ""]}
           >
@@ -99,7 +100,7 @@ export default function BarcodeFormatsPage() {
                   <Td>
                     <div className="flex items-center gap-3">
                       <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-emerald-400">
-                        <Barcode size={17} weight="bold" />
+                        <Barcode size={17} strokeWidth={2.2} />
                       </span>
                       <div>
                         <p className="text-[13.5px] font-semibold text-zinc-900">
@@ -140,10 +141,10 @@ export default function BarcodeFormatsPage() {
                   </Td>
                   <Td>
                     <Link
-                      href={`/app/setup/barcode-formats/${f.id}`}
+                      href={`/app/settings/barcode-formats/${f.id}`}
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
                     >
-                      <PencilSimple size={15} weight="bold" />
+                      <Pencil size={15} strokeWidth={2.2} />
                     </Link>
                   </Td>
                 </tr>

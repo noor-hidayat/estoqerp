@@ -14,9 +14,9 @@ import { camelizeRow } from "@/lib/supabase/rows";
 import type { Role, User } from "@/types";
 
 export const ROLE_LABELS: Record<Role, string> = {
+  ADMINISTRATOR: "Administrator",
   ADMIN: "Admin",
   STAFF: "Staff Gudang",
-  APPROVER: "Supervisor",
 };
 
 interface SessionValue {

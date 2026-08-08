@@ -3,94 +3,127 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ArrowsLeftRight,
+  ArrowLeftRight,
   Barcode,
-  Buildings,
-  ChartBar,
-  ClipboardText,
-  ClockCounterClockwise,
+  BarChart3,
+  Building2,
+  ClipboardList,
+  History,
   FileText,
+  LayoutGrid,
+  Map,
   MapPin,
-  MapTrifold,
+  Notebook,
   Package,
-  SquaresFour,
-  Stamp,
-  UsersThree,
-  Warning,
-  type Icon,
-} from "@phosphor-icons/react";
+  Tag,
+  TriangleAlert,
+  Users,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
 import { navForRole, type NavGroup } from "./nav";
 import { cx } from "@/lib/utils";
 import type { Role } from "@/types";
 
-const ICONS: Record<string, Icon> = {
-  SquaresFour,
-  ClipboardText,
-  ArrowsLeftRight,
-  Stamp,
+const ICONS: Record<string, LucideIcon> = {
+  SquaresFour: LayoutGrid,
+  ClipboardText: ClipboardList,
+  ArrowsLeftRight: ArrowLeftRight,
   Barcode,
   Package,
   MapPin,
-  Buildings,
-  UsersThree,
-  ChartBar,
-  Warning,
-  MapTrifold,
+  Buildings: Building2,
+  UsersThree: Users,
+  ChartBar: BarChart3,
+  Warning: TriangleAlert,
+  MapTrifold: Map,
   FileText,
-  ClockCounterClockwise,
+  ClockCounterClockwise: History,
+  GearSix: Settings,
+  Notebook,
+  Tag,
 };
 
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <div
-      className={cx(
-        "flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-emerald-400",
-        className
-      )}
-    >
-      <Barcode size={20} weight="bold" />
-    </div>
+    <img
+      src="/stockops.svg"
+      alt="StockOps"
+      className={cx("h-9 w-9", className)}
+    />
   );
 }
 
-function Group({ group, pathname }: { group: NavGroup; pathname: string }) {
+function Group({
+  group,
+  pathname,
+  collapsed,
+}: {
+  group: NavGroup;
+  pathname: string;
+  collapsed: boolean;
+}) {
   return (
-    <div className="mt-6 first:mt-0">
-      <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-        {group.title}
-      </p>
-      <div className="flex flex-col gap-0.5">
+    <div>
+      <div className="flex flex-col gap-0">
         {group.items.map((item) => {
-          const Icon = ICONS[item.icon] ?? SquaresFour;
-          const active =
+          const Icon = ICONS[item.icon] ?? LayoutGrid;
+          const itemMatches =
             item.href === "/app"
               ? pathname === "/app"
               : pathname === item.href || pathname.startsWith(item.href + "/");
+          const active =
+            itemMatches &&
+            !group.items.some(
+              (other) =>
+                other.href !== item.href &&
+                other.href.length > item.href.length &&
+                other.href.startsWith(item.href) &&
+                (pathname === other.href || pathname.startsWith(other.href + "/"))
+            );
           return (
             <Link
               key={item.href}
               href={item.href}
+              title={item.label}
               className={cx(
-                "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-[13.5px] font-medium transition-colors",
+                "group relative flex items-center rounded-lg py-1 text-[13.5px] font-medium transition-colors",
+                collapsed ? "w-11" : "w-full",
                 active
                   ? "text-zinc-900"
-                  : "text-zinc-500 hover:bg-zinc-100/80 hover:text-zinc-800"
+                  : "text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900"
               )}
             >
               {active && (
-                <span className="absolute inset-0 rounded-xl bg-zinc-100" />
+                <span className="absolute inset-0 rounded-lg bg-zinc-200/70" />
               )}
-              <Icon
-                size={18}
-                weight={active ? "bold" : "regular"}
-                className={cx(
-                  "relative z-10 transition-colors",
-                  active ? "text-emerald-600" : "text-zinc-400 group-hover:text-zinc-600"
-                )}
-              />
-              <span className="relative z-10">{item.label}</span>
-              {active && (
-                <span className="absolute right-3 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="relative z-10 flex h-9 w-11 shrink-0 items-center justify-center">
+                <Icon
+                  size={18}
+                  strokeWidth={active ? 2.5 : 2}
+                  className={cx(
+                    "transition-colors",
+                    active ? "text-[#0f1e3d]" : "text-zinc-500 group-hover:text-zinc-900"
+                  )}
+                />
+              </span>
+              <span
+                className="grid transition-[grid-template-columns] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                style={{ gridTemplateColumns: collapsed ? "0fr" : "1fr" }}
+              >
+                <span className="overflow-hidden min-w-0">
+                  <span
+                    className={cx(
+                      "block whitespace-nowrap pr-3 transition-opacity duration-200",
+                      collapsed ? "opacity-0" : "opacity-100"
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </span>
+              </span>
+              {active && !collapsed && (
+                <span className="absolute right-3 h-1.5 w-1.5 rounded-full bg-[#0f1e3d]" />
               )}
             </Link>
           );
@@ -103,46 +136,30 @@ function Group({ group, pathname }: { group: NavGroup; pathname: string }) {
 export function SidebarContent({
   role,
   onNavigate,
+  collapsed = false,
 }: {
   role: Role;
   onNavigate?: () => void;
+  collapsed?: boolean;
 }) {
   const pathname = usePathname();
   const groups = navForRole(role);
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 px-4 pb-6 pt-5">
-        <BrandMark />
-        <div className="leading-tight">
-          <p className="text-[15px] font-semibold tracking-tight text-zinc-900">
-            StockOpname
-          </p>
-          <p className="text-[11px] text-zinc-400">Gudang Operations</p>
-        </div>
-      </div>
-
       <nav
         onClick={onNavigate}
-        className="flex-1 overflow-y-auto px-3 pb-6"
+        className="flex-1 overflow-x-hidden overflow-y-auto px-2 py-3"
       >
         {groups.map((group) => (
-          <Group key={group.title} group={group} pathname={pathname} />
+          <Group
+            key={group.title}
+            group={group}
+            pathname={pathname}
+            collapsed={collapsed}
+          />
         ))}
       </nav>
-
-      <div className="border-t border-zinc-100 p-4">
-        <div className="flex items-center gap-3 rounded-xl bg-zinc-50 px-3 py-2.5">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-          </span>
-          <p className="text-[11.5px] text-zinc-500">
-            Sistem dalam mode{" "}
-            <span className="font-semibold text-zinc-700">demo data</span>
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

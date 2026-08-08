@@ -59,7 +59,6 @@ async function fetchAll(): Promise<DB> {
     scanSessions,
     scanRecords,
     opnameEntries,
-    approvals,
     profiles,
   ] = await Promise.all([
     sb.from("branches").select("*"),
@@ -72,7 +71,6 @@ async function fetchAll(): Promise<DB> {
     sb.from("scan_sessions").select("*"),
     sb.from("scan_records").select("*"),
     sb.from("opname_entries").select("*"),
-    sb.from("approvals").select("*"),
     sb.from("profiles").select("*"),
   ]);
 
@@ -87,7 +85,6 @@ async function fetchAll(): Promise<DB> {
     scanSessions,
     scanRecords,
     opnameEntries,
-    approvals,
     profiles,
   ].find((r: { error: { message: string } | null }) => r.error);
 
@@ -128,9 +125,6 @@ async function fetchAll(): Promise<DB> {
     ),
     opnameEntries: (opnameEntries.data ?? []).map(
       (r: Record<string, unknown>) => camelizeRow(r)
-    ),
-    approvals: (approvals.data ?? []).map((r: Record<string, unknown>) =>
-      camelizeRow(r)
     ),
     seq: 0,
   };
@@ -264,7 +258,7 @@ export function DBProvider({ children }: { children: ReactNode }) {
         <p className="text-sm text-zinc-600">{error}</p>
         <button
           onClick={() => void refresh()}
-          className="rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-medium text-zinc-50"
+          className="rounded-md bg-zinc-900 px-5 py-2.5 text-sm font-medium text-zinc-50"
         >
           Coba lagi
         </button>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PencilSimple, Plus, UsersThree } from "@phosphor-icons/react";
+import { Pencil, Plus, Users } from "lucide-react";
 import { useData } from "@/hooks/use-db";
 import { signUpUser } from "@/lib/supabase/client";
 import { ROLE_LABELS } from "@/lib/session";
@@ -18,9 +18,9 @@ import { Toggle } from "@/components/ui/toggle";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Avatar } from "@/components/ui/avatar";
 
-const ROLE_TONES: Record<Role, "emerald" | "blue" | "violet"> = {
-  ADMIN: "violet",
-  APPROVER: "blue",
+const ROLE_TONES: Record<Role, "emerald" | "violet" | "blue"> = {
+  ADMINISTRATOR: "violet",
+  ADMIN: "blue",
   STAFF: "emerald",
 };
 
@@ -169,17 +169,17 @@ export default function UsersPage() {
     void update("users", u.id, { active: next });
   };
 
-  const roleOptions: Role[] = ["ADMIN", "APPROVER", "STAFF"];
+  const roleOptions: Role[] = ["ADMINISTRATOR", "ADMIN", "STAFF"];
 
   return (
-    <RoleGuard roles={["ADMIN"]}>
+    <RoleGuard roles={["ADMINISTRATOR"]}>
       <PageHeader
-        eyebrow="Setup"
+        eyebrow="Settings"
         title="User & Role"
-        description="Kelola akses pengguna berdasarkan peran: Admin, Staff Gudang, dan Supervisor."
+        description="Kelola akses pengguna berdasarkan peran: Administrator, Admin, dan Staff Gudang."
         actions={
           <Button variant="secondary" onClick={openCreate}>
-            <Plus size={15} weight="bold" />
+            <Plus size={15} strokeWidth={2.2} />
             Tambah User
           </Button>
         }
@@ -202,12 +202,12 @@ export default function UsersPage() {
 
       {users.length === 0 ? (
         <EmptyState
-          icon={<UsersThree size={26} weight="bold" />}
+          icon={<Users size={26} strokeWidth={2} />}
           title="Tidak ada user"
           description="Tambahkan user untuk memberi akses ke workspace."
         />
       ) : (
-        <div className="rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="rounded-lg border border-zinc-200 bg-white">
           <Table
             columns={["User", "Email", "Role", "Cabang", "Gudang", "Status", ""]}
           >
@@ -249,7 +249,7 @@ export default function UsersPage() {
                     onClick={() => openEdit(u)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
                   >
-                    <PencilSimple size={15} weight="bold" />
+                    <Pencil size={15} strokeWidth={2.2} />
                   </button>
                 </Td>
               </tr>

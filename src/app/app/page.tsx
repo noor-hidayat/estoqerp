@@ -7,12 +7,11 @@ import {
   ArrowRight,
   ArrowUpRight,
   Barcode,
-  ChartLineUp,
-  ClipboardText,
-  Scan,
-  Stamp,
-  WarningCircle,
-} from "@phosphor-icons/react";
+  CheckCircle2,
+  CircleAlert,
+  ClipboardList,
+  ScanLine,
+} from "lucide-react";
 import { useDB } from "@/hooks/use-db";
 import { useSession } from "@/lib/session";
 import { formatDate, relativeTime } from "@/lib/utils";
@@ -35,9 +34,7 @@ export default function DashboardPage() {
   const data = useMemo(() => {
     const projects = db.projects;
     const active = projects.filter(isActiveProject);
-    const pending = projects.filter(
-      (p) => p.status === "PENDING_APPROVAL"
-    ).length;
+    const final = projects.filter((p) => p.status === "APPROVED").length;
     const scansToday = db.scanRecords.filter(
       (r) => new Date(r.scannedAt).toDateString() === new Date().toDateString()
     ).length;
@@ -72,7 +69,7 @@ export default function DashboardPage() {
 
     return {
       active,
-      pending,
+      final,
       scansToday,
       varianceItems,
       activeProject,
@@ -109,8 +106,8 @@ export default function DashboardPage() {
           <Stat
             label="Project berlangsung"
             value={data.active.length}
-            sub={`${data.pending} menunggu approval`}
-            icon={<ClipboardText size={18} weight="bold" />}
+            sub={`${data.final} project final`}
+            icon={<ClipboardList size={18} strokeWidth={2.2} />}
           />
         </StaggerItem>
         <StaggerItem>
@@ -118,7 +115,7 @@ export default function DashboardPage() {
             label="Scan hari ini"
             value={data.scansToday}
             sub="Transaksi terdeteksi"
-            icon={<Scan size={18} weight="bold" />}
+            icon={<ScanLine size={18} strokeWidth={2.2} />}
             accent
           />
         </StaggerItem>
@@ -127,7 +124,7 @@ export default function DashboardPage() {
             label="Item dengan selisih"
             value={data.varianceItems}
             sub="Tersebar di semua project"
-            icon={<WarningCircle size={18} weight="bold" />}
+            icon={<CircleAlert size={18} strokeWidth={2.2} />}
           />
         </StaggerItem>
         <StaggerItem>
@@ -135,7 +132,7 @@ export default function DashboardPage() {
             label="Format barcode aktif"
             value={db.barcodeFormats.filter((f) => f.isActive).length}
             sub={`${db.barcodeFormats.length} total format`}
-            icon={<Barcode size={18} weight="bold" />}
+            icon={<Barcode size={18} strokeWidth={2.2} />}
           />
         </StaggerItem>
       </Stagger>
@@ -144,7 +141,7 @@ export default function DashboardPage() {
         <div className="space-y-6">
           {data.activeProject && data.progress ? (
             <StaggerItem>
-              <div className="relative overflow-hidden rounded-[1.5rem] bg-zinc-950 p-6 text-zinc-100 sm:p-8">
+              <div className="relative overflow-hidden rounded-2xl bg-zinc-950 p-6 text-zinc-100 shadow-[0_20px_44px_-20px_rgb(0_0_0/0.4)] sm:p-8">
                 <div
                   className="pointer-events-none absolute inset-0 opacity-[0.07]"
                   style={{
@@ -166,7 +163,7 @@ export default function DashboardPage() {
                       href={`/app/opname/${data.activeProject.id}`}
                       className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-zinc-100 ring-1 ring-white/15 transition-colors hover:bg-white/20"
                     >
-                      <ArrowUpRight size={16} weight="bold" />
+                      <ArrowUpRight size={16} strokeWidth={2.2} />
                     </Link>
                   </div>
                   <h2 className="mt-4 text-xl font-semibold tracking-tight sm:text-2xl">
@@ -183,7 +180,7 @@ export default function DashboardPage() {
                         {data.progress.pct}%
                       </p>
                       <p className="text-[12px] text-zinc-500">
-                        {data.progress.counted} dari {data.progress.total} item
+                        {data.progress.counted} dari {data.progress.total} lokasi
                         terhitung
                       </p>
                     </div>
@@ -199,9 +196,9 @@ export default function DashboardPage() {
 
                   <Link
                     href={`/app/opname/${data.activeProject.id}/scan`}
-                    className="mt-7 inline-flex h-11 items-center gap-2 rounded-full bg-emerald-600 px-6 text-sm font-medium text-white shadow-lg shadow-emerald-600/25 transition-all hover:bg-emerald-500 active:scale-[0.98]"
+                    className="mt-7 inline-flex h-11 items-center gap-2 rounded-md bg-emerald-600 px-6 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
                   >
-                    <Scan size={16} weight="bold" />
+                    <ScanLine size={16} strokeWidth={2.2} />
                     Lanjutkan Scan
                   </Link>
                 </div>
@@ -209,10 +206,10 @@ export default function DashboardPage() {
             </StaggerItem>
           ) : (
             <StaggerItem>
-              <div className="rounded-[1.5rem] border border-zinc-200/70 bg-white p-8">
+              <div className="rounded-2xl border border-zinc-200/80 bg-white p-8 shadow-[0_10px_30px_-12px_rgb(17_17_17/0.08)]">
                 <div className="flex items-center gap-4">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400">
-                    <ClipboardText size={22} weight="bold" />
+                  <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-100 text-zinc-400">
+                    <ClipboardList size={22} strokeWidth={2.2} />
                   </span>
                   <div>
                     <h3 className="text-[15px] font-semibold text-zinc-800">
@@ -225,10 +222,10 @@ export default function DashboardPage() {
                 </div>
                 <Link
                   href="/app/opname/new"
-                  className="mt-5 inline-flex h-10 items-center gap-2 rounded-full bg-zinc-900 px-5 text-[13px] font-medium text-zinc-50 transition-all hover:bg-zinc-800 active:scale-[0.98]"
+                  className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-zinc-900 px-5 text-[13px] font-medium text-zinc-50 transition-colors hover:bg-zinc-800"
                 >
                   Buat Project
-                  <ArrowRight size={14} weight="bold" />
+                  <ArrowRight size={14} strokeWidth={2.2} />
                 </Link>
               </div>
             </StaggerItem>
@@ -241,7 +238,7 @@ export default function DashboardPage() {
                 <StaggerItem key={p.id}>
                   <Link
                     href={`/app/opname/${p.id}`}
-                    className="group block rounded-2xl border border-zinc-200/70 bg-white p-5 transition-all hover:border-zinc-300 hover:shadow-[0_20px_40px_-15px_rgb(24_24_27/0.08)]"
+                    className="group block rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-[0_10px_30px_-12px_rgb(17_17_17/0.08)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-14px_rgb(17_17_17/0.14)]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-[14px] font-semibold leading-snug text-zinc-900">
@@ -285,7 +282,7 @@ export default function DashboardPage() {
               Lihat semua
             </Link>
           </div>
-          <div className="divide-y divide-zinc-100 rounded-2xl border border-zinc-200/70 bg-white">
+          <div className="divide-y divide-zinc-100 rounded-2xl border border-zinc-200/80 bg-white shadow-[0_10px_30px_-12px_rgb(17_17_17/0.08)]">
             {data.recentScans.length === 0 && (
               <p className="p-6 text-center text-sm text-zinc-400">
                 Belum ada aktivitas scan.
@@ -294,7 +291,7 @@ export default function DashboardPage() {
             {data.recentScans.map((r) => (
               <div key={r.id} className="flex items-center gap-3 px-5 py-3.5">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                  <Scan size={14} weight="bold" />
+                  <ScanLine size={14} strokeWidth={2.2} />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-zinc-800">
@@ -316,24 +313,24 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div className="mt-6 rounded-2xl border border-zinc-200/70 bg-white p-5">
+          <div className="mt-6 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-[0_10px_30px_-12px_rgb(17_17_17/0.08)]">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                <Stamp size={18} weight="bold" />
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <CheckCircle2 size={18} strokeWidth={2.2} />
               </span>
               <div className="flex-1">
                 <p className="text-[13.5px] font-semibold text-zinc-900">
-                  Approval menunggu
+                  Project final
                 </p>
                 <p className="text-[12px] text-zinc-400">
-                  {data.pending} project siap direview
+                  {data.final} project selesai & siap di-export
                 </p>
               </div>
               <Link
-                href="/app/opname/approval"
+                href="/app/opname"
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 text-zinc-500 transition-colors hover:border-zinc-300 hover:text-zinc-800"
               >
-                <ChartLineUp size={15} weight="bold" />
+                <ArrowUpRight size={15} strokeWidth={2.2} />
               </Link>
             </div>
           </div>

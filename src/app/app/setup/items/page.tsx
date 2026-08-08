@@ -2,17 +2,18 @@
 
 import { useMemo, useState } from "react";
 import {
-  MagnifyingGlass,
   Package,
-  PencilSimple,
+  Pencil,
   Plus,
-  Trash,
-} from "@phosphor-icons/react";
+  Search,
+  Trash2,
+} from "lucide-react";
 import { useData } from "@/hooks/use-db";
 import { newUid } from "@/lib/mock/store";
 import { formatNumber } from "@/lib/utils";
 import type { Item } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
+import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,8 @@ const EMPTY: Omit<Item, "id" | "hue"> = {
   categoryId: "",
   systemStock: {},
   price: 0,
+  barcodeId: "",
+  qty: undefined,
 };
 
 export default function ItemsPage() {
@@ -70,6 +73,8 @@ export default function ItemsPage() {
       categoryId: item.categoryId,
       systemStock: { ...item.systemStock },
       price: item.price,
+      barcodeId: item.barcodeId ?? "",
+      qty: item.qty,
     });
     setError("");
     setOpen(true);
@@ -124,14 +129,14 @@ export default function ItemsPage() {
   };
 
   return (
-    <RoleGuard roles={["ADMIN"]}>
+    <RoleGuard roles={MANAGER_ROLES}>
       <PageHeader
         eyebrow="Setup"
         title="Item / Produk"
         description="Master data barang beserta stok sistem per gudang sebagai pembanding hasil hitung fisik."
         actions={
           <Button variant="secondary" onClick={openCreate}>
-            <Plus size={15} weight="bold" />
+            <Plus size={15} strokeWidth={2.2} />
             Tambah Item
           </Button>
         }
@@ -142,7 +147,7 @@ export default function ItemsPage() {
           placeholder="Cari nama atau kode item..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          icon={<MagnifyingGlass size={15} weight="bold" />}
+          icon={<Search size={15} strokeWidth={2.2} />}
           className="sm:max-w-xs"
         />
         <Select
@@ -161,12 +166,12 @@ export default function ItemsPage() {
 
       {items.length === 0 ? (
         <EmptyState
-          icon={<Package size={26} weight="bold" />}
+          icon={<Package size={26} strokeWidth={2} />}
           title="Tidak ada item"
           description="Tambahkan item baru atau sesuaikan filter pencarian Anda."
         />
       ) : (
-        <div className="rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="rounded-lg border border-zinc-200 bg-white">
           <Table
             columns={["Kode", "Item", "Kategori", "Unit", "Stok per Gudang", ""]}
           >
@@ -225,13 +230,13 @@ export default function ItemsPage() {
                       onClick={() => openEdit(item)}
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
                     >
-                      <PencilSimple size={15} weight="bold" />
+                      <Pencil size={15} strokeWidth={2.2} />
                     </button>
                     <button
                       onClick={() => handleRemove(item)}
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
                     >
-                      <Trash size={15} weight="bold" />
+                      <Trash2 size={15} strokeWidth={2.2} />
                     </button>
                   </div>
                 </Td>
@@ -301,6 +306,25 @@ export default function ItemsPage() {
             onChange={(e) =>
               setForm({ ...form, price: Math.max(0, Number(e.target.value) || 0) })
             }
+          />
+          <Input
+            label="Barcode ID (opsional)"
+            value={form.barcodeId ?? ""}
+            onChange={(e) => setForm({ ...form, barcodeId: e.target.value })}
+            placeholder="Masukkan barcode item"
+          />
+          <Input
+            label="Qty stok (opsional)"
+            type="number"
+            min={0}
+            value={form.qty ?? ""}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                qty: e.target.value === "" ? undefined : Math.max(0, Number(e.target.value) || 0),
+              })
+            }
+            placeholder="Jumlah stok"
           />
         </div>
 

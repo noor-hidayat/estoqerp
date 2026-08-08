@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  ArrowsLeftRight,
-  MagnifyingGlass,
-} from "@phosphor-icons/react";
+  ArrowLeftRight,
+  Search,
+} from "lucide-react";
 import { useDB } from "@/hooks/use-db";
 import { projectCounted } from "@/lib/compute";
 import { formatNumber } from "@/lib/utils";
@@ -85,7 +85,7 @@ export default function VarianceReviewPage() {
           placeholder="Cari item / project..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          icon={<MagnifyingGlass size={15} weight="bold" />}
+          icon={<Search size={15} strokeWidth={2.2} />}
           className="sm:max-w-xs"
         />
         <Select
@@ -104,12 +104,12 @@ export default function VarianceReviewPage() {
 
       {rows.length === 0 ? (
         <EmptyState
-          icon={<ArrowsLeftRight size={26} weight="bold" />}
+          icon={<ArrowLeftRight size={26} strokeWidth={2} />}
           title="Tidak ada selisih"
           description="Belum ada item dengan variance di filter ini."
         />
       ) : (
-        <div className="rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="rounded-lg border border-zinc-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4">
             <p className="text-[13px] text-zinc-500">
               <span className="font-semibold text-zinc-900">{rows.length}</span>{" "}
@@ -125,7 +125,7 @@ export default function VarianceReviewPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead>
-                <tr className="border-b border-zinc-200/80">
+                <tr className="border-b border-zinc-200">
                   {["Item", "Project", "Qty Sistem", "Qty Fisik", "Selisih", ""].map(
                     (h, i) => (
                       <th
@@ -193,7 +193,7 @@ export default function VarianceReviewPage() {
                         href={`/app/opname/${r.projectId}/variance`}
                         className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
                       >
-                        <ArrowRight size={15} weight="bold" />
+                        <ArrowRight size={15} strokeWidth={2.2} />
                       </Link>
                     </td>
                   </tr>

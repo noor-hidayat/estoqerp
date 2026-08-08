@@ -7,6 +7,7 @@ export const FIELD_COLORS: Record<SegmentField, { bg: string; text: string; dot:
   CATEGORY: { bg: "bg-violet-100", text: "text-violet-700", dot: "bg-violet-500" },
   DATE: { bg: "bg-sky-100", text: "text-sky-700", dot: "bg-sky-500" },
   SEQUENCE: { bg: "bg-amber-100", text: "text-amber-700", dot: "bg-amber-500" },
+  BARCODE_ID: { bg: "bg-rose-100", text: "text-rose-700", dot: "bg-rose-500" },
   CUSTOM: { bg: "bg-zinc-100", text: "text-zinc-600", dot: "bg-zinc-400" },
 };
 
@@ -15,6 +16,7 @@ export const FIELD_LABEL_SHORT: Record<SegmentField, string> = {
   CATEGORY: "Kat.",
   DATE: "Tgl",
   SEQUENCE: "Seq",
+  BARCODE_ID: "Barcode",
   CUSTOM: "Kus.",
 };
 

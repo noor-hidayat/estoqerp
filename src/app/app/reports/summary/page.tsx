@@ -3,12 +3,12 @@
 import { useMemo } from "react";
 import {
   Coins,
-  FilePdf,
+  FileDown,
   FileText,
-  FileXls,
+  FileSpreadsheet,
   Package,
   Warehouse as WarehouseIcon,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { useDB } from "@/hooks/use-db";
 import {
   projectProgress,
@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, Td } from "@/components/ui/table";
 import { RoleGuard } from "@/components/ui/role-guard";
+import { ALL_ROLES } from "@/lib/roles";
 
 export default function SummaryReportPage() {
   const db = useDB();
@@ -64,8 +65,8 @@ export default function SummaryReportPage() {
     { key: "name" as const, header: "Project" },
     { key: "branch" as const, header: "Cabang" },
     { key: "warehouse" as const, header: "Gudang" },
-    { key: "counted" as const, header: "Item Terhitung" },
-    { key: "total" as const, header: "Total Item" },
+    { key: "counted" as const, header: "Lokasi Terhitung" },
+    { key: "total" as const, header: "Total Lokasi" },
     { key: "pct" as const, header: "Completion %", format: (v: unknown) => `${v}%` },
   ];
 
@@ -81,7 +82,7 @@ export default function SummaryReportPage() {
   };
 
   return (
-    <RoleGuard roles={["ADMIN", "APPROVER"]}>
+    <RoleGuard roles={ALL_ROLES}>
       <PageHeader
         eyebrow="Laporan"
         title="Summary Report"
@@ -89,11 +90,11 @@ export default function SummaryReportPage() {
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
-              <FileXls size={15} weight="bold" className="text-emerald-600" />
+              <FileSpreadsheet size={15} strokeWidth={2.2} className="text-emerald-600" />
               Excel
             </Button>
             <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
-              <FilePdf size={15} weight="bold" className="text-red-500" />
+              <FileDown size={15} strokeWidth={2.2} className="text-red-500" />
               PDF
             </Button>
           </div>
@@ -101,27 +102,27 @@ export default function SummaryReportPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-5">
+        <div className="rounded-lg border border-zinc-200 bg-white p-5">
           <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500">
-            <Package size={18} weight="bold" />
+            <Package size={18} strokeWidth={2.2} />
           </div>
           <p className="text-[12px] font-medium text-zinc-400">Total item master</p>
           <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
             {data.totalItems}
           </p>
         </div>
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-5">
+        <div className="rounded-lg border border-zinc-200 bg-white p-5">
           <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500">
-            <WarehouseIcon size={18} weight="bold" />
+            <WarehouseIcon size={18} strokeWidth={2.2} />
           </div>
           <p className="text-[12px] font-medium text-zinc-400">Total gudang</p>
           <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
             {db.warehouses.length}
           </p>
         </div>
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-5">
+        <div className="rounded-lg border border-zinc-200 bg-white p-5">
           <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600/10 text-emerald-700">
-            <FileText size={18} weight="bold" />
+            <FileText size={18} strokeWidth={2.2} />
           </div>
           <p className="text-[12px] font-medium text-zinc-400">Completion rata-rata</p>
           <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
@@ -134,9 +135,9 @@ export default function SummaryReportPage() {
             />
           </div>
         </div>
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-5">
+        <div className="rounded-lg border border-zinc-200 bg-white p-5">
           <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600/10 text-emerald-700">
-            <Coins size={18} weight="bold" />
+            <Coins size={18} strokeWidth={2.2} />
           </div>
           <p className="text-[12px] font-medium text-zinc-400">Total nilai stok sistem</p>
           <p className="mt-1 font-mono text-xl font-semibold tracking-tight text-zinc-900">
@@ -145,7 +146,7 @@ export default function SummaryReportPage() {
         </div>
       </div>
 
-      <div className="mt-8 rounded-2xl border border-zinc-200/70 bg-white">
+      <div className="mt-8 rounded-lg border border-zinc-200 bg-white">
         <div className="border-b border-zinc-100 px-5 py-4">
           <h3 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">
             Ringkasan per project
@@ -174,7 +175,7 @@ export default function SummaryReportPage() {
                     />
                   </div>
                   <span className="font-mono text-[12px] font-medium text-zinc-600">
-                    {p.counted}/{p.total} · {p.pct}%
+                    {p.counted}/{p.total} lokasi · {p.pct}%
                   </span>
                 </div>
               </Td>

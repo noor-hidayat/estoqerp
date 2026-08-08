@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "STAFF" | "APPROVER";
+export type Role = "ADMINISTRATOR" | "ADMIN" | "STAFF";
 
 export interface User {
   id: string;
@@ -47,6 +47,8 @@ export interface Item {
   systemStock: Record<string, number>;
   price: number;
   hue: number;
+  barcodeId?: string;
+  qty?: number;
 }
 
 export type SegmentField =
@@ -54,6 +56,7 @@ export type SegmentField =
   | "CATEGORY"
   | "DATE"
   | "SEQUENCE"
+  | "BARCODE_ID"
   | "CUSTOM";
 
 export interface BarcodeSegment {
@@ -70,6 +73,7 @@ export interface BarcodeFormat {
   description?: string;
   isActive: boolean;
   qtyPerFormat: boolean;
+  uniqueBarcode?: boolean;
   segments: BarcodeSegment[];
   updatedAt: string;
 }
@@ -79,9 +83,7 @@ export type OpnameMode = "COMPARE" | "SCRATCH";
 export type ProjectStatus =
   | "DRAFT"
   | "IN_PROGRESS"
-  | "PENDING_APPROVAL"
   | "APPROVED"
-  | "REJECTED"
   | "CANCELLED";
 
 export interface Project {
@@ -133,13 +135,4 @@ export interface OpnameEntry {
   countedQty: number;
 }
 
-export type ApprovalStatus = "APPROVED" | "REJECTED";
 
-export interface Approval {
-  id: string;
-  projectId: string;
-  approvedBy: string;
-  status: ApprovalStatus;
-  note?: string;
-  at: string;
-}

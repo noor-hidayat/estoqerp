@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
+import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { FormatEditor } from "@/components/barcode/format-editor";
 import { useDB } from "@/hooks/use-db";
@@ -15,9 +16,9 @@ export default function EditBarcodeFormatPage() {
 
   if (!format) {
     return (
-      <RoleGuard roles={["ADMIN"]}>
+      <RoleGuard roles={MANAGER_ROLES}>
         <PageHeader title="Format tidak ditemukan" />
-        <button onClick={() => router.push("/app/setup/barcode-formats")}>
+        <button onClick={() => router.push("/app/settings/barcode-formats")}>
           Kembali
         </button>
       </RoleGuard>
@@ -25,9 +26,9 @@ export default function EditBarcodeFormatPage() {
   }
 
   return (
-    <RoleGuard roles={["ADMIN"]}>
+    <RoleGuard roles={MANAGER_ROLES}>
       <PageHeader
-        eyebrow="Setup"
+        eyebrow="Settings"
         title={format.name}
         description="Sesuaikan segmen posisi digit dan uji parsing format ini."
       />

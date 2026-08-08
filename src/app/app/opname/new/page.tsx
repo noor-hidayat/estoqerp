@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useData } from "@/hooks/use-db";
 import { useSession } from "@/lib/session";
 import { newUid } from "@/lib/mock/store";
@@ -10,6 +10,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { RoleGuard } from "@/components/ui/role-guard";
+import { MANAGER_ROLES } from "@/lib/roles";
 import { cx } from "@/lib/utils";
 import type { OpnameMode } from "@/types";
 
@@ -46,8 +48,11 @@ export default function NewProjectPage() {
   const { db, insert } = useData();
   const { user } = useSession();
 
+  const lockedBranch = user?.role === "ADMIN" ? user.branchId ?? "" : "";
   const [name, setName] = useState("");
-  const [branchId, setBranchId] = useState(db.branches[0]?.id ?? "");
+  const [branchId, setBranchId] = useState(
+    lockedBranch || db.branches[0]?.id || ""
+  );
   const [warehouseId, setWarehouseId] = useState("");
   const [mode, setMode] = useState<OpnameMode>("COMPARE");
   const [deadline, setDeadline] = useState("");
@@ -82,12 +87,13 @@ export default function NewProjectPage() {
   };
 
   return (
-    <div>
+    <RoleGuard roles={MANAGER_ROLES}>
+      <div>
       <button
         onClick={() => router.push("/app/opname")}
         className="mb-6 inline-flex items-center gap-2 text-[13px] font-medium text-zinc-500 transition-colors hover:text-zinc-800"
       >
-        <ArrowLeft size={15} weight="bold" />
+        <ArrowLeft size={15} strokeWidth={2.2} />
         Kembali ke Projects
       </button>
 
@@ -99,7 +105,7 @@ export default function NewProjectPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="space-y-6">
-          <div className="rounded-2xl border border-zinc-200/70 bg-white p-6">
+          <div className="rounded-lg border border-zinc-200 bg-white p-6">
             <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-wider text-zinc-500">
               Detail project
             </h3>
@@ -116,6 +122,8 @@ export default function NewProjectPage() {
                 label="Cabang"
                 value={branchId}
                 onChange={(e) => handleBranchChange(e.target.value)}
+                disabled={!!lockedBranch}
+                hint={lockedBranch ? "Cabang dikunci sesuai plant Anda" : undefined}
               >
                 {db.branches.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -159,7 +167,7 @@ export default function NewProjectPage() {
                     key={m.id}
                     onClick={() => setMode(m.id)}
                     className={cx(
-                      "rounded-2xl border p-5 text-left transition-all",
+                      "rounded-lg border p-5 text-left transition-all",
                       active
                         ? "border-emerald-500/60 bg-emerald-50/50 ring-1 ring-emerald-500/20"
                         : "border-zinc-200 bg-white hover:border-zinc-300"
@@ -210,10 +218,11 @@ export default function NewProjectPage() {
             onClick={create}
           >
             Buat Project
-            <ArrowRight size={16} weight="bold" />
+            <ArrowRight size={16} strokeWidth={2.2} />
           </Button>
         </div>
       </div>
-    </div>
+      </div>
+    </RoleGuard>
   );
 }

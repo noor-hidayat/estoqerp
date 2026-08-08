@@ -17,11 +17,11 @@ export function EmptyState({
   return (
     <div
       className={cx(
-        "flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300/80 bg-zinc-50/50 px-6 py-16 text-center",
+        "flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50/50 px-6 py-16 text-center",
         className
       )}
     >
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-zinc-400 shadow-sm ring-1 ring-zinc-200/60">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-white text-zinc-400 ring-1 ring-zinc-200">
         {icon}
       </div>
       <h3 className="text-[15px] font-semibold text-zinc-800">{title}</h3>

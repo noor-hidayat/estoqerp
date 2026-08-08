@@ -38,10 +38,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           ref={ref}
           id={inputId}
           className={cx(
-            "h-10 w-full rounded-xl border bg-white text-sm text-zinc-900 placeholder:text-zinc-400 transition-colors",
-            "focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/60",
+            "h-10 w-full rounded-md border bg-white text-sm text-zinc-900 placeholder:text-zinc-400 transition-colors",
+            "focus:outline-none focus:ring-1 focus:ring-zinc-900/20 focus:border-zinc-400",
             error
-              ? "border-red-400 focus:ring-red-500/40 focus:border-red-500"
+              ? "border-red-400 focus:ring-red-500/30 focus:border-red-500"
               : "border-zinc-300",
             icon ? "pl-10 pr-3.5" : "px-3.5",
             className

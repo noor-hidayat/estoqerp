@@ -3,14 +3,15 @@
 import { useMemo, useState } from "react";
 import {
   MapPin,
-  PencilSimple,
+  Pencil,
   Plus,
-  Trash,
-} from "@phosphor-icons/react";
+  Trash2,
+} from "lucide-react";
 import { useData } from "@/hooks/use-db";
 import { newUid } from "@/lib/mock/store";
 import type { Location } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
+import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,14 +88,14 @@ export default function LocationsPage() {
   };
 
   return (
-    <RoleGuard roles={["ADMIN"]}>
+    <RoleGuard roles={MANAGER_ROLES}>
       <PageHeader
         eyebrow="Setup"
         title="Lokasi Gudang"
         description="Kode rak / bin yang dipakai saat sesi scan berlangsung, contoh: H1 AB1."
         actions={
           <Button variant="secondary" onClick={openCreate}>
-            <Plus size={15} weight="bold" />
+            <Plus size={15} strokeWidth={2.2} />
             Tambah Lokasi
           </Button>
         }
@@ -117,12 +118,12 @@ export default function LocationsPage() {
 
       {locations.length === 0 ? (
         <EmptyState
-          icon={<MapPin size={26} weight="bold" />}
+          icon={<MapPin size={26} strokeWidth={2} />}
           title="Belum ada lokasi"
           description="Tambahkan lokasi rak/bin untuk menandai area pada sesi scan."
         />
       ) : (
-        <div className="rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="rounded-lg border border-zinc-200 bg-white">
           <Table columns={["Kode Lokasi", "Nama", "Gudang", "Cabang", ""]}>
             {locations.map((loc) => {
               const wh = warehouseOf(loc.warehouseId);
@@ -142,13 +143,13 @@ export default function LocationsPage() {
                         onClick={() => openEdit(loc)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
                       >
-                        <PencilSimple size={15} weight="bold" />
+                        <Pencil size={15} strokeWidth={2.2} />
                       </button>
                       <button
                         onClick={() => handleRemove(loc)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
                       >
-                        <Trash size={15} weight="bold" />
+                        <Trash2 size={15} strokeWidth={2.2} />
                       </button>
                     </div>
                   </Td>

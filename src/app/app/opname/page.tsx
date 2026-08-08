@@ -1,202 +1,241 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
-  ClipboardText,
+  ClipboardList,
+  Folder,
   FolderOpen,
   Plus,
-  Scan,
-} from "@phosphor-icons/react";
+  ScanLine,
+} from "lucide-react";
 import { useDB } from "@/hooks/use-db";
+import { useSession } from "@/lib/session";
+import { isManager } from "@/lib/roles";
 import {
   MODE_LABELS,
+  projectCode,
   projectProgress,
   STATUS_LABELS,
   STATUS_TONE,
 } from "@/lib/compute";
-import { formatDate } from "@/lib/utils";
+import { formatDate, cx } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs } from "@/components/ui/tabs";
+import { Table, Td } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Stagger, StaggerItem } from "@/components/motion/stagger";
-
-const FILTERS = [
-  { id: "all", label: "Semua" },
-  { id: "active", label: "Aktif" },
-  { id: "PENDING_APPROVAL", label: "Menunggu Approval" },
-  { id: "APPROVED", label: "Disetujui" },
-  { id: "REJECTED", label: "Ditolak" },
-  { id: "DRAFT", label: "Draft" },
-];
 
 export default function OpnameProjectsPage() {
   const db = useDB();
-  const [filter, setFilter] = useState("all");
+  const { user } = useSession();
+
+  const visibleProjects = useMemo(() => {
+    if (user?.role === "ADMIN") {
+      return db.projects.filter((p) => p.branchId === user.branchId);
+    }
+    return db.projects;
+  }, [db, user]);
 
   const projects = useMemo(
     () =>
-      [...db.projects]
-        .filter((p) => {
-          if (filter === "all") return true;
-          if (filter === "active")
-            return p.status === "IN_PROGRESS" || p.status === "PENDING_APPROVAL";
-          return p.status === filter;
-        })
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [db, filter]
+      [...visibleProjects].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [visibleProjects]
   );
 
-  const warehouseName = (id: string) =>
-    db.warehouses.find((w) => w.id === id)?.name ?? "—";
-  const branchName = (id: string) =>
-    db.branches.find((b) => b.id === id)?.name ?? "—";
-
   const counts = useMemo(() => {
-    const active = db.projects.filter(
-      (p) => p.status === "IN_PROGRESS" || p.status === "PENDING_APPROVAL"
+    const active = visibleProjects.filter(
+      (p) => p.status === "IN_PROGRESS"
     ).length;
-    const pending = db.projects.filter(
-      (p) => p.status === "PENDING_APPROVAL"
-    ).length;
-    return { active, pending };
-  }, [db]);
+    const final = visibleProjects.filter((p) => p.status === "APPROVED").length;
+    return { active, final };
+  }, [visibleProjects]);
+
+  const progressColor = (pct: number, status: string) => {
+    if (status === "APPROVED") return "bg-emerald-500";
+    if (pct === 100) return "bg-emerald-500";
+    return "bg-amber-400";
+  };
 
   return (
     <div>
       <PageHeader
-        eyebrow="Stock Opname"
         title="Projects"
-        description="Kelompokkan sesi opname dalam satu project bernama, lalu jalankan scan dan approval."
+        description="Kelompokkan sesi opname dalam satu project bernama, lalu jalankan sesi scan."
         actions={
-          <Link href="/app/opname/new">
-            <Button variant="secondary">
-              <Plus size={15} weight="bold" />
-              Buat Project
-            </Button>
-          </Link>
+          isManager(user?.role ?? "STAFF") ? (
+            <Link href="/app/opname/new">
+              <Button variant="primary">
+                <Plus size={15} strokeWidth={2.2} />
+                Buat Project
+              </Button>
+            </Link>
+          ) : undefined
         }
       />
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-3">
+      <div className="mb-10 grid gap-4 sm:grid-cols-3">
         {[
           {
             label: "Total project",
-            value: db.projects.length,
-            icon: <FolderOpen size={18} weight="bold" />,
+            value: visibleProjects.length,
+            icon: <FolderOpen size={18} strokeWidth={2.2} />,
+            iconClass: "bg-zinc-900 text-zinc-50",
+            chip: "Semua",
+            tone: "text-zinc-900",
           },
           {
             label: "Berlangsung",
             value: counts.active,
-            icon: <Scan size={18} weight="bold" />,
+            icon: <ScanLine size={18} strokeWidth={2.2} />,
+            iconClass: "bg-amber-100 text-amber-700",
+            chip: "Aktif",
+            tone: "text-amber-600",
           },
           {
-            label: "Menunggu approval",
-            value: counts.pending,
-            icon: <ClipboardText size={18} weight="bold" />,
+            label: "Final",
+            value: counts.final,
+            icon: <ClipboardList size={18} strokeWidth={2.2} />,
+            iconClass: "bg-emerald-100 text-emerald-700",
+            chip: "Selesai",
+            tone: "text-emerald-600",
           },
-        ].map((s) => (
+        ].map((s, i) => (
           <div
             key={s.label}
-            className="rounded-2xl border border-zinc-200/70 bg-white p-5"
+            className="animate-fade-up group rounded-xl border border-zinc-200 bg-white p-6 transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_14px_36px_-16px_rgb(17_17_17/0.14)]"
+            style={{ animationDelay: `${i * 70}ms` }}
           >
-            <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500">
-              {s.icon}
+            <div className="flex items-center justify-between">
+              <span
+                className={cx(
+                  "inline-flex h-10 w-10 items-center justify-center rounded-lg transition-transform duration-300 group-hover:scale-105",
+                  s.iconClass
+                )}
+              >
+                {s.icon}
+              </span>
+              <span className="rounded-full bg-zinc-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 ring-1 ring-inset ring-zinc-200/70">
+                {s.chip}
+              </span>
             </div>
-            <p className="text-[12px] font-medium text-zinc-400">{s.label}</p>
-            <p className="mt-0.5 font-mono text-2xl font-semibold tracking-tight text-zinc-900">
+            <p className={cx("mt-6 font-mono text-[30px] font-semibold leading-none tracking-tight", s.tone)}>
               {s.value}
+            </p>
+            <p className="mt-2 text-[13px] font-medium text-zinc-500">
+              {s.label}
             </p>
           </div>
         ))}
       </div>
 
-      <div className="mb-6">
-        <Tabs
-          tabs={FILTERS.map((f) => ({
-            id: f.id,
-            label: f.label,
-            count:
-              f.id === "all"
-                ? db.projects.length
-                : f.id === "active"
-                  ? counts.active
-                  : db.projects.filter((p) => p.status === f.id).length,
-          }))}
-          active={filter}
-          onChange={setFilter}
-        />
-      </div>
-
       {projects.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardText size={26} weight="bold" />}
-          title="Tidak ada project"
-          description="Buat project opname baru untuk mulai proses penghitungan stok."
-          action={
-            <Link href="/app/opname/new">
-              <Button variant="secondary">Buat Project</Button>
-            </Link>
-          }
-        />
+        <div className="animate-fade-up rounded-xl border border-zinc-200 bg-white p-14">
+          <EmptyState
+            icon={<Folder size={28} strokeWidth={2} />}
+            title="Belum ada project"
+            description="Buat project opname pertama untuk mulai proses penghitungan stok."
+            action={
+              isManager(user?.role ?? "STAFF") ? (
+                <Link href="/app/opname/new">
+                  <Button variant="primary">
+                    <Plus size={15} strokeWidth={2.2} />
+                    Buat Project
+                  </Button>
+                </Link>
+              ) : undefined
+            }
+          />
+        </div>
       ) : (
-        <Stagger className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {projects.map((p) => {
-            const progress = projectProgress(db, p);
-            return (
-              <StaggerItem key={p.id}>
-                <Link
-                  href={`/app/opname/${p.id}`}
-                  className="group flex h-full flex-col rounded-2xl border border-zinc-200/70 bg-white p-6 transition-all hover:border-zinc-300 hover:shadow-[0_24px_50px_-20px_rgb(24_24_27/0.12)]"
+        <div
+          className="animate-fade-up overflow-hidden rounded-xl border border-zinc-200 bg-white"
+          style={{ animationDelay: "280ms" }}
+        >
+          <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600">
+                <Folder size={16} strokeWidth={2.2} />
+              </span>
+              <div>
+                <h2 className="text-[14px] font-semibold tracking-tight text-zinc-900">
+                  Daftar Project
+                </h2>
+                <p className="text-[12px] text-zinc-400">
+                  {projects.length} project · {counts.active} berlangsung
+                </p>
+              </div>
+            </div>
+            <Badge tone="neutral" dot>
+              {STATUS_LABELS.APPROVED}
+            </Badge>
+          </div>
+          <Table
+            columns={["ID", "Project", "Status", "Mode", "Progress", "Dibuat", ""]}
+          >
+            {projects.map((p) => {
+              const progress = projectProgress(db, p);
+              return (
+                <tr
+                  key={p.id}
+                  className="group transition-colors hover:bg-zinc-50/70"
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <Td mono className="text-[12px] text-zinc-500">
+                    {projectCode(db, p)}
+                  </Td>
+                  <Td>
+                    <Link
+                      href={`/app/opname/${p.id}`}
+                      className="block"
+                    >
+                      <p className="text-[14px] font-semibold tracking-tight text-zinc-900 transition-colors group-hover:text-emerald-700">
+                        {p.name}
+                      </p>
+                    </Link>
+                  </Td>
+                  <Td>
                     <Badge tone={STATUS_TONE[p.status]} dot>
                       {STATUS_LABELS[p.status]}
                     </Badge>
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-300 transition-all group-hover:bg-zinc-900 group-hover:text-white">
-                      <ArrowUpRight size={15} weight="bold" />
-                    </span>
-                  </div>
-                  <h3 className="mt-4 text-[16px] font-semibold leading-snug tracking-tight text-zinc-900">
-                    {p.name}
-                  </h3>
-                  <p className="mt-1.5 text-[12.5px] text-zinc-400">
-                    {warehouseName(p.warehouseId)} · {branchName(p.branchId)}
-                  </p>
-
-                  <div className="mt-4 flex items-center gap-2">
-                    <Badge tone={p.mode === "COMPARE" ? "emerald" : "violet"}>
+                  </Td>
+                  <Td>
+                    <span className="text-[12.5px] font-medium text-zinc-500">
                       {MODE_LABELS[p.mode]}
-                    </Badge>
-                  </div>
-
-                  <div className="mt-auto pt-5">
-                    <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                      <span>
-                        Progress {progress.counted}/{progress.total} item
-                      </span>
-                      <span className="font-mono font-semibold text-zinc-600">
+                    </span>
+                  </Td>
+                  <Td>
+                    <div className="flex min-w-[140px] items-center gap-3">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
+                        <div
+                          className={cx(
+                            "h-full rounded-full transition-all duration-500",
+                            progressColor(progress.pct, p.status)
+                          )}
+                          style={{ width: `${progress.pct}%` }}
+                        />
+                      </div>
+                      <span className="w-10 shrink-0 text-right font-mono text-[12px] font-semibold text-zinc-600">
                         {progress.pct}%
                       </span>
                     </div>
-                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-zinc-100">
-                      <div
-                        className="h-full rounded-full bg-emerald-500 transition-all"
-                        style={{ width: `${progress.pct}%` }}
-                      />
-                    </div>
-                    <p className="mt-3 text-[11px] text-zinc-400">
-                      Dibuat {formatDate(p.createdAt)}
-                    </p>
-                  </div>
-                </Link>
-              </StaggerItem>
-            );
-          })}
-        </Stagger>
+                  </Td>
+                  <Td className="text-[12.5px] text-zinc-500">
+                    {formatDate(p.createdAt)}
+                  </Td>
+                  <Td>
+                    <Link
+                      href={`/app/opname/${p.id}`}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-300 transition-all hover:bg-zinc-900 hover:text-white"
+                    >
+                      <ArrowUpRight size={15} strokeWidth={2.2} />
+                    </Link>
+                  </Td>
+                </tr>
+              );
+            })}
+          </Table>
+        </div>
       )}
     </div>
   );

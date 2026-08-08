@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { LockKey } from "@phosphor-icons/react";
+import { LockKeyhole } from "lucide-react";
 import { useSession } from "@/lib/session";
 import type { Role } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,8 @@ export function RoleGuard({
   if (!hasRole(roles)) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400">
-          <LockKey size={28} weight="bold" />
+        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-lg bg-zinc-100 text-zinc-400">
+          <LockKeyhole size={28} strokeWidth={2} />
         </div>
         <h1 className="text-xl font-semibold tracking-tight text-zinc-900">
           Akses terbatas

@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { X } from "@phosphor-icons/react";
+import { X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { cx } from "@/lib/utils";
 
@@ -18,7 +18,7 @@ export function Modal({
   onClose: () => void;
   title: string;
   description?: string;
-  children: ReactNode;
+  children?: ReactNode;
   footer?: ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
 }) {
@@ -52,19 +52,19 @@ export function Modal({
           exit={{ opacity: 0 }}
           onClick={onClose}
         >
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
-            initial={{ opacity: 0, y: 24, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 320, damping: 30 }}
-            className={cx(
-              "w-full rounded-t-[1.5rem] bg-white p-6 shadow-[0_24px_80px_-20px_rgb(24_24_27/0.35)] sm:rounded-[1.5rem]",
-              widths[size]
-            )}
-          >
+        <motion.div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => e.stopPropagation()}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 8 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className={cx(
+            "w-full rounded-t-lg bg-white p-6 sm:rounded-lg",
+            widths[size]
+          )}
+        >
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold tracking-tight text-zinc-900">
@@ -76,9 +76,9 @@ export function Modal({
               </div>
               <button
                 onClick={onClose}
-                className="rounded-full p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+                className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
               >
-                <X size={18} weight="bold" />
+                <X size={18} strokeWidth={2.2} />
               </button>
             </div>
             <div>{children}</div>

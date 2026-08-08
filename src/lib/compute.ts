@@ -11,9 +11,7 @@ export const MODE_LABELS: Record<OpnameMode, string> = {
 export const STATUS_LABELS: Record<ProjectStatus, string> = {
   DRAFT: "Draft",
   IN_PROGRESS: "Berlangsung",
-  PENDING_APPROVAL: "Menunggu Approval",
-  APPROVED: "Disetujui",
-  REJECTED: "Ditolak",
+  APPROVED: "Final",
   CANCELLED: "Dibatalkan",
 };
 
@@ -23,9 +21,7 @@ export const STATUS_TONE: Record<
 > = {
   DRAFT: "neutral",
   IN_PROGRESS: "amber",
-  PENDING_APPROVAL: "blue",
   APPROVED: "emerald",
-  REJECTED: "red",
   CANCELLED: "neutral",
 };
 
@@ -71,10 +67,21 @@ export function projectCounted(db: DB, project: Project): VarianceRow[] {
 }
 
 export function projectProgress(db: DB, project: Project) {
-  const rows = projectCounted(db, project);
-  const total = rows.length;
-  const counted = rows.filter((r) => r.countedQty > 0).length;
-  const pct = total === 0 ? 0 : Math.round((counted / total) * 100);
+  const locations = db.locations.filter(
+    (l) => l.warehouseId === project.warehouseId
+  );
+  const total = locations.length;
+  if (total === 0) return { total: 0, counted: 0, pct: 0 };
+
+  const warehouseIds = new Set(locations.map((l) => l.id));
+  const scannedIds = new Set(
+    db.scanRecords
+      .filter((r) => r.projectId === project.id && r.locationId)
+      .map((r) => r.locationId)
+      .filter((id): id is string => !!id && warehouseIds.has(id))
+  );
+  const counted = scannedIds.size;
+  const pct = Math.round((counted / total) * 100);
   return { total, counted, pct };
 }
 
@@ -85,5 +92,15 @@ export function completedProjects(db: DB, project: Project) {
 }
 
 export function isActiveProject(p: Project) {
-  return p.status === "IN_PROGRESS" || p.status === "PENDING_APPROVAL";
+  return p.status === "IN_PROGRESS";
+}
+
+export function projectCode(db: DB, project: Project) {
+  const serial = db.projects
+    .filter((p) => p.createdAt < project.createdAt)
+    .length + 1;
+  const d = new Date(project.createdAt);
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `SO-${yy}${mm}-${String(serial).padStart(4, "0")}`;
 }

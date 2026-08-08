@@ -11,6 +11,7 @@ export const SEGMENT_FIELD_LABELS: Record<SegmentField, string> = {
   CATEGORY: "Kategori",
   DATE: "Tanggal",
   SEQUENCE: "No. Urut",
+  BARCODE_ID: "Barcode",
   CUSTOM: "Kustom",
 };
 
@@ -95,6 +96,7 @@ export function parseWithFormat(
     CATEGORY: "",
     DATE: "",
     SEQUENCE: "",
+    BARCODE_ID: "",
     CUSTOM: "",
   };
 
@@ -105,12 +107,22 @@ export function parseWithFormat(
   let itemId: string | undefined;
   let item: Item | undefined;
 
-  const itemCode = values.ITEM_CODE;
-  if (itemCode) {
+  const barcodeId = values.BARCODE_ID;
+  if (barcodeId) {
     item = ctx.items.find(
-      (i) => i.code.toLowerCase() === itemCode.toLowerCase()
+      (i) => i.barcodeId?.toLowerCase() === barcodeId.toLowerCase()
     );
     if (item) itemId = item.id;
+  }
+
+  if (!item) {
+    const itemCode = values.ITEM_CODE;
+    if (itemCode) {
+      item = ctx.items.find(
+        (i) => i.code.toLowerCase() === itemCode.toLowerCase()
+      );
+      if (item) itemId = item.id;
+    }
   }
 
   const categoryCode = values.CATEGORY || undefined;
@@ -160,7 +172,7 @@ export function parseBarcode(
   return {
     formatId: "",
     formatName: "",
-    values: { ITEM_CODE: "", CATEGORY: "", DATE: "", SEQUENCE: "", CUSTOM: "" },
+    values: { ITEM_CODE: "", CATEGORY: "", DATE: "", SEQUENCE: "", BARCODE_ID: "", CUSTOM: "" },
     raw: trimmed,
     matched: false,
   };

@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import {
-  Buildings,
-  PencilSimple,
+  Building2,
+  Pencil,
   Plus,
-  Trash,
+  Trash2,
   Warehouse as WarehouseIcon,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { useData } from "@/hooks/use-db";
 import { newUid } from "@/lib/mock/store";
 import { PageHeader } from "@/components/ui/page-header";
+import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -142,7 +143,7 @@ export default function BranchesPage() {
   const branchOf = (id: string) => db.branches.find((b) => b.id === id);
 
   return (
-    <RoleGuard roles={["ADMIN"]}>
+    <RoleGuard roles={MANAGER_ROLES}>
       <PageHeader
         eyebrow="Setup"
         title="Cabang & Gudang"
@@ -162,7 +163,7 @@ export default function BranchesPage() {
           variant="secondary"
           onClick={tab === "branches" ? openNewBranch : openNewWh}
         >
-          <Plus size={15} weight="bold" />
+          <Plus size={15} strokeWidth={2.2} />
           {tab === "branches" ? "Tambah Cabang" : "Tambah Gudang"}
         </Button>
       </div>
@@ -170,12 +171,12 @@ export default function BranchesPage() {
       {tab === "branches" ? (
         db.branches.length === 0 ? (
           <EmptyState
-            icon={<Buildings size={26} weight="bold" />}
+            icon={<Building2 size={26} strokeWidth={2} />}
             title="Belum ada cabang"
             description="Tambahkan cabang pertama untuk struktur organisasi."
           />
         ) : (
-          <div className="rounded-2xl border border-zinc-200/70 bg-white">
+          <div className="rounded-lg border border-zinc-200 bg-white">
             <Table columns={["Kode", "Nama Cabang", "Kota", "Jumlah Gudang", ""]}>
               {db.branches.map((b) => (
                 <tr key={b.id} className="transition-colors hover:bg-zinc-50/60">
@@ -195,13 +196,13 @@ export default function BranchesPage() {
                         onClick={() => openEditBranch(b)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
                       >
-                        <PencilSimple size={15} weight="bold" />
+                        <Pencil size={15} strokeWidth={2.2} />
                       </button>
                       <button
                         onClick={() => removeBranch(b)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
                       >
-                        <Trash size={15} weight="bold" />
+                        <Trash2 size={15} strokeWidth={2.2} />
                       </button>
                     </div>
                   </Td>
@@ -212,12 +213,12 @@ export default function BranchesPage() {
         )
       ) : db.warehouses.length === 0 ? (
         <EmptyState
-          icon={<WarehouseIcon size={26} weight="bold" />}
+          icon={<WarehouseIcon size={26} strokeWidth={2} />}
           title="Belum ada gudang"
           description="Tambahkan gudang dan hubungkan ke cabang yang sesuai."
         />
       ) : (
-        <div className="rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="rounded-lg border border-zinc-200 bg-white">
           <Table columns={["Kode", "Nama Gudang", "Cabang", "Jumlah Lokasi", ""]}>
             {db.warehouses.map((w) => (
               <tr key={w.id} className="transition-colors hover:bg-zinc-50/60">
@@ -237,13 +238,13 @@ export default function BranchesPage() {
                       onClick={() => openEditWh(w)}
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
                     >
-                      <PencilSimple size={15} weight="bold" />
+                      <Pencil size={15} strokeWidth={2.2} />
                     </button>
                     <button
                       onClick={() => removeWh(w)}
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
                     >
-                      <Trash size={15} weight="bold" />
+                      <Trash2 size={15} strokeWidth={2.2} />
                     </button>
                   </div>
                 </Td>

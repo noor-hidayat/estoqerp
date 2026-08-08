@@ -5,11 +5,11 @@ import { useParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
-  CheckCircle,
-  Scan,
-  VideoCamera,
+  CheckCircle2,
+  ScanLine,
+  Video,
   XCircle,
-} from "@phosphor-icons/react";
+} from "lucide-react";
 import { useData } from "@/hooks/use-db";
 import { useSession } from "@/lib/session";
 import { newUid } from "@/lib/mock/store";
@@ -140,8 +140,6 @@ export default function ScanSessionPage() {
       categories: db.categories,
     });
 
-    setCameraOpen(false);
-
     if (!parsed || !parsed.matched) {
       setFeed({
         ok: false,
@@ -172,6 +170,17 @@ export default function ScanSessionPage() {
     }
 
     const existing = buffer.find((e) => e.barcode === barcode);
+    if (existing && format.uniqueBarcode) {
+      setFeed({
+        ok: false,
+        title: "Barcode duplikat",
+        itemName: parsed.item?.name,
+        hue: parsed.item?.hue,
+        detail: `Barcode ini sudah di-scan. Format "${format.name}" tidak mengizinkan duplikat.`,
+      });
+      setInput("");
+      return;
+    }
     const newCount = (existing?.count ?? 0) + 1;
     setBuffer((prev) =>
       existing
@@ -188,12 +197,19 @@ export default function ScanSessionPage() {
       detail: `Masuk antrean scan (total ${newCount}x)`,
     });
     setInput("");
-    inputRef.current?.focus();
+    if (!cameraOpen) inputRef.current?.focus();
   };
 
   const openSave = () => {
     const map: Record<string, string> = {};
-    for (const e of buffer) map[e.barcode] = String(e.count);
+    for (const e of buffer) {
+      const masterQty = e.parsed.item?.qty;
+      const autoQty =
+        e.format.qtyPerFormat && masterQty && masterQty > 0
+          ? masterQty * e.count
+          : e.count;
+      map[e.barcode] = String(autoQty);
+    }
     setQtyMap(map);
     setSaveOpen(true);
   };
@@ -218,6 +234,11 @@ export default function ScanSessionPage() {
     }> = [];
     for (const e of buffer) {
       const raw = (qtyMap[e.barcode] ?? "").trim();
+      const masterQty = e.parsed.item?.qty;
+      const autoQty =
+        e.format.qtyPerFormat && masterQty && masterQty > 0
+          ? masterQty * e.count
+          : e.count;
       const qty = raw === "" ? e.count : Number(raw);
       if (!Number.isFinite(qty) || qty < 1) {
         setFeed({
@@ -230,7 +251,7 @@ export default function ScanSessionPage() {
       items.push({
         parsed: e.parsed,
         quantity: qty,
-        qtyMode: e.format.qtyPerFormat && qty === e.count ? "AUTO" : "MANUAL",
+        qtyMode: qty === autoQty ? "AUTO" : "MANUAL",
         source: e.source,
       });
     }
@@ -262,8 +283,8 @@ export default function ScanSessionPage() {
     project.status === "CANCELLED"
   ) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-zinc-200/70 bg-white py-20 text-center">
-        <CheckCircle size={28} weight="bold" className="text-zinc-300" />
+      <div className="flex flex-col items-center justify-center rounded-lg border border-zinc-200 bg-white py-20 text-center">
+        <CheckCircle2 size={28} strokeWidth={2} className="text-zinc-300" />
         <h2 className="mt-4 text-lg font-semibold text-zinc-900">
           Sesi scan sudah ditutup
         </h2>
@@ -277,9 +298,9 @@ export default function ScanSessionPage() {
   if (!activeSession) {
     return (
       <div className="mx-auto max-w-md">
-        <div className="rounded-[1.5rem] border border-zinc-200/70 bg-white p-8">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-900 text-emerald-400">
-            <Scan size={26} weight="bold" />
+        <div className="rounded-lg border border-zinc-200 bg-white p-8">
+          <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-zinc-900 text-emerald-400">
+            <ScanLine size={26} strokeWidth={2} />
           </span>
           <h2 className="mt-5 text-xl font-semibold tracking-tight text-zinc-900">
             Mulai sesi scan
@@ -311,7 +332,7 @@ export default function ScanSessionPage() {
             onClick={startSession}
           >
             Mulai Scan
-            <ArrowRight size={16} weight="bold" />
+            <ArrowRight size={16} strokeWidth={2.2} />
           </Button>
         </div>
       </div>
@@ -321,7 +342,7 @@ export default function ScanSessionPage() {
   return (
     <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
       <div className="space-y-6">
-        <div className="rounded-2xl border border-zinc-200/70 bg-white p-6">
+        <div className="rounded-lg border border-zinc-200 bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="relative flex h-3 w-3">
@@ -363,7 +384,7 @@ export default function ScanSessionPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Scan barcode / tempel dari keyboard scanner..."
-                className="h-14 w-full rounded-2xl border-2 border-zinc-200 bg-zinc-50 px-5 pr-16 font-mono text-lg tracking-wider text-zinc-900 placeholder:font-sans placeholder:text-sm placeholder:tracking-normal placeholder:text-zinc-400 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                className="h-14 w-full rounded-lg border-2 border-zinc-200 bg-zinc-50 px-5 pr-16 font-mono text-lg tracking-wider text-zinc-900 placeholder:font-sans placeholder:text-sm placeholder:tracking-normal placeholder:text-zinc-400 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
               />
               <button
                 type="button"
@@ -375,64 +396,13 @@ export default function ScanSessionPage() {
                     : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
                 )}
               >
-                <VideoCamera size={18} weight="bold" />
+                <Video size={18} strokeWidth={2.2} />
               </button>
             </div>
             <p className="mt-2 text-[11.5px] text-zinc-400">
               Scan bebas beberapa barcode, lalu klik Simpan untuk mengisi qty.
             </p>
           </form>
-
-          {buffer.length > 0 && (
-            <div className="mt-4 rounded-2xl border border-zinc-200/70 bg-white">
-              <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-3.5">
-                <h3 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
-                  Antrean scan · {buffer.length} barcode
-                </h3>
-                <div className="flex gap-2">
-                  <button
-                    onClick={clearBuffer}
-                    className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
-                  >
-                    Bersihkan
-                  </button>
-                  <Button size="sm" onClick={openSave}>
-                    Simpan
-                    <CheckCircle size={14} weight="bold" />
-                  </Button>
-                </div>
-              </div>
-              <div className="max-h-56 divide-y divide-zinc-100 overflow-y-auto">
-                {buffer.map((e) => {
-                  const item = e.parsed.item;
-                  return (
-                    <div key={e.barcode} className="flex items-center gap-3 px-5 py-2.5">
-                      <span
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold text-white"
-                        style={{ background: `hsl(${item?.hue ?? 200} 55% 45%)` }}
-                      >
-                        {item?.name.split(" ").slice(0, 2).map((w) => w[0]).join("") ?? "?"}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12.5px] font-medium text-zinc-800">
-                          {item?.name ?? "—"}
-                        </p>
-                        <p className="truncate font-mono text-[10.5px] text-zinc-400">
-                          {e.barcode}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-mono text-[12.5px] font-semibold text-zinc-900">
-                          {e.count}x
-                        </p>
-                        <p className="text-[10px] text-zinc-400">{e.format.name}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           <AnimatePresence>
             {feed && (
@@ -443,7 +413,7 @@ export default function ScanSessionPage() {
                 exit={{ opacity: 0 }}
                 transition={{ type: "spring", stiffness: 320, damping: 26 }}
                 className={cx(
-                  "mt-4 flex items-center gap-4 rounded-2xl border p-4",
+                  "mt-4 flex items-center gap-4 rounded-lg border p-4",
                   feed.ok
                     ? "border-emerald-200 bg-emerald-50/70"
                     : "border-red-200 bg-red-50/70"
@@ -462,7 +432,7 @@ export default function ScanSessionPage() {
                   </span>
                 ) : (
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600">
-                    <XCircle size={22} weight="bold" />
+                    <XCircle size={22} strokeWidth={2} />
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
@@ -476,9 +446,9 @@ export default function ScanSessionPage() {
                   )}
                 </div>
                 {feed.ok && (
-                  <CheckCircle
+                  <CheckCircle2
                     size={20}
-                    weight="bold"
+                    strokeWidth={2.2}
                     className="shrink-0 text-emerald-500"
                   />
                 )}
@@ -496,6 +466,64 @@ export default function ScanSessionPage() {
           )}
         </AnimatePresence>
 
+        {buffer.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 bg-white">
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-3.5">
+              <h3 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+                Antrean scan · {buffer.length} barcode
+              </h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={clearBuffer}
+                  className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+                >
+                  Bersihkan
+                </button>
+                <Button size="sm" onClick={openSave}>
+                  Simpan
+                  <CheckCircle2 size={14} strokeWidth={2.2} />
+                </Button>
+              </div>
+            </div>
+            <div className="max-h-56 divide-y divide-zinc-100 overflow-y-auto">
+              {buffer.map((e) => {
+                const item = e.parsed.item;
+                return (
+                  <div key={e.barcode} className="flex items-center gap-3 px-5 py-2.5">
+                    <span
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold text-white"
+                      style={{ background: `hsl(${item?.hue ?? 200} 55% 45%)` }}
+                    >
+                      {item?.name.split(" ").slice(0, 2).map((w) => w[0]).join("") ?? "?"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12.5px] font-medium text-zinc-800">
+                        {item?.name ?? "—"}
+                      </p>
+                      <p className="truncate font-mono text-[10.5px] text-zinc-400">
+                        {e.barcode}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-[12.5px] font-semibold text-zinc-900">
+                        {e.count}x
+                      </p>
+                      <p className="text-[10px] text-zinc-400">{e.format.name}</p>
+                      {e.format.qtyPerFormat &&
+                        e.parsed.item?.qty &&
+                        e.parsed.item.qty > 0 && (
+                          <p className="text-[10px] font-medium text-emerald-600">
+                            qty master {e.parsed.item.qty}
+                          </p>
+                        )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <AnimatePresence>
           {saveOpen && (
             <motion.div
@@ -511,7 +539,7 @@ export default function ScanSessionPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 12 }}
                 transition={{ type: "spring", stiffness: 320, damping: 28 }}
-                className="w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-200/70 bg-white"
+                className="w-full max-w-lg overflow-hidden rounded-lg border border-zinc-200 bg-white"
               >
                 <div className="border-b border-zinc-100 px-5 py-4">
                   <h3 className="text-[15px] font-semibold tracking-tight text-zinc-900">
@@ -540,7 +568,18 @@ export default function ScanSessionPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-zinc-400">scan {e.count}x</span>
+                        <div className="text-right">
+                          <span className="block text-[11px] text-zinc-400">
+                            scan {e.count}x
+                          </span>
+                          {e.format.qtyPerFormat &&
+                            e.parsed.item?.qty &&
+                            e.parsed.item.qty > 0 && (
+                              <span className="block text-[10px] font-medium text-emerald-600">
+                                master {e.parsed.item.qty}/scan
+                              </span>
+                            )}
+                        </div>
                         <input
                           type="number"
                           min={1}
@@ -565,7 +604,7 @@ export default function ScanSessionPage() {
                   </Button>
                   <Button className="flex-1" onClick={confirmSave}>
                     Simpan Scan
-                    <CheckCircle size={15} weight="bold" />
+                    <CheckCircle2 size={15} strokeWidth={2.2} />
                   </Button>
                 </div>
               </motion.div>
@@ -583,7 +622,7 @@ export default function ScanSessionPage() {
           ].map((s) => (
             <div
               key={s.label}
-              className="rounded-2xl border border-zinc-200/70 bg-white p-4 text-center"
+              className="rounded-lg border border-zinc-200 bg-white p-4 text-center"
             >
               <p className="font-mono text-xl font-semibold text-zinc-900">
                 {s.value}
@@ -595,7 +634,7 @@ export default function ScanSessionPage() {
           ))}
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white">
+        <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
           <div className="border-b border-zinc-100 px-5 py-3.5">
             <h3 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
               Scan terakhir sesi ini
