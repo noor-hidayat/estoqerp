@@ -1,186 +1,160 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Pencil, Plus, Trash2 } from "lucide-react";
-import { useBranches, useAllWarehouses, useInsert, useUpdate, useRemove } from "@/lib/api/query";
-import { useSaveShortcut } from "@/lib/use-save-shortcut";
+import { useNavigate } from "react-router-dom";
+import { Building2, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { useBranches, useAllWarehouses, useRemove } from "@/lib/api/query";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
-import { Table, Td } from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ShellLoader } from "@/components/ui/loader";
 import type { Branch } from "@/types";
 
 export default function PlantsPage() {
+  const navigate = useNavigate();
   const { data: branches = [], isLoading: branchesLoading } = useBranches();
   const { data: warehouses = [] } = useAllWarehouses();
-  const insertBranch = useInsert("branches");
-  const updateBranch = useUpdate("branches");
   const removeBranch = useRemove("branches");
-
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Branch | null>(null);
-  const [form, setForm] = useState({ code: "", name: "", city: "" });
-  const [error, setError] = useState("");
-
-  const openNew = () => {
-    setEditing(null);
-    setForm({ code: "", name: "", city: "" });
-    setError("");
-    setOpen(true);
-  };
-
-  const openEdit = (b: Branch) => {
-    setEditing(b);
-    setForm({ code: b.code, name: b.name, city: b.city });
-    setError("");
-    setOpen(true);
-  };
-
-  const save = async () => {
-    if (!form.code.trim() || !form.name.trim()) {
-      setError("Kode dan nama plant wajib diisi.");
-      return;
-    }
-    if (
-      branches.some(
-        (b) =>
-          b.code.toLowerCase() === form.code.trim().toLowerCase() &&
-          b.id !== editing?.id
-      )
-    ) {
-      setError("Kode plant sudah digunakan.");
-      return;
-    }
-    try {
-      if (editing) {
-        await updateBranch.mutateAsync({ id: editing.id, patch: { ...form } });
-      } else {
-        await insertBranch.mutateAsync({ ...form });
-      }
-      setOpen(false);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Gagal menyimpan");
-    }
-  };
-
-  useSaveShortcut(save, open);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const handleRemove = async (b: Branch) => {
-    if (!confirm(`Hapus plant "${b.name}"?`)) return;
+    if (!confirm(`Delete plant "${b.name}"?`)) return;
     try {
       await removeBranch.mutateAsync(b.id);
     } catch {
-      alert("Tidak bisa menghapus plant ini karena masih digunakan oleh gudang atau project.");
+      alert("Cannot delete this plant because it is still used by warehouses or projects.");
+    }
+  };
+
+  const handleBulkRemove = async () => {
+    const n = selected.size;
+    if (n === 0) return;
+    if (!confirm(`Delete ${n} selected plant${n > 1 ? "s" : ""}?`)) return;
+    try {
+      await Promise.all([...selected].map((id) => removeBranch.mutateAsync(id)));
+      setSelected(new Set());
+    } catch {
+      alert("Cannot delete some plants because they are still used by warehouses or projects.");
     }
   };
 
   if (branchesLoading) return <ShellLoader />;
 
+  const columns: DataTableColumn<Branch>[] = [
+    {
+      id: "code",
+      header: "Code",
+      sortValue: (b) => b.code,
+      cell: (b) => <span className="font-mono text-xs text-muted-foreground">{b.code}</span>,
+    },
+    {
+      id: "name",
+      header: "Plant Name",
+      sortValue: (b) => b.name,
+      cell: (b) => <span className="font-medium text-foreground">{b.name}</span>,
+      className: "min-w-[200px]",
+    },
+    {
+      id: "city",
+      header: "City",
+      sortValue: (b) => b.city,
+      cell: (b) => <span className="text-muted-foreground">{b.city}</span>,
+    },
+    {
+      id: "warehouses",
+      header: "Warehouse Count",
+      align: "right",
+      cell: (b) => (
+        <Badge tone="neutral">
+          {warehouses.filter((w) => w.branchId === b.id).length} warehouses
+        </Badge>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      cell: (b) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              aria-label={`Actions for ${b.name}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={() => navigate(`/app/stock/branches/${b.id}`)}>
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => handleRemove(b)}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
+
   return (
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.branches"]}>
       <PageHeader
-        eyebrow="Inventory"
         title="Plants"
-        description="Kelola plant / cabang sebagai struktur tertinggi organisasi."
+
         actions={
-          <Button variant="secondary" onClick={openNew}>
+          <Button onClick={() => navigate("/app/stock/branches/new")}>
             <Plus size={15} strokeWidth={2} />
-            Tambah Plant
+            Add Plant
           </Button>
         }
       />
 
-      {branches.length === 0 ? (
-        <EmptyState
-          icon={<Building2 size={26} strokeWidth={2} />}
-          title="Belum ada plant"
-          description="Tambahkan plant pertama untuk struktur organisasi."
-        />
-      ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white">
-          <Table storageKey="branches" columns={["Kode", "Nama Plant", "Kota", "Jumlah Gudang", ""]}>
-            {branches.map((b) => (
-              <tr key={b.id} className="transition-colors hover:bg-zinc-50/60">
-                <Td mono>{b.code}</Td>
-                <Td truncate className="text-[13.5px] font-semibold text-zinc-900">
-                  {b.name}
-                </Td>
-                <Td className="text-[12.5px]">{b.city}</Td>
-                <Td>
-                  <Badge tone="neutral">
-                    {warehouses.filter((w) => w.branchId === b.id).length} gudang
-                  </Badge>
-                </Td>
-                <Td>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => openEdit(b)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
-                    >
-                      <Pencil size={15} strokeWidth={2} />
-                    </button>
-                    <button
-                      onClick={() => handleRemove(b)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                    >
-                      <Trash2 size={15} strokeWidth={2} />
-                    </button>
-                  </div>
-                </Td>
-              </tr>
-            ))}
-          </Table>
-        </div>
-      )}
-
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? "Edit Plant" : "Tambah Plant"}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
-              Batal
+      <DataTable
+        columns={columns}
+        data={branches}
+        getRowId={(b) => b.id}
+        searchPlaceholder="Search plants..."
+        getSearchText={(b) => `${b.code} ${b.name} ${b.city}`}
+        selectable
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        toolbarRight={
+          selected.size > 0 ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={handleBulkRemove}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete ({selected.size})
             </Button>
-            <Button variant="secondary" onClick={save}>
-              Simpan
-            </Button>
-          </>
+          ) : null
         }
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Kode plant"
-            placeholder="PBG"
-            value={form.code}
-            onChange={(e) => setForm({ ...form, code: e.target.value })}
-          />
-          <Input
-            label="Kota"
-            placeholder="Bandung"
-            value={form.city}
-            onChange={(e) => setForm({ ...form, city: e.target.value })}
-          />
-          <div className="sm:col-span-2">
-            <Input
-              label="Nama plant"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          </div>
-        </div>
-        {error && (
-          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-[12.5px] text-red-600">
-            {error}
-          </p>
-        )}
-      </Modal>
+        minWidth={640}
+        emptyIcon={<Building2 size={26} strokeWidth={2} />}
+        emptyTitle="No plants yet"
+        emptyDescription="Add your first plant for the organization structure."
+      />
     </RoleGuard>
   );
 }

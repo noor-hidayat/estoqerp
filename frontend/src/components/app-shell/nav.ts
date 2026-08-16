@@ -4,9 +4,9 @@ export interface NavItem {
   label: string;
   href: string;
   icon: string;
-  /** Kunci menu RBAC — item tampil bila role punya akses view menu ini. */
+  /** RBAC menu key — item shows when role has view access to this menu. */
   menu: string;
-  /** Submenu (Master, Inventory) — dirender sebagai grup expandable. */
+  /** Submenu (Master Data, Inventory) — rendered as expandable group. */
   children?: NavItem[];
 }
 
@@ -22,29 +22,18 @@ export const NAV: NavGroup[] = [
       {
         label: "Dashboard",
         href: "/app",
-        icon: "SquaresFour",
+        icon: "LayoutDashboard",
         menu: "dashboard",
       },
     ],
   },
   {
-    title: "Variance",
+    title: "Menu",
     items: [
       {
-        label: "Variance Review",
-        href: "/app/opname/variance",
-        icon: "ArrowsLeftRight",
-        menu: "opname.variance",
-      },
-    ],
-  },
-  {
-    title: "Stock Opname",
-    items: [
-      {
-        label: "Projects",
-        href: "/app/opname",
-        icon: "ClipboardText",
+        label: "Project",
+        href: "/app/projects",
+        icon: "FolderKanban",
         menu: "opname",
       },
     ],
@@ -55,7 +44,7 @@ export const NAV: NavGroup[] = [
       {
         label: "Master",
         href: "/app/setup",
-        icon: "Archive",
+        icon: "Database",
         menu: "master",
         children: [
           {
@@ -118,44 +107,76 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
-    title: "Laporan",
+    title: "Reports",
     items: [
       {
-        label: "Laporan",
+        label: "Reports",
         href: "/app/reports",
-        icon: "ChartBar",
+        icon: "ChartColumn",
         menu: "reports",
+        children: [
+          {
+            label: "Report per Project",
+            href: "/app/reports/project",
+            icon: "ChartColumn",
+            menu: "reports.project",
+          },
+          {
+            label: "Variance Report",
+            href: "/app/reports/variance",
+            icon: "TriangleAlert",
+            menu: "reports.variance",
+          },
+          {
+            label: "Summary Report",
+            href: "/app/reports/summary",
+            icon: "FileText",
+            menu: "reports.summary",
+          },
+          {
+            label: "Scan History",
+            href: "/app/reports/history",
+            icon: "History",
+            menu: "reports.history",
+          },
+        ],
       },
     ],
   },
   {
     title: "Settings",
     items: [
-    {
-      label: "Settings",
-      href: "/app/settings",
-      icon: "GearSix",
-      menu: "settings",
-      children: [
-        {
-          label: "User & Role",
-          href: "/app/settings/users",
-          icon: "Users",
-          menu: "settings.users",
-        },
-        {
-          label: "Role Management",
-          href: "/app/settings/roles",
-          icon: "SquareAsterisk",
-          menu: "settings.roles",
-        },
-      ],
-    },
+      {
+        label: "Settings",
+        href: "/app/settings",
+        icon: "Settings",
+        menu: "settings",
+        children: [
+          {
+            label: "User & Role",
+            href: "/app/settings/users",
+            icon: "Users",
+            menu: "settings.users",
+          },
+          {
+            label: "Role Management",
+            href: "/app/settings/roles",
+            icon: "SquareAsterisk",
+            menu: "settings.roles",
+          },
+          {
+            label: "Import Data",
+            href: "/app/settings/import",
+            icon: "FileSpreadsheet",
+            menu: "settings.import",
+          },
+        ],
+      },
     ],
   },
 ];
 
-/** Filter nav berdasarkan akses view (berbasis permission, bukan role id). */
+/** Filter nav based on view access (permission-based, not role id). */
 export function navForPermissions(canView: (menu: string) => boolean): NavGroup[] {
   return NAV.map((group) => ({
     ...group,

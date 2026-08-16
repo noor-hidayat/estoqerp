@@ -1,40 +1,41 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   MapPin,
+  MoreHorizontal,
   Pencil,
   Plus,
   Trash2,
 } from "lucide-react";
-import { useLocations, useAllWarehouses, useBranches, useInsert, useUpdate, useRemove } from "@/lib/api/query";
-import { useSaveShortcut } from "@/lib/use-save-shortcut";
+import { useLocations, useAllWarehouses, useBranches, useRemove } from "@/lib/api/query";
 import type { Location } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Modal } from "@/components/ui/modal";
-import { Table, Td } from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ShellLoader } from "@/components/ui/loader";
 
 export default function LocationsPage() {
+  const navigate = useNavigate();
   const { data: allLocations = [], isLoading: locationsLoading } = useLocations();
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: branches = [] } = useBranches();
-  const insertLocation = useInsert("locations");
-  const updateLocation = useUpdate("locations");
   const removeLocation = useRemove("locations");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const [warehouseFilter, setWarehouseFilter] = useState("all");
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Location | null>(null);
-  const [form, setForm] = useState({ code: "", name: "", warehouseId: "" });
-  const [error, setError] = useState("");
 
   const locations = useMemo(() => {
     return allLocations
@@ -45,185 +46,147 @@ export default function LocationsPage() {
   const warehouseOf = (id: string) => warehouses.find((w) => w.id === id);
   const branchOf = (branchId: string) => branches.find((b) => b.id === branchId);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({
-      code: "",
-      name: "",
-      warehouseId: warehouses[0]?.id ?? "",
-    });
-    setError("");
-    setOpen(true);
-  };
-
-  const openEdit = (loc: Location) => {
-    setEditing(loc);
-    setForm({ code: loc.code, name: loc.name, warehouseId: loc.warehouseId });
-    setError("");
-    setOpen(true);
-  };
-
-  const save = async () => {
-    if (!form.code.trim() || !form.warehouseId) {
-      setError("Kode lokasi dan gudang wajib diisi.");
-      return;
-    }
-    if (
-      allLocations.some(
-        (l) =>
-          l.code.toLowerCase() === form.code.trim().toLowerCase() &&
-          l.id !== editing?.id
-      )
-    ) {
-      setError("Kode lokasi sudah digunakan.");
-      return;
-    }
-    try {
-      if (editing) {
-        await updateLocation.mutateAsync({ id: editing.id, patch: { ...form } });
-      } else {
-        await insertLocation.mutateAsync({ ...form });
-      }
-      setOpen(false);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Gagal menyimpan");
-    }
-  };
-
-  useSaveShortcut(save, open);
-
   const handleRemove = async (loc: Location) => {
-    if (!confirm(`Hapus lokasi "${loc.code}"?`)) return;
+    if (!confirm(`Delete location "${loc.code}"?`)) return;
     try {
       await removeLocation.mutateAsync(loc.id);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Gagal menghapus");
+      alert(e instanceof Error ? e.message : "Failed to delete");
+    }
+  };
+
+  const handleBulkRemove = async () => {
+    const n = selected.size;
+    if (n === 0) return;
+    if (!confirm(`Delete ${n} selected location${n > 1 ? "s" : ""}?`)) return;
+    try {
+      await Promise.all([...selected].map((id) => removeLocation.mutateAsync(id)));
+      setSelected(new Set());
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to delete");
     }
   };
 
   if (locationsLoading) return <ShellLoader />;
 
+  const columns: DataTableColumn<Location>[] = [
+    {
+      id: "code",
+      header: "Location Code",
+      sortValue: (l) => l.code,
+      cell: (l) => <span className="font-mono text-xs text-muted-foreground">{l.code}</span>,
+    },
+    {
+      id: "name",
+      header: "Name",
+      sortValue: (l) => l.name,
+      cell: (l) => <span className="text-foreground">{l.name}</span>,
+      className: "min-w-[180px]",
+    },
+    {
+      id: "warehouse",
+      header: "Warehouse",
+      sortValue: (l) => warehouseOf(l.warehouseId)?.name ?? "",
+      cell: (l) => <Badge tone="neutral">{warehouseOf(l.warehouseId)?.name ?? "—"}</Badge>,
+    },
+    {
+      id: "branch",
+      header: "Branch",
+      cell: (l) => (
+        <span className="text-muted-foreground">
+          {branchOf(warehouseOf(l.warehouseId)?.branchId ?? "")?.name ?? "—"}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      cell: (l) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              aria-label={`Actions for ${l.code}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={() => navigate(`/app/stock/locations/${l.id}`)}>
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => handleRemove(l)}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
+
   return (
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.locations"]}>
-      <PageHeader
-        eyebrow="Setup"
-        title="Lokasi Gudang"
-        description="Kode rak / bin yang dipakai saat sesi scan berlangsung, contoh: H1 AB1."
+<PageHeader
+        title="Locations"
+
         actions={
-          <Button variant="secondary" onClick={openCreate}>
+          <Button onClick={() => navigate("/app/stock/locations/new")}>
             <Plus size={15} strokeWidth={2} />
-            Tambah Lokasi
+            Add Location
           </Button>
         }
       />
 
-      <div className="mb-5">
-        <Select
-          value={warehouseFilter}
-          onChange={(e) => setWarehouseFilter(e.target.value)}
-          className="sm:w-64"
-        >
-          <option value="all">Semua gudang</option>
-          {warehouses.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.code} — {w.name}
-            </option>
-          ))}
-        </Select>
-      </div>
-
-      {locations.length === 0 ? (
-        <EmptyState
-          icon={<MapPin size={26} strokeWidth={2} />}
-          title="Belum ada lokasi"
-          description="Tambahkan lokasi rak/bin untuk menandai area pada sesi scan."
-        />
-      ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white">
-          <Table storageKey="locations" columns={["Kode Lokasi", "Nama", "Gudang", "Cabang", ""]}>
-            {locations.map((loc) => {
-              const wh = warehouseOf(loc.warehouseId);
-              return (
-                <tr key={loc.id} className="transition-colors hover:bg-zinc-50/60">
-                  <Td mono>{loc.code}</Td>
-                  <Td className="text-[13.5px]">{loc.name}</Td>
-                  <Td>
-                    <Badge tone="neutral">{wh?.name ?? "—"}</Badge>
-                  </Td>
-                  <Td className="text-[12.5px] text-zinc-500">
-                    {branchOf(wh?.branchId ?? "")?.name ?? "—"}
-                  </Td>
-                  <Td>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEdit(loc)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
-                      >
-                        <Pencil size={15} strokeWidth={2} />
-                      </button>
-                      <button
-                        onClick={() => handleRemove(loc)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 size={15} strokeWidth={2} />
-                      </button>
-                    </div>
-                  </Td>
-                </tr>
-              );
-            })}
-          </Table>
-        </div>
-      )}
-
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? "Edit Lokasi" : "Tambah Lokasi"}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
-              Batal
-            </Button>
-            <Button variant="secondary" onClick={save}>
-              Simpan
-            </Button>
-          </>
-        }
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Kode lokasi"
-            placeholder="H1 AB1"
-            value={form.code}
-            onChange={(e) => setForm({ ...form, code: e.target.value })}
-          />
+      <DataTable
+        columns={columns}
+        data={locations}
+        getRowId={(l) => l.id}
+        searchPlaceholder="Search locations..."
+        getSearchText={(l) => `${l.code} ${l.name}`}
+        filters={
           <Select
-            label="Gudang"
-            value={form.warehouseId}
-            onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
+            value={warehouseFilter}
+            onChange={(e) => setWarehouseFilter(e.target.value)}
+            className="h-8 w-56 text-xs"
           >
+            <option value="all">All warehouses</option>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.code} — {w.name}
               </option>
             ))}
           </Select>
-          <div className="sm:col-span-2">
-            <Input
-              label="Nama lokasi (opsional)"
-              placeholder="Rak H1, Blok A, Lorong 1"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          </div>
-        </div>
-        {error && (
-          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-[12.5px] text-red-600">
-            {error}
-          </p>
-        )}
-      </Modal>
+        }
+        selectable
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        toolbarRight={
+          selected.size > 0 ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={handleBulkRemove}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete ({selected.size})
+            </Button>
+          ) : null
+        }
+        minWidth={640}
+        emptyIcon={<MapPin size={26} strokeWidth={2} />}
+        emptyTitle="No locations yet"
+        emptyDescription="Add rack/bin locations to mark areas during scan sessions."
+      />
     </RoleGuard>
   );
 }

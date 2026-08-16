@@ -1,88 +1,51 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Trash2, Warehouse as WarehouseIcon } from "lucide-react";
-import { useAllWarehouses, useBranches, useLocations, useInsert, useUpdate, useRemove } from "@/lib/api/query";
-import { useSaveShortcut } from "@/lib/use-save-shortcut";
+import { useNavigate } from "react-router-dom";
+import { MoreHorizontal, Pencil, Plus, Trash2, Warehouse as WarehouseIcon } from "lucide-react";
+import { useAllWarehouses, useBranches, useLocations, useRemove } from "@/lib/api/query";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Modal } from "@/components/ui/modal";
-import { Table, Td } from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ShellLoader } from "@/components/ui/loader";
 import type { Warehouse } from "@/types";
 
 export default function WarehousesPage() {
+  const navigate = useNavigate();
   const { data: warehouses = [], isLoading: warehousesLoading } = useAllWarehouses();
   const { data: branches = [] } = useBranches();
   const { data: locations = [] } = useLocations();
-  const insertWarehouse = useInsert("warehouses");
-  const updateWarehouse = useUpdate("warehouses");
   const removeWarehouse = useRemove("warehouses");
-
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Warehouse | null>(null);
-  const [form, setForm] = useState({
-    code: "",
-    name: "",
-    branchId: "",
-  });
-  const [error, setError] = useState("");
-
-  const openNew = () => {
-    setEditing(null);
-    setForm({ code: "", name: "", branchId: branches[0]?.id ?? "" });
-    setError("");
-    setOpen(true);
-  };
-
-  const openEdit = (w: Warehouse) => {
-    setEditing(w);
-    setForm({ code: w.code, name: w.name, branchId: w.branchId });
-    setError("");
-    setOpen(true);
-  };
-
-  const save = async () => {
-    if (!form.code.trim() || !form.name.trim() || !form.branchId) {
-      setError("Kode, nama gudang, dan plant wajib diisi.");
-      return;
-    }
-    if (
-      warehouses.some(
-        (w) =>
-          w.code.toLowerCase() === form.code.trim().toLowerCase() &&
-          w.id !== editing?.id
-      )
-    ) {
-      setError("Kode gudang sudah digunakan.");
-      return;
-    }
-    try {
-      if (editing) {
-        await updateWarehouse.mutateAsync({ id: editing.id, patch: { ...form } });
-      } else {
-        await insertWarehouse.mutateAsync({ ...form });
-      }
-      setOpen(false);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Gagal menyimpan");
-    }
-  };
-
-  useSaveShortcut(save, open);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const handleRemove = async (w: Warehouse) => {
-    if (!confirm(`Hapus gudang "${w.name}"?`)) return;
+    if (!confirm(`Delete warehouse "${w.name}"?`)) return;
     try {
       await removeWarehouse.mutateAsync(w.id);
     } catch {
-      alert("Tidak bisa menghapus gudang ini karena masih digunakan oleh lokasi atau project.");
+      alert("Cannot delete this warehouse because it is still used by locations or projects.");
+    }
+  };
+
+  const handleBulkRemove = async () => {
+    const n = selected.size;
+    if (n === 0) return;
+    if (!confirm(`Delete ${n} selected warehouse${n > 1 ? "s" : ""}?`)) return;
+    try {
+      await Promise.all([...selected].map((id) => removeWarehouse.mutateAsync(id)));
+      setSelected(new Set());
+    } catch {
+      alert("Cannot delete some warehouses because they are still used by locations or projects.");
     }
   };
 
@@ -90,110 +53,107 @@ export default function WarehousesPage() {
 
   if (warehousesLoading) return <ShellLoader />;
 
+  const columns: DataTableColumn<Warehouse>[] = [
+    {
+      id: "code",
+      header: "Code",
+      sortValue: (w) => w.code,
+      cell: (w) => <span className="font-mono text-xs text-muted-foreground">{w.code}</span>,
+    },
+    {
+      id: "name",
+      header: "Warehouse Name",
+      sortValue: (w) => w.name,
+      cell: (w) => <span className="font-medium text-foreground">{w.name}</span>,
+      className: "min-w-[200px]",
+    },
+    {
+      id: "branch",
+      header: "Plant",
+      sortValue: (w) => branchOf(w.branchId)?.name ?? "",
+      cell: (w) => <Badge tone="neutral">{branchOf(w.branchId)?.name ?? "—"}</Badge>,
+    },
+    {
+      id: "locations",
+      header: "Location Count",
+      align: "right",
+      cell: (w) => <span className="text-muted-foreground">{locations.filter((l) => l.warehouseId === w.id).length} locations</span>,
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      cell: (w) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              aria-label={`Actions for ${w.name}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={() => navigate(`/app/stock/warehouses/${w.id}`)}>
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => handleRemove(w)}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
+
   return (
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.warehouses"]}>
       <PageHeader
-        eyebrow="Inventory"
         title="Warehouses"
-        description="Kelola gudang yang berada di bawah setiap plant."
+
         actions={
-          <Button variant="secondary" onClick={openNew}>
+          <Button onClick={() => navigate("/app/stock/warehouses/new")}>
             <Plus size={15} strokeWidth={2} />
-            Tambah Gudang
+            Add Warehouse
           </Button>
         }
       />
 
-      {warehouses.length === 0 ? (
-        <EmptyState
-          icon={<WarehouseIcon size={26} strokeWidth={2} />}
-          title="Belum ada gudang"
-          description="Tambahkan gudang dan hubungkan ke plant yang sesuai."
-        />
-      ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white">
-          <Table storageKey="warehouses" columns={["Kode", "Nama Gudang", "Plant", "Jumlah Lokasi", ""]}>
-            {warehouses.map((w) => (
-              <tr key={w.id} className="transition-colors hover:bg-zinc-50/60">
-                <Td mono>{w.code}</Td>
-                <Td truncate className="text-[13.5px] font-semibold text-zinc-900">
-                  {w.name}
-                </Td>
-                <Td>
-                  <Badge tone="neutral">{branchOf(w.branchId)?.name ?? "—"}</Badge>
-                </Td>
-                <Td className="text-[12.5px]">
-                  {locations.filter((l) => l.warehouseId === w.id).length} lokasi
-                </Td>
-                <Td>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => openEdit(w)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
-                    >
-                      <Pencil size={15} strokeWidth={2} />
-                    </button>
-                    <button
-                      onClick={() => handleRemove(w)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                    >
-                      <Trash2 size={15} strokeWidth={2} />
-                    </button>
-                  </div>
-                </Td>
-              </tr>
-            ))}
-          </Table>
-        </div>
-      )}
-
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? "Edit Gudang" : "Tambah Gudang"}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
-              Batal
+      <DataTable
+        columns={columns}
+        data={warehouses}
+        getRowId={(w) => w.id}
+        searchPlaceholder="Search warehouses..."
+        getSearchText={(w) => `${w.code} ${w.name}`}
+        selectable
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        toolbarRight={
+          selected.size > 0 ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={handleBulkRemove}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete ({selected.size})
             </Button>
-            <Button variant="secondary" onClick={save}>
-              Simpan
-            </Button>
-          </>
+          ) : null
         }
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Kode gudang"
-            placeholder="BND-01"
-            value={form.code}
-            onChange={(e) => setForm({ ...form, code: e.target.value })}
-          />
-          <Select
-            label="Plant"
-            value={form.branchId}
-            onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-          >
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.code} — {b.name}
-              </option>
-            ))}
-          </Select>
-          <div className="sm:col-span-2">
-            <Input
-              label="Nama gudang"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          </div>
-        </div>
-        {error && (
-          <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-[12.5px] text-red-600">
-            {error}
-          </p>
-        )}
-      </Modal>
+        minWidth={640}
+        emptyIcon={<WarehouseIcon size={26} strokeWidth={2} />}
+        emptyTitle="No warehouses yet"
+        emptyDescription="Add a warehouse and connect it to the appropriate plant."
+      />
     </RoleGuard>
   );
 }

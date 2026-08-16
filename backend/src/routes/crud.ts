@@ -47,6 +47,31 @@ function isUniqueViolation(e: unknown): boolean {
   );
 }
 
+function isForeignKeyViolation(e: unknown): boolean {
+  const code =
+    (e as { code?: string } | null)?.code ??
+    ((e as { cause?: { code?: string } } | null)?.cause?.code);
+  return code === "23503";
+}
+
+// Pesan jelas saat hapus diblokir foreign key (data masih dipakai).
+const DELETE_BLOCK_MESSAGES: Record<string, string> = {
+  categories:
+    "Kategori masih dipakai oleh item — pindahkan item ke kategori lain atau hapus item-nya terlebih dahulu.",
+  items:
+    "Item ini masih tercatat dalam hasil stock opname (opname entries) — data opname yang sudah masuk perhitungan tidak bisa dihapus.",
+  branches:
+    "Plant ini masih dipakai oleh gudang atau project — pindahkan atau hapus data terkait terlebih dahulu.",
+  warehouses:
+    "Gudang ini masih dipakai oleh lokasi, project, atau stock balance — pindahkan atau hapus data terkait terlebih dahulu.",
+  locations:
+    "Lokasi ini masih dipakai oleh sesi scan, record scan, atau hasil opname — hapus data terkait terlebih dahulu.",
+  roles:
+    "Role ini masih dipakai oleh user — pindahkan user ke role lain terlebih dahulu.",
+  users:
+    "User ini masih terkait dengan data lain di sistem — tidak dapat dihapus.",
+};
+
 async function ensureRowId(
   tableName: string,
   values: Record<string, unknown>
@@ -57,13 +82,14 @@ async function ensureRowId(
     return { ...values, id: `${uuidPrefix}_${crypto.randomUUID()}` };
   }
   if (tableName === "projects") {
-    // ID project historis berupa angka berurutan: "1", "2", ...
+    // ID project: "SOP-001", "SOP-002", ... (legacy "1", "2", ... tetap dihitung)
     const rows = await db.select({ id: schema.projects.id }).from(schema.projects);
     const max = rows.reduce((m, r) => {
-      const n = Number(r.id);
+      const id = String(r.id);
+      const n = id.startsWith("SOP-") ? Number(id.slice(4)) : Number(id);
       return Number.isFinite(n) && n > m ? n : m;
     }, 0);
-    return { ...values, id: String(max + 1) };
+    return { ...values, id: `SOP-${String(max + 1).padStart(3, "0")}` };
   }
   const prefix = ID_PREFIXES[tableName];
   if (!prefix) return values;
@@ -274,7 +300,6 @@ function messageOf(e: unknown): string {
 // ---- GET helpers ----
 
 const DEFAULT_PAGE_SIZE = 20;
-const PAGINABLE = new Set(["items", "scanSessions", "scanRecords", "stockBalances"]);
 
 const SORT_COLS: Record<string, AnyPgColumn> = {
   items: schema.items.code,
@@ -296,6 +321,63 @@ function getOrderBy(req: Request, tableName: string) {
   if (!col) return undefined;
   const dir = queryStr(req, "orderDir") === "asc" ? "asc" : "desc";
   return dir === "asc" ? sql`${col} ASC NULLS LAST` : sql`${col} DESC NULLS LAST`;
+}
+
+// Kolom yang dicari via param `query` — filter dilakukan di SQL
+// (SELECT * FROM t WHERE <col> ILIKE ...), bukan ambil semua lalu filter.
+const SEARCHABLE_COLS: Record<string, AnyPgColumn[]> = {
+  items: [
+    schema.items.code,
+    schema.items.name,
+    schema.items.unit,
+    schema.items.barcodeId,
+    schema.items.categoryId,
+    schema.items.price,
+    schema.items.id,
+  ],
+};
+
+/**
+ * Kondisi WHERE untuk pencarian teks lintas kolom. scanRecords dicari sampai
+ * nama hasil join (item, project, lokasi, user) lewat subquery EXISTS agar
+ * bentuk SELECT utama tidak berubah.
+ */
+function searchCondition(tableName: string, q: string): ReturnType<typeof sql> | undefined {
+  const p = `%${q}%`;
+  if (tableName === "scanRecords") {
+    const s = schema;
+    return sql`(
+      ${s.scanRecords.barcode}::text ILIKE ${p}
+      OR ${s.scanRecords.id}::text ILIKE ${p}
+      OR ${s.scanRecords.quantity}::text ILIKE ${p}
+      OR ${s.scanRecords.source}::text ILIKE ${p}
+      OR ${s.scanRecords.qtyMode}::text ILIKE ${p}
+      OR ${s.scanRecords.sessionId}::text ILIKE ${p}
+      OR EXISTS (
+        SELECT 1 FROM ${s.items} WHERE ${s.items.id} = ${s.scanRecords.itemId}
+          AND (${s.items.code}::text ILIKE ${p} OR ${s.items.name}::text ILIKE ${p})
+      )
+      OR EXISTS (
+        SELECT 1 FROM ${s.projects} WHERE ${s.projects.id} = ${s.scanRecords.projectId}
+          AND ${s.projects.name}::text ILIKE ${p}
+      )
+      OR EXISTS (
+        SELECT 1 FROM ${s.locations} WHERE ${s.locations.id} = ${s.scanRecords.locationId}
+          AND ${s.locations.code}::text ILIKE ${p}
+      )
+      OR EXISTS (
+        SELECT 1 FROM ${s.scanSessions} WHERE ${s.scanSessions.id} = ${s.scanRecords.sessionId}
+          AND EXISTS (
+            SELECT 1 FROM ${s.users} WHERE ${s.users.id} = ${s.scanSessions.scannedBy}
+              AND ${s.users.name}::text ILIKE ${p}
+          )
+      )
+    )`;
+  }
+  const cols = SEARCHABLE_COLS[tableName];
+  if (!cols || cols.length === 0) return undefined;
+  const ors = cols.map((col) => sql`${col}::text ILIKE ${p}`);
+  return ors.length === 1 ? ors[0] : sql`(${sql.join(ors, sql.raw(" OR "))})`;
 }
 
 async function applyEntityScope(req: Request, tableName: string) {
@@ -370,10 +452,13 @@ async function buildWhere(req: Request, table: AnyPgTable, tableName: string) {
     if (warehouseId) conditions.push(eq(s.locations.warehouseId, warehouseId));
   }
   if (tableName === "items") {
-    const q = queryStr(req, "query");
-    if (q) conditions.push(sql`(${s.items.code} ILIKE ${`%${q}%`} OR ${s.items.name} ILIKE ${`%${q}%`})`);
     const categoryId = queryStr(req, "categoryId");
     if (categoryId) conditions.push(eq(s.items.categoryId, categoryId));
+  }
+  const q = queryStr(req, "query");
+  if (q) {
+    const sc = searchCondition(tableName, q);
+    if (sc) conditions.push(sc);
   }
   if (tableName === "stockBalances") {
     const warehouseId = queryStr(req, "warehouseId");
@@ -384,6 +469,8 @@ async function buildWhere(req: Request, table: AnyPgTable, tableName: string) {
   if (tableName === "projects") {
     const branchId = queryStr(req, "branchId");
     if (branchId) conditions.push(eq(s.projects.branchId, branchId));
+    const projectId = queryStr(req, "projectId");
+    if (projectId) conditions.push(eq(s.projects.projectId, projectId));
   }
   if (tableName === "scanSessions") {
     const projectId = queryStr(req, "projectId");
@@ -429,11 +516,10 @@ crudRouter.get("/:table", async (req, res) => {
     const whereCond = await buildWhere(req, table, tableName);
     const orderBy = getOrderBy(req, tableName);
 
-    // Pagination hanya aktif bila param page/pageSize dikirim eksplisit.
-    // Tanpa param, kembalikan array penuh (untuk lookup/hook non-paginated).
+    // Pagination aktif bila param page/pageSize dikirim eksplisit, untuk semua
+    // tabel. Tanpa param, kembalikan array penuh (untuk lookup/hook non-paginated).
     const wantsPagination =
-      PAGINABLE.has(tableName) &&
-      (queryStr(req, "page") !== null || queryStr(req, "pageSize") !== null);
+      queryStr(req, "page") !== null || queryStr(req, "pageSize") !== null;
 
     if (wantsPagination) {
       const page = queryNum(req, "page") ?? 1;
@@ -467,6 +553,124 @@ crudRouter.get("/:table", async (req, res) => {
       const rows = (await q).map((r) => sanitizeRow(table, r as Record<string, unknown>));
       res.json(rows);
     }
+  } catch (e) {
+    res.status(500).json({ error: messageOf(e) });
+  }
+});
+
+// Kondisi WHERE umum untuk stock balances: filter scope entitas, warehouse,
+// item, dan pencarian teks lintas kolom (termasuk nama hasil join).
+async function stockBalanceConds(req: Request): Promise<ReturnType<typeof sql> | undefined> {
+  const conds: ReturnType<typeof sql>[] = [];
+  const scope = await applyEntityScope(req, "stockBalances");
+  if (scope) conds.push(scope);
+  const warehouseId = queryStr(req, "warehouseId");
+  if (warehouseId) conds.push(eq(schema.stockBalances.warehouseId, warehouseId));
+  const itemId = queryStr(req, "itemId");
+  if (itemId) conds.push(eq(schema.stockBalances.itemId, itemId));
+  const q = queryStr(req, "query");
+  if (q) {
+    const p = `%${q}%`;
+    const s = schema;
+    conds.push(sql`(
+      ${s.stockBalances.id}::text ILIKE ${p}
+      OR EXISTS (
+        SELECT 1 FROM ${s.items} WHERE ${s.items.id} = ${s.stockBalances.itemId}
+          AND (${s.items.code}::text ILIKE ${p} OR ${s.items.name}::text ILIKE ${p})
+      )
+      OR EXISTS (
+        SELECT 1 FROM ${s.warehouses} WHERE ${s.warehouses.id} = ${s.stockBalances.warehouseId}
+          AND ${s.warehouses.name}::text ILIKE ${p}
+      )
+      OR EXISTS (
+        SELECT 1 FROM ${s.items} i2
+          JOIN ${s.categories} ON ${s.categories.id} = i2."category_id"
+          WHERE i2.id = ${s.stockBalances.itemId}
+            AND ${s.categories.name}::text ILIKE ${p}
+      )
+    )`);
+  }
+  return conds.length > 0 ? and(...conds) : undefined;
+}
+
+// GET /stock-balances/ledger?page=&pageSize=&query=&warehouseId=&itemId=
+// Join stockBalances × items × warehouses × categories dengan pagination
+// server-side (dipakai halaman Stock Balance).
+crudRouter.get("/stock-balances/ledger", async (req, res) => {
+  if (!(await checkTablePermission(req, res, "stockBalances", "view"))) return;
+  try {
+    const page = queryNum(req, "page") ?? 1;
+    const pageSize = queryNum(req, "pageSize") ?? DEFAULT_PAGE_SIZE;
+    const offset = (page - 1) * pageSize;
+    const whereCond = await stockBalanceConds(req);
+
+    const countQ = db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.stockBalances)
+      .where(whereCond ?? undefined);
+    const [c] = await countQ;
+    const total = Number(c.count);
+
+    const rows = await db
+      .select({
+        id: schema.stockBalances.id,
+        warehouseId: schema.stockBalances.warehouseId,
+        itemId: schema.stockBalances.itemId,
+        code: schema.items.code,
+        name: schema.items.name,
+        category: schema.categories.name,
+        warehouse: schema.warehouses.name,
+        openingQty: schema.stockBalances.openingQty,
+        inQty: schema.stockBalances.inQty,
+        outQty: schema.stockBalances.outQty,
+        closingQty: schema.stockBalances.closingQty,
+      })
+      .from(schema.stockBalances)
+      .leftJoin(schema.items, eq(schema.items.id, schema.stockBalances.itemId))
+      .leftJoin(schema.warehouses, eq(schema.warehouses.id, schema.stockBalances.warehouseId))
+      .leftJoin(schema.categories, eq(schema.categories.id, schema.items.categoryId))
+      .where(whereCond ?? undefined)
+      .orderBy(
+        sql`${schema.items.code} ASC NULLS LAST`,
+        sql`${schema.warehouses.name} ASC NULLS LAST`
+      )
+      .offset(offset)
+      .limit(pageSize);
+
+    res.json({
+      rows,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    });
+  } catch (e) {
+    res.status(500).json({ error: messageOf(e) });
+  }
+});
+
+// GET /stock-balances/summary?query=&warehouseId=&itemId=
+// Ringkasan untuk summary card halaman Stock Balance: total item, total qty
+// (closing stock), dan jumlah baris — mengikuti filter & scope yang sama.
+crudRouter.get("/stock-balances/summary", async (req, res) => {
+  if (!(await checkTablePermission(req, res, "stockBalances", "view"))) return;
+  try {
+    const whereCond = await stockBalanceConds(req);
+
+    const [row] = await db
+      .select({
+        totalItems: sql<number>`count(distinct ${schema.stockBalances.itemId})`,
+        totalQty: sql<number>`coalesce(sum(${schema.stockBalances.closingQty}), 0)`,
+        totalRows: sql<number>`count(*)`,
+      })
+      .from(schema.stockBalances)
+      .where(whereCond ?? undefined);
+
+    res.json({
+      totalItems: Number(row.totalItems),
+      totalQty: Number(row.totalQty),
+      totalRows: Number(row.totalRows),
+    });
   } catch (e) {
     res.status(500).json({ error: messageOf(e) });
   }
@@ -509,7 +713,7 @@ crudRouter.get("/items/lookup", async (req, res) => {
       let barcodeId: string | null = null;
 
       for (const seg of segments) {
-        const val = barcode.slice(seg.start, seg.end);
+        const val = barcode.slice(seg.start - 1, seg.end);
         values[seg.field] = val;
         if (seg.field === "ITEM_CODE") itemCode = val;
         if (seg.field === "CATEGORY") categoryCode = val;
@@ -624,7 +828,7 @@ crudRouter.get("/projects/:id/stats", async (req, res) => {
       .where(eq(schema.scanRecords.projectId, projectId));
 
     const balances = await db
-      .select({ itemId: schema.stockBalances.itemId, qty: schema.stockBalances.qty })
+      .select({ itemId: schema.stockBalances.itemId, closingQty: schema.stockBalances.closingQty })
       .from(schema.stockBalances)
       .where(eq(schema.stockBalances.warehouseId, project.warehouseId));
 
@@ -638,7 +842,7 @@ crudRouter.get("/projects/:id/stats", async (req, res) => {
 
     const stockByItem = new Map<string, number>();
     for (const sb of balances) {
-      stockByItem.set(sb.itemId, (stockByItem.get(sb.itemId) ?? 0) + sb.qty);
+      stockByItem.set(sb.itemId, (stockByItem.get(sb.itemId) ?? 0) + sb.closingQty);
     }
 
     const candidateIds = new Set([...stockByItem.keys(), ...countedByItem.keys()]);
@@ -748,6 +952,7 @@ crudRouter.patch("/:table/:id", async (req, res) => {
     if (!(await enforceSettingsOwner(req, res))) return;
     const values = coerceDates(req.body);
     if (tableName === "userSettings") delete values.userId;
+    const rowId = paramString(req, "id");
     if (tableName === "items" && typeof values.code === "string") {
       values.code = values.code.trim();
       const [dup] = await db
@@ -764,7 +969,7 @@ crudRouter.patch("/:table/:id", async (req, res) => {
     const [row] = await db
       .update(table)
       .set(values)
-      .where(eq(idColumn(table), paramString(req, "id")))
+      .where(eq(idColumn(table), rowId))
       .returning();
     if (!row) {
       res.status(404).json({ error: "Data tidak ditemukan." });
@@ -796,6 +1001,16 @@ crudRouter.delete("/:table/:id", async (req, res) => {
     }
     res.json(sanitizeRow(table, row as Record<string, unknown>));
   } catch (e) {
+    if (isForeignKeyViolation(e)) {
+      res
+        .status(409)
+        .json({
+          error:
+            DELETE_BLOCK_MESSAGES[tableName] ??
+            "Data masih dipakai oleh data lain — tidak dapat dihapus.",
+        });
+      return;
+    }
     res.status(500).json({ error: messageOf(e) });
   }
 });

@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -104,6 +106,25 @@ export const userSettings = pgTable(
   ]
 );
 
+// Konfigurasi AI assistant (satu baris global).
+export const aiSettings = pgTable(
+  "ai_settings",
+  {
+    id: text("id").primaryKey(),
+    enabled: boolean("enabled").notNull().default(false),
+    defaultProvider: text("default_provider", { enum: ["GOOGLE", "DEEPSEEK"] })
+      .notNull()
+      .default("GOOGLE"),
+    googleApiKey: text("google_api_key"),
+    googleModel: text("google_model").notNull().default("gemini-3.5-flash"),
+    deepseekApiKey: text("deepseek_api_key"),
+    deepseekModel: text("deepseek_model").notNull().default("deepseek-chat"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  }
+);
+
 export const branches = pgTable("branches", {
   id: text("id").primaryKey(),
   code: text("code").notNull(),
@@ -139,13 +160,23 @@ export const stockBalances = pgTable(
   "stock_balances",
   {
     id: text("id").primaryKey(),
+    balanceDate: date("balance_date").notNull().default(sql`CURRENT_DATE`),
     warehouseId: text("warehouse_id")
       .notNull()
       .references(() => warehouses.id, { onDelete: "cascade" }),
     itemId: text("item_id")
       .notNull()
       .references(() => items.id, { onDelete: "cascade" }),
-    qty: integer("qty").notNull().default(0),
+    openingQty: integer("opening_qty").notNull().default(0),
+    inQty: integer("in_qty").notNull().default(0),
+    outQty: integer("out_qty").notNull().default(0),
+    closingQty: integer("closing_qty").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     uniqueIndex("uq_stock_balances_wh_item").on(t.warehouseId, t.itemId),
@@ -180,11 +211,24 @@ export const barcodeFormats = pgTable("barcode_formats", {
     .defaultNow(),
 });
 
+export const opnameProjects = pgTable("opname_projects", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  deadline: timestamp("deadline", { withTimezone: true }),
+  createdBy: text("created_by").references(() => users.id),
+});
+
 export const projects = pgTable(
   "projects",
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
+    projectId: text("project_id").references(() => opnameProjects.id, {
+      onDelete: "set null",
+    }),
     branchId: text("branch_id")
       .notNull()
       .references(() => branches.id),
@@ -201,7 +245,10 @@ export const projects = pgTable(
     deadline: timestamp("deadline", { withTimezone: true }),
     createdBy: text("created_by").references(() => users.id),
   },
-  (t) => [index("idx_projects_created_by").on(t.createdBy)]
+  (t) => [
+    index("idx_projects_project_id").on(t.projectId),
+    index("idx_projects_created_by").on(t.createdBy),
+  ]
 );
 
 export const scanSessions = pgTable(

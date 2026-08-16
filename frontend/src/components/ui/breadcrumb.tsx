@@ -1,16 +1,28 @@
-"use client";
+"use client"
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface Crumb {
   label: string;
   href?: string;
 }
 
-export function Breadcrumb({ crumbs }: { crumbs: Crumb[] }) {
+export function Breadcrumb({
+  crumbs,
+  className,
+}: {
+  crumbs: Crumb[];
+  className?: string;
+}) {
   return (
-    <nav className="mb-4 flex flex-wrap items-center gap-1.5 text-[12px] text-zinc-400">
+    <nav
+      className={cn(
+        "mb-4 flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground",
+        className
+      )}
+    >
       {crumbs.map((c, i) => {
         const last = i === crumbs.length - 1;
         return (
@@ -19,12 +31,17 @@ export function Breadcrumb({ crumbs }: { crumbs: Crumb[] }) {
             {c.href && !last ? (
               <Link
                 href={c.href}
-                className="transition-colors hover:text-emerald-600"
+                className="whitespace-nowrap transition-colors hover:text-primary"
               >
                 {c.label}
               </Link>
             ) : (
-              <span className={last ? "font-medium text-zinc-700" : ""}>
+              <span
+                className={cn(
+                  "whitespace-nowrap",
+                  last && "font-semibold text-foreground"
+                )}
+              >
                 {c.label}
               </span>
             )}

@@ -92,6 +92,36 @@ async function main() {
   }
   if (totalAdded === 0) console.log("Tidak ada permission yang perlu diekspansi.");
 
+  // 3b) Pastikan semua role non-administrator punya akses view menu "ai"
+  // (AI Assistant tersedia untuk semua user login).
+  const aiTargets = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(ne(roles.id, "role_sys_admin"));
+  for (const r of aiTargets) {
+    const [existing] = await db
+      .select({ id: rolePermissions.id })
+      .from(rolePermissions)
+      .where(
+        sql`${rolePermissions.roleId} = ${r.id} AND ${rolePermissions.menu} = 'ai' AND ${rolePermissions.action} = 'view'`
+      )
+      .limit(1);
+    if (existing) continue;
+    const rows = await db.select({ id: rolePermissions.id }).from(rolePermissions);
+    let seq = rows.reduce((m, r2) => {
+      if (!r2.id.startsWith("pm_")) return m;
+      const n = Number(r2.id.slice(3));
+      return Number.isFinite(n) && n > m ? n : m;
+    }, 0);
+    await db.insert(rolePermissions).values({
+      id: `pm_${String(++seq).padStart(3, "0")}`,
+      roleId: r.id,
+      menu: "ai",
+      action: "view",
+    });
+    console.log(`Role ${r.id}: permission ai:view ditambahkan.`);
+  }
+
   // 4) Akses entitas murni per role: role_accesses + user_accesses → branch_access.
   const branchAccess = `
     CREATE TABLE IF NOT EXISTS "branch_access" (

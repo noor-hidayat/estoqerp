@@ -1,32 +1,61 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, SquareAsterisk, Users } from "lucide-react";
+import { ArrowUpRight, Bot, FileSpreadsheet, SquareAsterisk, Users } from "lucide-react";
 import { useSession } from "@/lib/session";
+import { can } from "@/lib/permissions";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoleGuard } from "@/components/ui/role-guard";
-import { MANAGER_ROLES } from "@/lib/roles";
+import { isManager, MANAGER_ROLES } from "@/lib/roles";
+import type { ReactNode } from "react";
 
 export default function SettingsPage() {
-  const { user } = useSession();
-  const isRoot = user?.role === "role_sys_admin";
+  const { user, isSystem, permissions } = useSession();
+  const canView = (menu: string) => can(isSystem, permissions, menu, "view");
 
-  const MENUS = [
-    ...(isRoot
+  const MENUS: {
+    label: string;
+    href: string;
+    icon: ReactNode;
+    iconClass: string;
+  }[] = [
+    ...(canView("settings.users")
       ? [
           {
-            label: "User & Role",
-            description: "Kelola pengguna beserta akses cabang/gudang/lokasi.",
+            label: "Users",
             href: "/app/settings/users",
             icon: <Users size={24} strokeWidth={2} />,
-            iconClass: "bg-zinc-900 text-zinc-50",
+            iconClass: "bg-primary text-primary-foreground",
           },
+        ]
+      : []),
+    ...(canView("settings.roles")
+      ? [
           {
-            label: "Role Management",
-            description: "Tambah/edit role, atur permission menu, dan akses entitas.",
+            label: "Roles",
             href: "/app/settings/roles",
             icon: <SquareAsterisk size={24} strokeWidth={2} />,
-            iconClass: "bg-zinc-900 text-zinc-50",
+            iconClass: "bg-primary text-primary-foreground",
+          },
+        ]
+      : []),
+    ...(canView("settings.import")
+      ? [
+          {
+            label: "Import",
+            href: "/app/settings/import",
+            icon: <FileSpreadsheet size={24} strokeWidth={2} />,
+            iconClass: "bg-primary text-primary-foreground",
+          },
+        ]
+      : []),
+    ...(user && isManager(user.role)
+      ? [
+          {
+            label: "AI Assistant",
+            href: "/app/settings/ai",
+            icon: <Bot size={24} strokeWidth={2} />,
+            iconClass: "bg-primary text-primary-foreground",
           },
         ]
       : []),
@@ -36,8 +65,7 @@ export default function SettingsPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["settings"]}>
       <div>
         <PageHeader
-          title="Settings"
-          description="Kelola user dan role akses aplikasi."
+          title="Shortcut"
         />
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -45,7 +73,7 @@ export default function SettingsPage() {
             <Link
               key={m.href}
               href={m.href}
-              className="animate-fade-up group flex items-center gap-4 rounded-xl border border-zinc-200 bg-white p-6 transition-all duration-300 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-[0_14px_36px_-16px_rgb(17_17_17/0.14)]"
+              className="animate-fade-up group flex items-center gap-4 rounded-xl border border-border bg-card p-6 transition-all duration-300 hover:-translate-y-0.5 hover:border-border hover:shadow-[0_14px_36px_-16px_rgb(17_17_17/0.14)]"
               style={{ animationDelay: `${i * 70}ms` }}
             >
               <span
@@ -54,16 +82,13 @@ export default function SettingsPage() {
                 {m.icon}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-zinc-900">
+                <span className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-foreground">
                   {m.label}
                   <ArrowUpRight
                     size={15}
                     strokeWidth={2}
-                    className="text-zinc-300 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-zinc-900"
+                    className="text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
                   />
-                </span>
-                <span className="mt-1 block text-[13px] leading-relaxed text-zinc-500">
-                  {m.description}
                 </span>
               </span>
             </Link>

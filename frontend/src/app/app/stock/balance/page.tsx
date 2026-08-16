@@ -1,38 +1,77 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Boxes,
   FileDown,
   FileSpreadsheet,
   Search,
+  X,
 } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { accessibleWarehouseIds } from "@/lib/permissions";
 import { formatNumber } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
 import {
-  useItemsList,
+  useStockBalanceLedger,
+  useStockBalanceSummary,
   useAllWarehouses,
-  useCategories,
-  useStockBalances,
+  useItems,
+  type StockBalanceLedgerRow,
 } from "@/lib/api/query";
+import type { Item } from "@/types";
+import { api } from "@/lib/api/client";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Table, Td } from "@/components/ui/table";
-import { EmptyState } from "@/components/ui/empty-state";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 
 export default function StockBalancePage() {
   const { isSystem, access } = useSession();
-  const [query, setQuery] = useState("");
+  const [itemQuery, setItemQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [warehouseId, setWarehouseId] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [exporting, setExporting] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
-  const { data: allItems = [] } = useItemsList();
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(itemQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [itemQuery]);
+
+  useEffect(() => {
+    if (!itemQuery) return;
+    const onDoc = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setItemQuery("");
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [itemQuery]);
+
   const { data: allWarehouses = [] } = useAllWarehouses();
-  const { data: categories = [] } = useCategories();
-  const { data: stockBalances = [] } = useStockBalances();
+  const { data: suggestionsResult, isLoading: suggestionsLoading } = useItems({
+    query: debouncedQuery || undefined,
+    pageSize: 10,
+  });
+  const suggestions = suggestionsResult?.rows ?? [];
+
+  const ledgerParams = {
+    itemId: selectedItem?.id,
+    warehouseId: warehouseId === "all" ? undefined : warehouseId,
+    page,
+    pageSize,
+  };
+  const {
+    data: result,
+    isLoading,
+  } = useStockBalanceLedger(ledgerParams);
+  const { data: summary } = useStockBalanceSummary(ledgerParams);
 
   const allowedWhs = useMemo(
     () => {
@@ -44,191 +83,264 @@ export default function StockBalancePage() {
     [allWarehouses, isSystem, access]
   );
 
-  const categoryMap = useMemo(
-    () => new Map(categories.map((c) => [c.id, c])),
-    [categories]
-  );
-
-  const rows = useMemo(() => {
-    const items = allItems.filter((i) => {
-      if (!query) return true;
-      const q = query.toLowerCase();
-      return (
-        i.name.toLowerCase().includes(q) ||
-        i.code.toLowerCase().includes(q)
-      );
-    });
-
-    const warehouses =
-      warehouseId === "all"
-        ? allowedWhs
-        : allowedWhs.filter((w) => w.id === warehouseId);
-
-    const out: {
-      code: string;
-      name: string;
-      unit: string;
-      category: string;
-      warehouse: string;
-      qty: number;
-    }[] = [];
-
-    for (const item of items) {
-      for (const wh of warehouses) {
-        out.push({
-          code: item.code,
-          name: item.name,
-          unit: item.unit,
-          category: categoryMap.get(item.categoryId)?.name ?? "—",
-          warehouse: wh.name,
-          qty:
-            stockBalances.find(
-              (sb) => sb.itemId === item.id && sb.warehouseId === wh.id
-            )?.qty ?? 0,
-        });
-      }
-    }
-
-    return out.sort(
-      (a, b) =>
-        a.code.localeCompare(b.code) || a.warehouse.localeCompare(b.warehouse)
-    );
-  }, [allItems, query, warehouseId, allowedWhs, stockBalances, categoryMap]);
-
-  const totalQty = rows.reduce((a, r) => a + r.qty, 0);
-  const totalItems = new Set(rows.map((r) => r.code)).size;
+  const rows = result?.rows ?? [];
+  const total = result?.total ?? 0;
+  const totalItems = summary?.totalItems ?? 0;
+  const totalQty = summary?.totalQty ?? 0;
 
   const exportColumns = [
     { key: "code" as const, header: "Item Code" },
     { key: "name" as const, header: "Item Name" },
     { key: "category" as const, header: "Category" },
     { key: "warehouse" as const, header: "Warehouse" },
-    { key: "unit" as const, header: "Stock UOM" },
-    { key: "qty" as const, header: "Balance Qty", format: (v: unknown) => formatNumber(Number(v)) },
+    { key: "openingQty" as const, header: "Opening Stock", format: (v: unknown) => formatNumber(Number(v)) },
+    { key: "inQty" as const, header: "In Qty", format: (v: unknown) => formatNumber(Number(v)) },
+    { key: "outQty" as const, header: "Out Qty", format: (v: unknown) => formatNumber(Number(v)) },
+    { key: "closingQty" as const, header: "Closing Stock", format: (v: unknown) => formatNumber(Number(v)) },
   ];
 
-  const handleExport = (type: "xlsx" | "pdf") => {
-    const base = "stock-ledger";
-    const meta = {
-      title: "Stock — Monitoring Stok",
-      subtitle: `${totalItems} item · total qty ${formatNumber(totalQty)}`,
-    };
-    if (type === "xlsx")
-      exportXlsx(rows, exportColumns, base, "Stock");
-    else exportPdf(rows, exportColumns, base, meta);
+  const handleExport = async (type: "xlsx" | "pdf") => {
+    setExporting(true);
+    try {
+      const sp = new URLSearchParams();
+      if (selectedItem) sp.set("itemId", selectedItem.id);
+      if (warehouseId !== "all") sp.set("warehouseId", warehouseId);
+      sp.set("pageSize", String(total || 500));
+      const res = await api.get<{ rows: StockBalanceLedgerRow[] }>(
+        `/stock-balances/ledger?${sp.toString()}`
+      );
+      const base = "stock-ledger";
+      const meta = {
+        title: "Stock — Stock Monitoring",
+        subtitle: `${totalItems} items · total qty ${formatNumber(totalQty)}`,
+      };
+      if (type === "xlsx")
+        exportXlsx(res.rows, exportColumns, base, "Stock");
+      else exportPdf(res.rows, exportColumns, base, meta);
+    } finally {
+      setExporting(false);
+    }
   };
+
+  const columns: DataTableColumn<StockBalanceLedgerRow>[] = [
+    {
+      id: "code",
+      header: "Item Code",
+      sortValue: (r) => r.code,
+      cell: (r) => <span className="font-mono text-xs text-muted-foreground">{r.code}</span>,
+      className: "whitespace-nowrap",
+    },
+    {
+      id: "name",
+      header: "Item Name",
+      sortValue: (r) => r.name,
+      cell: (r) => <span className="font-medium text-foreground">{r.name}</span>,
+      className: "min-w-[200px]",
+    },
+    {
+      id: "category",
+      header: "Category",
+      sortValue: (r) => r.category ?? "—",
+      cell: (r) => <span className="text-xs text-muted-foreground">{r.category ?? "—"}</span>,
+    },
+    {
+      id: "warehouse",
+      header: "Warehouse",
+      sortValue: (r) => r.warehouse,
+      cell: (r) => <span className="text-xs text-muted-foreground">{r.warehouse}</span>,
+      className: "min-w-[140px]",
+    },
+    {
+      id: "openingQty",
+      header: "Opening Stock",
+      align: "right",
+      sortValue: (r) => r.openingQty,
+      cell: (r) => <span className="font-mono text-xs font-medium tabular-nums">{formatNumber(r.openingQty)}</span>,
+    },
+    {
+      id: "inQty",
+      header: "In Qty",
+      align: "right",
+      sortValue: (r) => r.inQty,
+      cell: (r) => <span className="font-mono text-xs font-medium tabular-nums">{formatNumber(r.inQty)}</span>,
+    },
+    {
+      id: "outQty",
+      header: "Out Qty",
+      align: "right",
+      sortValue: (r) => r.outQty,
+      cell: (r) => <span className="font-mono text-xs font-medium tabular-nums">{formatNumber(r.outQty)}</span>,
+    },
+    {
+      id: "closingQty",
+      header: "Closing Stock",
+      align: "right",
+      sortValue: (r) => r.closingQty,
+      cell: (r) => <span className="font-mono text-xs font-medium tabular-nums">{formatNumber(r.closingQty)}</span>,
+    },
+  ];
 
   return (
     <div>
       <PageHeader
         title="Stock Balance"
-        description="Monitoring stok per item di setiap gudang."
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleExport("xlsx")}
-            >
-              <FileSpreadsheet
-                size={15}
-                strokeWidth={2}
-                className="text-emerald-600"
-              />
-              Excel
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleExport("pdf")}
-            >
-              <FileDown size={15} strokeWidth={2} className="text-red-500" />
-              PDF
-            </Button>
-          </div>
-        }
+
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <p className="text-[12px] font-medium text-zinc-400">Total item</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
-            {totalItems}
+        <div className="rounded-md border border-border bg-card p-5">
+          <p className="text-[12px] font-medium text-muted-foreground">Total item</p>
+          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
+            {formatNumber(totalItems)}
           </p>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <p className="text-[12px] font-medium text-zinc-400">Total qty</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
+        <div className="rounded-md border border-border bg-card p-5">
+          <p className="text-[12px] font-medium text-muted-foreground">Total closing stock</p>
+          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
             {formatNumber(totalQty)}
           </p>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <p className="text-[12px] font-medium text-zinc-400">Baris stok</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
-            {rows.length}
+        <div className="rounded-md border border-border bg-card p-5">
+          <p className="text-[12px] font-medium text-muted-foreground">Stock rows</p>
+          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
+            {formatNumber(total)}
           </p>
         </div>
       </div>
 
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Input
-          placeholder="Cari kode atau nama item..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          icon={<Search size={15} strokeWidth={2} />}
-          className="sm:max-w-xs"
-        />
-        <Select
-          value={warehouseId}
-          onChange={(e) => setWarehouseId(e.target.value)}
-          className="sm:w-56"
-        >
-          <option value="all">Semua gudang</option>
-          {allowedWhs.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.code} — {w.name}
-            </option>
-          ))}
-        </Select>
-      </div>
-
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Boxes size={26} strokeWidth={2} />}
-          title="Tidak ada data stok"
-          description="Belum ada data item atau sesuaikan filter."
-        />
-      ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white">
-          <Table
-            storageKey="stock-balance"
-            fixed
-            columns={[
-              "Item Code",
-              "Item Name",
-              "Category",
-              "Warehouse",
-              "Stock UOM",
-              "Balance Qty",
-            ]}
-          >
-            {rows.map((r, i) => (
-              <tr key={i} className="transition-colors hover:bg-zinc-50/60">
-                <Td mono truncate>
-                  {r.code}
-                </Td>
-                <Td truncate className="text-[13.5px] font-semibold text-zinc-900">
-                  {r.name}
-                </Td>
-                <Td truncate className="text-[12.5px] text-zinc-500">{r.category}</Td>
-                <Td truncate className="text-[12.5px] text-zinc-500">{r.warehouse}</Td>
-                <Td truncate className="text-[12.5px] text-zinc-500">{r.unit}</Td>
-                <Td mono className="text-right">{formatNumber(r.qty)}</Td>
-              </tr>
-            ))}
-          </Table>
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(r) => r.id}
+        loading={isLoading}
+        filters={
+          <>
+            <div ref={pickerRef} className="relative">
+              <Search
+                size={14}
+                strokeWidth={2}
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                value={selectedItem ? `${selectedItem.code} — ${selectedItem.name}` : itemQuery}
+                onChange={(e) => {
+                  if (selectedItem) {
+                    setSelectedItem(null);
+                    setPage(1);
+                  }
+                  setItemQuery(e.target.value);
+                }}
+                placeholder="Search item (code, name, unit, barcode)..."
+                className="h-8 w-[300px] pl-8 pr-7 text-xs shadow-none focus-visible:ring-1"
+              />
+              {selectedItem && (
+                <button
+                  type="button"
+                  aria-label="Clear item"
+                  onClick={() => {
+                    setSelectedItem(null);
+                    setItemQuery("");
+                    setPage(1);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {!selectedItem && itemQuery && (
+                <div className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+                  <div className="max-h-64 overflow-y-auto">
+                    {suggestionsLoading ? (
+                      <p className="px-3.5 py-3 text-[12.5px] text-muted-foreground">
+                        Searching...
+                      </p>
+                    ) : suggestions.length === 0 ? (
+                      <p className="px-3.5 py-3 text-[12.5px] text-muted-foreground">
+                        No matching items
+                      </p>
+                    ) : (
+                      suggestions.map((it) => (
+                        <button
+                          key={it.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedItem(it);
+                            setItemQuery("");
+                            setPage(1);
+                          }}
+                          className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] text-foreground transition-colors hover:bg-accent"
+                        >
+                          <span className="font-mono text-xs text-muted-foreground">{it.code}</span>
+                          <span className="min-w-0 flex-1 truncate font-medium">{it.name}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">{it.unit}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <Select
+              value={warehouseId}
+              onChange={(e) => {
+                setWarehouseId(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 w-56 text-xs"
+            >
+              <option value="all">All warehouses</option>
+              {allowedWhs.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.code} — {w.name}
+                </option>
+              ))}
+            </Select>
+          </>
+        }
+        toolbarRight={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs"
+              onClick={() => void handleExport("xlsx")}
+              disabled={exporting}
+            >
+              <FileSpreadsheet size={14} strokeWidth={2} className="text-primary" />
+              Export
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs"
+              onClick={() => void handleExport("pdf")}
+              disabled={exporting}
+            >
+              <FileDown size={14} strokeWidth={2} className="text-destructive" />
+              PDF
+            </Button>
+          </>
+        }
+        pagination="server"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+        onPageSizeChange={(ps) => {
+          setPageSize(ps);
+          setPage(1);
+        }}
+        minWidth={760}
+        emptyIcon={<Boxes size={26} strokeWidth={2} />}
+        emptyTitle="No stock data"
+        emptyDescription="No item data yet or adjust filters."
+        onResetFilters={() => {
+          setSelectedItem(null);
+          setItemQuery("");
+          setWarehouseId("all");
+          setPage(1);
+        }}
+      />
     </div>
   );
 }

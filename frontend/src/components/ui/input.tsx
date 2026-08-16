@@ -1,7 +1,5 @@
-"use client";
-
-import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
-import { cx } from "@/lib/utils";
+import * as React from "react"
+import { cn } from "@/lib/utils"
 
 export interface FieldProps {
   label?: string;
@@ -9,51 +7,51 @@ export interface FieldProps {
   error?: string;
 }
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement>, FieldProps {
-  icon?: ReactNode;
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement>, FieldProps {
+  icon?: React.ReactNode;
 }
 
-export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, hint, error, icon, className, id, ...props },
-  ref
-) {
-  const inputId = id || props.name;
-  return (
-    <div className="flex flex-col gap-1.5">
-      {label && (
-        <label
-          htmlFor={inputId}
-          className="text-[13px] font-medium text-zinc-700"
-        >
-          {label}
-        </label>
-      )}
-      <div className="relative">
-        {icon && (
-          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400">
-            {icon}
-          </span>
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ label, hint, error, icon, className, id, ...props }, ref) => {
+    const inputId = id || props.name
+    return (
+      <div className="flex flex-col gap-2">
+        {label && (
+          <label
+            htmlFor={inputId}
+            className="text-sm font-medium leading-none"
+          >
+            {label}
+          </label>
         )}
-        <input
-          ref={ref}
-          id={inputId}
-          className={cx(
-            "h-10 w-full rounded-md border bg-white text-sm text-zinc-900 placeholder:text-zinc-400 transition-colors",
-            "focus:outline-none focus:ring-1 focus:ring-zinc-900/20 focus:border-zinc-400",
-            error
-              ? "border-red-400 focus:ring-red-500/30 focus:border-red-500"
-              : "border-zinc-300",
-            icon ? "pl-10 pr-3.5" : "px-3.5",
-            className
+        <div className="relative">
+          {icon && (
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+              {icon}
+            </span>
           )}
-          {...props}
-        />
+          <input
+            ref={ref}
+            id={inputId}
+            className={cn(
+              "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+              error && "border-destructive focus-visible:ring-destructive",
+              icon ? "pl-10" : "",
+              className
+            )}
+            {...props}
+          />
+        </div>
+        {error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : hint ? (
+          <p className="text-sm text-muted-foreground">{hint}</p>
+        ) : null}
       </div>
-      {error ? (
-        <p className="text-xs text-red-600">{error}</p>
-      ) : hint ? (
-        <p className="text-xs text-zinc-400">{hint}</p>
-      ) : null}
-    </div>
-  );
-});
+    )
+  }
+)
+Input.displayName = "Input"
+
+export { Input }

@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db, pool } from "./pool";
 import {
   branches,
@@ -9,6 +9,7 @@ import {
   items,
   locations,
   opnameEntries,
+  opnameProjects,
   projects,
   rolePermissions,
   roles,
@@ -42,11 +43,18 @@ function nextSerial(prefix: string, date: Date): string {
   return `${key}_${String(n).padStart(4, "0")}`;
 }
 
-// ID project: 1, 2, 3, ... (berurutan dari 1)
+// ID project: SOP-001, SOP-002, ... (berurutan dari 1)
 let projectSeq = 0;
 function nextProjectId(): string {
   projectSeq += 1;
-  return String(projectSeq);
+  return `SOP-${String(projectSeq).padStart(3, "0")}`;
+}
+
+// ID parent project: PRJ-001, PRJ-002, ...
+let parentSeq = 0;
+function nextParentId(): string {
+  parentSeq += 1;
+  return `PRJ-${String(parentSeq).padStart(3, "0")}`;
 }
 
 // Barcode 11 digit: CATEGORY(2) + ITEM_CODE(5) + SEQUENCE(4)
@@ -132,7 +140,7 @@ async function ensureSystemRoles() {
   ]);
 
   // Permission dasar untuk role non-administrator (isSystem bypass).
-  const allMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","settings.columnWidth","master","master.items","master.categories","master.barcodeFormats","master.barcodeFormats.new","master.barcodeFormats.edit","inventory","inventory.stockBalance","inventory.branches","inventory.warehouses","inventory.locations","reports","reports.project","reports.summary","reports.history","reports.variance","settings","settings.users","settings.roles","settings.roles.new","settings.roles.edit"];
+  const allMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","settings.columnWidth","master","master.items","master.categories","master.barcodeFormats","master.barcodeFormats.new","master.barcodeFormats.edit","inventory","inventory.stockBalance","inventory.branches","inventory.warehouses","inventory.locations","reports","reports.project","reports.summary","reports.history","reports.variance","settings","settings.users","settings.roles","settings.roles.new","settings.roles.edit","ai"];
   // Menu yang punya tombol Export (Export/Import hanya untuk menu ini).
   const exportMenus = new Set(["inventory.stockBalance","reports.project","reports.summary","reports.history","reports.variance"]);
   const baseActions = ["view","create","update","delete"];
@@ -147,7 +155,7 @@ async function ensureSystemRoles() {
       perms.push({ id: permId(), roleId: "role_admin", menu, action });
     }
   }
-  const staffMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","reports","reports.project","reports.summary","reports.history","reports.variance"];
+  const staffMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","reports","reports.project","reports.summary","reports.history","reports.variance","ai"];
   for (const menu of staffMenus) {
     perms.push({ id: permId(), roleId: "role_staff", menu, action: "view" });
   }
@@ -261,11 +269,15 @@ async function seedDummyData(adminId: string) {
         itemDefs
           .find((d) => d.code === itm.code)!
           .stock
-          .map(([warehouseId, qty]) => ({
+          .map(([warehouseId, closingQty]) => ({
             id: nextId("stb"),
+            balanceDate: sql`CURRENT_DATE`,
             warehouseId,
             itemId: itm.id,
-            qty,
+            openingQty: 0,
+            inQty: 0,
+            outQty: 0,
+            closingQty,
           }))
       )
     );
@@ -320,10 +332,17 @@ async function seedDummyData(adminId: string) {
       { id: nextId("bxa"), roleId: "role_staff", entityType: "WAREHOUSE" as const, entityId: whJkt1.id },
     ]);
 
-    // --- Project ---
+    // --- Parent Projects & Stock Opnames ---
+    const parent1 = { id: nextParentId(), name: "Opname Tahunan 2025", createdAt: daysAgo(120), deadline: daysAgo(90), createdBy: adminId };
+    const parent2 = { id: nextParentId(), name: "Opname Bulanan September", createdAt: daysAgo(10), deadline: daysAgo(-20), createdBy: admin2.id };
+    const parent3 = { id: nextParentId(), name: "Stocktake Gudang Surabaya", createdAt: daysAgo(6), deadline: daysAgo(-14), createdBy: adminId };
+    const parent4 = { id: nextParentId(), name: "Opname Awal Gudang Bahan Baku", createdAt: daysAgo(2), deadline: daysAgo(-30), createdBy: adminId };
+    await tx.insert(opnameProjects).values([parent1, parent2, parent3, parent4]);
+
     const projFinal = {
       id: nextProjectId(),
       name: "Opname Tahunan 2025",
+      projectId: parent1.id,
       branchId: brJkt.id,
       warehouseId: whJkt1.id,
       mode: "COMPARE" as const,
@@ -335,6 +354,7 @@ async function seedDummyData(adminId: string) {
     const projActive = {
       id: nextProjectId(),
       name: "Opname Bulanan September",
+      projectId: parent2.id,
       branchId: brJkt.id,
       warehouseId: whJkt1.id,
       mode: "COMPARE" as const,
@@ -349,6 +369,7 @@ async function seedDummyData(adminId: string) {
       {
         id: nextProjectId(),
         name: "Stocktake Gudang Surabaya",
+        projectId: parent3.id,
         branchId: brSby.id,
         warehouseId: whSby1.id,
         mode: "SCRATCH" as const,
@@ -360,6 +381,7 @@ async function seedDummyData(adminId: string) {
       {
         id: nextProjectId(),
         name: "Opname Awal Gudang Bahan Baku",
+        projectId: parent4.id,
         branchId: brJkt.id,
         warehouseId: whJkt2.id,
         mode: "COMPARE" as const,

@@ -2,8 +2,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import type {
   Branch, Warehouse, Location, Category, Item, StockBalance,
-  BarcodeFormat, Project, ScanSession, ScanRecord, OpnameEntry,
+  BarcodeFormat, Project, ProjectStatus, ScanSession, ScanRecord, OpnameEntry,
   User, Role, RolePermission, BranchAccess,
+  OpnameProject, OpnameProjectDetail,
 } from "@/types";
 
 function qs(params: Record<string, unknown>): string {
@@ -34,11 +35,14 @@ function useResourceList<T>(table: string, params?: Record<string, unknown>) {
   });
 }
 
-function usePaginatedList<T>(table: string, params?: Record<string, unknown>) {
+function usePaginatedList<T, R extends PaginatedResponse<T> = PaginatedResponse<T>>(
+  table: string,
+  params?: Record<string, unknown>
+) {
   return useQuery({
     queryKey: [table, params],
     queryFn: async () => {
-      const res = await api.get<PaginatedResponse<T>>(`/${table}${qs(params ?? {})}`);
+      const res = await api.get<R>(`/${table}${qs(params ?? {})}`);
       return res;
     },
     placeholderData: (prev) => prev,
@@ -81,8 +85,16 @@ export function useRemove<K extends string>(table: K) {
 
 // ---- Specific table hooks ----
 
+export function useBranch(id?: string) {
+  return useResourceOne<Branch>("branches", id);
+}
+
 export function useBranches() {
   return useResourceList<Branch>("branches");
+}
+
+export function useWarehouse(id?: string) {
+  return useResourceOne<Warehouse>("warehouses", id);
 }
 
 export function useWarehouses(branchId?: string) {
@@ -93,12 +105,24 @@ export function useAllWarehouses() {
   return useResourceList<Warehouse>("warehouses");
 }
 
+export function useLocation(id?: string) {
+  return useResourceOne<Location>("locations", id);
+}
+
 export function useLocations(warehouseId?: string) {
   return useResourceList<Location>("locations", warehouseId ? { warehouseId } : undefined);
 }
 
+export function useCategory(id?: string) {
+  return useResourceOne<Category>("categories", id);
+}
+
 export function useCategories() {
   return useResourceList<Category>("categories");
+}
+
+export function useItem(id?: string) {
+  return useResourceOne<Item>("items", id);
 }
 
 export function useItems(params?: { query?: string; categoryId?: string; page?: number; pageSize?: number }) {
@@ -113,11 +137,56 @@ export function useStockBalances(params?: { warehouseId?: string; itemId?: strin
   return useResourceList<StockBalance>("stockBalances", params as Record<string, unknown>);
 }
 
+export type StockBalanceLedgerRow = {
+  id: string;
+  warehouseId: string;
+  itemId: string;
+  code: string;
+  name: string;
+  category: string | null;
+  warehouse: string;
+  openingQty: number;
+  inQty: number;
+  outQty: number;
+  closingQty: number;
+};
+
+export function useStockBalanceLedger(params?: {
+  query?: string;
+  warehouseId?: string;
+  itemId?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  return usePaginatedList<StockBalanceLedgerRow>(
+    "stock-balances/ledger",
+    params as Record<string, unknown>
+  );
+}
+
+export interface StockBalanceSummary {
+  totalItems: number;
+  totalQty: number;
+  totalRows: number;
+}
+
+export function useStockBalanceSummary(params?: {
+  query?: string;
+  warehouseId?: string;
+  itemId?: string;
+}) {
+  return useQuery({
+    queryKey: ["stock-balances/summary", params],
+    queryFn: () =>
+      api.get<StockBalanceSummary>(`/stock-balances/summary${qs(params ?? {})}`),
+  });
+}
+
 export function useBarcodeFormats() {
   return useResourceList<BarcodeFormat>("barcodeFormats");
 }
 
-export function useProjects(params?: { branchId?: string }) {
+export function useProjects(params?: { branchId?: string; projectId?: string }) {
   return useResourceList<Project>("projects", params as Record<string, unknown>);
 }
 
@@ -129,12 +198,16 @@ export function useScanSessions(params?: { projectId?: string; status?: string }
   return useResourceList<ScanSession>("scanSessions", params as Record<string, unknown>);
 }
 
-export function useScanRecords(params?: { projectId?: string; sessionId?: string; source?: string; date?: string; page?: number; pageSize?: number }) {
+export function useScanRecords(params?: { projectId?: string; sessionId?: string; source?: string; date?: string; query?: string; page?: number; pageSize?: number }) {
   return usePaginatedList<ScanRecord>("scanRecords", params as Record<string, unknown>);
 }
 
 export function useOpnameEntries(projectId?: string) {
   return useResourceList<OpnameEntry>("opnameEntries", projectId ? { projectId } : undefined);
+}
+
+export function useUser(id?: string) {
+  return useResourceOne<User>("users", id);
 }
 
 export function useUsers() {
@@ -162,7 +235,8 @@ export function useDashboard() {
       active: number; final: number; totalScan: number; totalItems: number;
       progressPct: number; progressCounted: number; progressTotal: number;
       recentSessions: { id: string; code: string; product: string; qty: number; scannedBy: string; at: string }[];
-      projectProgressRows: { id: string; name: string; pct: number; warehouse: string }[];
+      projectProgressRows: { id: string; name: string; pct: number; warehouse: string; counted: number; total: number; status: ProjectStatus }[];
+      warehouseOpname: { warehouseId: string; warehouseName: string; projectName: string; systemQty: number; countedQty: number }[];
     }>("/dashboard"),
   });
 }
@@ -176,6 +250,64 @@ export function useProjectStats(projectId?: string) {
       variance: { itemId: string; itemCode: string; itemName: string; unit: string; systemQty: number; countedQty: number; diff: number }[];
     }>(`/projects/${projectId}/stats`),
     enabled: !!projectId,
+  });
+}
+
+export function useOpnameProjects() {
+  return useQuery({
+    queryKey: ["opnameProjects"],
+    queryFn: () => api.get<(OpnameProject & {
+      jumlahGudang: number;
+      status: ProjectStatus;
+      progress: { counted: number; total: number; pct: number };
+      warehouses: { id: string; warehouseName: string; status: string }[];
+    })[]>("/opname-projects"),
+  });
+}
+
+export function useOpnameProjectDetail(id?: string) {
+  return useQuery({
+    queryKey: ["opnameProjects", id, "detail"],
+    queryFn: () => api.get<OpnameProjectDetail>(`/opname-projects/${id}/detail`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateOpnameProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      deadline?: string | null;
+      mode: "COMPARE" | "SCRATCH";
+      warehouses: { warehouseId: string; branchId: string }[];
+    }) => api.post("/opname-projects", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["opnameProjects"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useUpdateOpnameProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: { name?: string; deadline?: string | null } }) =>
+      api.patch(`/opname-projects/${id}`, patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["opnameProjects"] });
+    },
+  });
+}
+
+export function useDeleteOpnameProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/opname-projects/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["opnameProjects"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 }
 

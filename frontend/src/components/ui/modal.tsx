@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
-import { cx } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export function Modal({
   open,
@@ -22,7 +22,6 @@ export function Modal({
   children?: ReactNode;
   footer?: ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
-  /** posisi vertikal dialog — "center" (tengah layar) atau "top" (atas layar) */
   align?: "center" | "top";
 }) {
   useEffect(() => {
@@ -49,8 +48,8 @@ export function Modal({
     <AnimatePresence>
       {open && (
         <motion.div
-          className={cx(
-            "fixed inset-0 z-50 flex justify-center bg-zinc-950/40 p-0 backdrop-blur-sm sm:p-6",
+          className={cn(
+            "fixed inset-0 z-50 flex justify-center bg-black/50 p-0 backdrop-blur-sm sm:p-6",
             align === "top"
               ? "items-start sm:items-start"
               : "items-end sm:items-center"
@@ -64,35 +63,35 @@ export function Modal({
           role="dialog"
           aria-modal="true"
           onClick={(e) => e.stopPropagation()}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 8 }}
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 8, scale: 0.98 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className={cx(
-            "w-full bg-white p-6 sm:rounded-lg",
-            align === "top" ? "rounded-b-lg sm:mt-6" : "rounded-t-lg",
+          className={cn(
+            "w-full bg-card p-6 shadow-2xl sm:rounded-xl",
+            align === "top" ? "rounded-b-xl sm:mt-6" : "rounded-t-xl",
             widths[size]
           )}
         >
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold tracking-tight text-zinc-900">
+                <h2 className="text-lg font-bold tracking-tight text-foreground">
                   {title}
                 </h2>
                 {description && (
-                  <p className="mt-1 text-sm text-zinc-500">{description}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{description}</p>
                 )}
               </div>
               <button
                 onClick={onClose}
-                className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 <X size={18} strokeWidth={2} />
               </button>
             </div>
             <div>{children}</div>
             {footer && (
-              <div className="mt-6 flex items-center justify-end gap-3 border-t border-zinc-100 pt-5">
+              <div className="mt-6 flex items-center justify-end gap-3 border-t border-border pt-5">
                 {footer}
               </div>
             )}

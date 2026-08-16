@@ -8,8 +8,11 @@ import { config } from "./config";
 import { requireAuth } from "./middleware/auth";
 import { resolveScope } from "./middleware/scope";
 import { authRouter } from "./routes/auth";
+import { aiRouter } from "./routes/ai";
 import { crudRouter } from "./routes/crud";
 import { dashboardRouter } from "./routes/dashboard";
+import { importRouter } from "./routes/import";
+import opnameProjectsRouter from "./routes/opname-projects";
 
 const app = express();
 
@@ -18,7 +21,7 @@ app.use(
     origin: config.corsOrigin === "*" ? true : config.corsOrigin,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
@@ -29,6 +32,9 @@ app.use("/api/auth", authRouter);
 app.use("/api", requireAuth);
 app.use("/api", resolveScope);
 app.use("/api", dashboardRouter);
+app.use("/api/import", importRouter);
+app.use("/api/opname-projects", opnameProjectsRouter);
+app.use("/api/ai", aiRouter);
 app.use("/api", crudRouter);
 
 app.use((_req, res) => {

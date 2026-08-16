@@ -15,7 +15,7 @@ import type { User } from "@/types";
 export const ROLE_LABELS: Record<string, string> = {
   role_sys_admin: "Administrator",
   role_admin: "Admin",
-  role_staff: "Staff Gudang",
+  role_staff: "Warehouse Staff",
 };
 
 export interface SessionAccess {
@@ -119,6 +119,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       });
       setTokens(data.accessToken, data.refreshToken);
       setUser(data.user);
+
+      // Fetch full session (permissions, isSystem, access) so sidebar is
+      // immediately populated instead of empty on first login.
+      try {
+        const me = await api.get<MeResponse>("/auth/me");
+        setIsSystem(me.isSystem ?? false);
+        setPermissions(me.permissions ?? []);
+        setAccess(me.access ?? { branchIds: [], warehouseIds: [] });
+      } catch {
+        // If /auth/me fails right after login, ignore — the worst case is
+        // the same old behaviour (empty sidebar until refresh).
+      }
+
       return { error: null };
     } catch (e) {
       return { error: e instanceof Error ? e.message : "Login gagal." };

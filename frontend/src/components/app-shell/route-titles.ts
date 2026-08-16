@@ -1,25 +1,29 @@
-// Map pathname → label halaman untuk breadcrumb 3 level di Topbar.
-// Hanya route yang title-nya berbeda dari nav label yang perlu didaftarkan.
+// Map pathname → page label for 3-level breadcrumb in Topbar.
+// Only routes whose title differs from nav label need to be registered.
 
 const STATIC_TITLES: Record<string, string> = {
-  "/app/opname/new": "Buat Project Baru",
-  "/app/opname/variance": "Variance Review",
-  "/app/reports/project": "Laporan per Project",
+  "/app/projects/new": "Create Project",
+  "/app/so/new": "Create Stock Opname",
+  "/app/so/variance": "Variance Review",
+  "/app/reports/project": "Report per Stock Opname",
   "/app/reports/variance": "Variance Report",
   "/app/reports/summary": "Summary Report",
-  "/app/reports/history": "Riwayat Scan",
-  "/app/settings/roles/new": "Tambah Role",
-  "/app/setup/barcode-formats/new": "Format Barcode Baru",
+  "/app/reports/history": "Scan History",
+  "/app/settings/roles/new": "Add Role",
+  "/app/settings/ai": "AI Assistant",
+  "/app/ai": "AI Assistant",
+  "/app/setup/barcode-formats/new": "New Barcode Format",
 };
 
 const PATTERNS: { regex: RegExp; title: string }[] = [
-  // Semua sub-page dalam Detail Project → label "Detail Project",
-  // kecuali Detail Session yang menampilkan hierarki penuh.
-  { regex: /^\/app\/opname\/[^/]+\/sessions\/[^/]+$/, title: "Detail Session" },
-  { regex: /^\/app\/opname\/[^/]+$/, title: "Detail Project" },
-  { regex: /^\/app\/opname\/[^/]+\/scan$/, title: "Detail Project" },
-  { regex: /^\/app\/opname\/[^/]+\/sessions$/, title: "Detail Project" },
-  { regex: /^\/app\/opname\/[^/]+\/variance$/, title: "Detail Project" },
+  // All sub-pages in Project Details → label "Project Details",
+  // except Session Details which shows the full hierarchy.
+  { regex: /^\/app\/projects\/[^/]+$/, title: "Project Details" },
+  { regex: /^\/app\/so\/[^/]+\/sessions\/[^/]+$/, title: "Session Details" },
+  { regex: /^\/app\/so\/[^/]+$/, title: "Stock Opname Details" },
+  { regex: /^\/app\/so\/[^/]+\/scan$/, title: "Stock Opname Details" },
+  { regex: /^\/app\/so\/[^/]+\/sessions$/, title: "Stock Opname Details" },
+  { regex: /^\/app\/so\/[^/]+\/variance$/, title: "Stock Opname Details" },
   { regex: /^\/app\/setup\/barcode-formats\/[^/]+$/, title: "Edit Format" },
   { regex: /^\/app\/settings\/roles\/[^/]+$/, title: "Edit Role" },
 ];

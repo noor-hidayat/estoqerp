@@ -10,8 +10,7 @@ import { exportPdf, exportXlsx } from "@/lib/export";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { Table, Td } from "@/components/ui/table";
-import { EmptyState } from "@/components/ui/empty-state";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { cx } from "@/lib/utils";
 import { ShellLoader } from "@/components/ui/loader";
 
@@ -19,6 +18,18 @@ interface VarianceStats {
   projectId: string;
   progress: { total: number; counted: number; pct: number };
   variance: { itemId: string; itemCode: string; itemName: string; unit: string; systemQty: number; countedQty: number; diff: number }[];
+}
+
+interface VarianceRow {
+  projectName: string;
+  projectId: string;
+  code: string;
+  name: string;
+  unit: string;
+  warehouse: string;
+  systemQty: number;
+  countedQty: number;
+  diff: number;
 }
 
 export default function VarianceReportPage() {
@@ -68,20 +79,20 @@ export default function VarianceReportPage() {
 
   const exportColumns = [
     { key: "projectName" as const, header: "Project" },
-    { key: "warehouse" as const, header: "Gudang" },
-    { key: "code" as const, header: "Kode" },
-    { key: "name" as const, header: "Nama Item" },
+    { key: "warehouse" as const, header: "Warehouse" },
+    { key: "code" as const, header: "Code" },
+    { key: "name" as const, header: "Item Name" },
     { key: "unit" as const, header: "Unit" },
-    { key: "systemQty" as const, header: "Qty Sistem", format: (v: unknown) => formatNumber(Number(v)) },
-    { key: "countedQty" as const, header: "Qty Hitung", format: (v: unknown) => formatNumber(Number(v)) },
-    { key: "diff" as const, header: "Selisih", format: (v: unknown) => formatNumber(Number(v)) },
+    { key: "systemQty" as const, header: "System Qty", format: (v: unknown) => formatNumber(Number(v)) },
+    { key: "countedQty" as const, header: "Counted Qty", format: (v: unknown) => formatNumber(Number(v)) },
+    { key: "diff" as const, header: "Variance", format: (v: unknown) => formatNumber(Number(v)) },
   ];
 
   const handleExport = (type: "xlsx" | "pdf") => {
-    const base = "laporan-variance";
+    const base = "variance-report";
     const meta = {
       title: "Variance Report",
-      subtitle: "Fokus item dengan selisih antara stok sistem dan hasil hitung fisik",
+      subtitle: "Focus on items with differences between system stock and physical count",
     };
     if (type === "xlsx") exportXlsx(rows, exportColumns, base, "Variance");
     else exportPdf(rows, exportColumns, base, meta);
@@ -89,102 +100,152 @@ export default function VarianceReportPage() {
 
   if (projectsLoading) return <ShellLoader />;
 
+  const columns: DataTableColumn<VarianceRow>[] = [
+    {
+      id: "project",
+      header: "Project",
+      sortValue: (r) => r.projectName,
+      cell: (r) => <span className="text-[12.5px]">{r.projectName}</span>,
+    },
+    {
+      id: "warehouse",
+      header: "Warehouse",
+      cell: (r) => <span className="text-xs">{r.warehouse}</span>,
+    },
+    {
+      id: "item",
+      header: "Item",
+      sortValue: (r) => r.name,
+      cell: (r) => (
+        <div>
+          <p className="text-[13px] font-medium text-foreground">{r.name}</p>
+          <p className="font-mono text-[10.5px] text-muted-foreground">{r.code}</p>
+        </div>
+      ),
+      className: "min-w-[200px]",
+    },
+    {
+      id: "unit",
+      header: "Unit",
+      cell: (r) => <span className="text-xs">{r.unit}</span>,
+    },
+    {
+      id: "system",
+      header: "System Qty",
+      align: "right",
+      sortValue: (r) => r.systemQty,
+      cell: (r) => <span className="font-mono text-xs tabular-nums">{formatNumber(r.systemQty)}</span>,
+    },
+    {
+      id: "counted",
+      header: "Counted Qty",
+      align: "right",
+      sortValue: (r) => r.countedQty,
+      cell: (r) => <span className="font-mono text-xs tabular-nums">{formatNumber(r.countedQty)}</span>,
+    },
+    {
+      id: "diff",
+      header: "Variance",
+      align: "right",
+      sortValue: (r) => r.diff,
+      cell: (r) => (
+        <span
+          className={cx(
+            "font-mono text-xs font-semibold tabular-nums",
+            r.diff > 0 ? "text-emerald-600" : "text-destructive"
+          )}
+        >
+          {r.diff > 0 ? `+${formatNumber(r.diff)}` : formatNumber(r.diff)}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
-        eyebrow="Laporan"
         title="Variance Report"
-        description="Laporan yang fokus pada item dengan selisih stok."
+
       />
 
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Select
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            className="sm:w-72"
-          >
-            <option value="all">Semua project</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setMode("diff")}
-              className={cx(
-                "rounded-md px-4 py-2 text-[12.5px] font-medium transition-colors",
-                mode === "diff"
-                  ? "bg-zinc-900 text-white"
-                  : "bg-white text-zinc-500 ring-1 ring-zinc-200 hover:text-zinc-800"
-              )}
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(r) => `${r.projectId}-${r.code}`}
+        loading={anyLoading}
+        searchPlaceholder="Search items..."
+        getSearchText={(r) => `${r.name} ${r.code} ${r.projectName}`}
+        filters={
+          <>
+            <Select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="h-8 w-60 text-xs"
             >
-              Hanya selisih
-            </button>
-            <button
-              onClick={() => setMode("all")}
-              className={cx(
-                "rounded-md px-4 py-2 text-[12.5px] font-medium transition-colors",
-                mode === "all"
-                  ? "bg-zinc-900 text-white"
-                  : "bg-white text-zinc-500 ring-1 ring-zinc-200 hover:text-zinc-800"
-              )}
+              <option value="all">All projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+            <div className="flex items-center gap-1 rounded-md border border-input p-0.5">
+              <button
+                onClick={() => setMode("diff")}
+                className={cx(
+                  "rounded-[4px] px-3 py-1 text-[12px] font-medium transition-colors",
+                  mode === "diff"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Only variance
+              </button>
+              <button
+                onClick={() => setMode("all")}
+                className={cx(
+                  "rounded-[4px] px-3 py-1 text-[12px] font-medium transition-colors",
+                  mode === "all"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                All items
+              </button>
+            </div>
+          </>
+        }
+        toolbarRight={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs"
+              onClick={() => handleExport("xlsx")}
             >
-              Semua item
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
-            <FileSpreadsheet size={15} strokeWidth={2} className="text-emerald-600" />
-            Export Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
-            <FileDown size={15} strokeWidth={2} className="text-red-500" />
-            Export PDF
-          </Button>
-        </div>
-      </div>
-
-      {anyLoading ? (
-        <ShellLoader />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon={<TriangleAlert size={26} strokeWidth={2} />}
-          title="Tidak ada selisih"
-          description="Belum ada item dengan variance pada filter ini."
-        />
-      ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white">
-          <Table storageKey="reports-variance" columns={["Project", "Gudang", "Item", "Unit", "Qty Sistem", "Qty Hitung", "Selisih"]}>
-            {rows.map((r, i) => (
-              <tr key={i} className="transition-colors hover:bg-zinc-50/60">
-                <Td className="text-[12.5px]">{r.projectName}</Td>
-                <Td className="text-[12px]">{r.warehouse}</Td>
-                <Td truncate>
-                  <p className="text-[13px] font-semibold text-zinc-900">{r.name}</p>
-                  <p className="font-mono text-[10.5px] text-zinc-400">{r.code}</p>
-                </Td>
-                <Td className="text-[12px]">{r.unit}</Td>
-                <Td mono className="text-right">{formatNumber(r.systemQty)}</Td>
-                <Td mono className="text-right">{formatNumber(r.countedQty)}</Td>
-                <Td className="text-right">
-                  <span
-                    className={cx(
-                      "font-mono text-[12px] font-semibold",
-                      r.diff > 0 ? "text-emerald-600" : "text-red-600"
-                    )}
-                  >
-                    {r.diff > 0 ? `+${formatNumber(r.diff)}` : formatNumber(r.diff)}
-                  </span>
-                </Td>
-              </tr>
-            ))}
-          </Table>
-        </div>
-      )}
+              <FileSpreadsheet size={14} strokeWidth={2} className="text-primary" />
+              Export Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs"
+              onClick={() => handleExport("pdf")}
+            >
+              <FileDown size={14} strokeWidth={2} className="text-destructive" />
+              Export PDF
+            </Button>
+          </>
+        }
+        minWidth={880}
+        emptyIcon={<TriangleAlert size={26} strokeWidth={2} />}
+        emptyTitle="No variance"
+        emptyDescription="No items with variance for this filter yet."
+        onResetFilters={() => {
+          setProjectId("all");
+          setMode("diff");
+        }}
+      />
     </div>
   );
 }

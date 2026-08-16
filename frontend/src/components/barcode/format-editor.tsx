@@ -18,6 +18,11 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
+import {
+  FormSection,
+  FormGrid,
+  FormActions,
+} from "@/components/ui/form-page";
 import { SegmentBar, FIELD_COLORS, FIELD_LABEL_SHORT } from "./segment-visualizer";
 import { cx } from "@/lib/utils";
 import { nextSegId } from "@/lib/mock/store";
@@ -27,7 +32,7 @@ const FIELD_OPTIONS: SegmentField[] = [
   "CATEGORY",
   "DATE",
   "SEQUENCE",
-  "BARCODE_ID",
+    "BARCODE_ID",
   "CUSTOM",
 ];
 
@@ -39,20 +44,20 @@ function segmentIssues(
 ): string[] {
   const issues: string[] = [];
   if (seg.start > seg.end) {
-    issues.push("Posisi mulai tidak boleh lebih besar dari posisi akhir.");
+    issues.push("Start position cannot be greater than end position.");
     return issues;
   }
   if (seg.end > barcodeLength) {
-    issues.push("Posisi akhir melebihi panjang barcode.");
+    issues.push("End position exceeds barcode length.");
   }
   const overlaps = segments.filter(
     (o) =>
       o.id !== seg.id && !(o.end < seg.start || o.start > seg.end)
   );
   if (overlaps.length > 0) {
-    issues.push(
-      `Posisi ${seg.start}–${seg.end} sudah digunakan oleh segmen lain.`
-    );
+      issues.push(
+        `Position ${seg.start}–${seg.end} is already used by another segment.`
+      );
   }
   return issues;
 }
@@ -76,10 +81,10 @@ function SegmentRow({
   return (
     <div
       data-seg-id={segment.id}
-      className={cx(
-        "rounded-lg border bg-white p-2",
-        issues.length > 0 ? "border-red-300" : "border-zinc-200"
-      )}
+        className={cx(
+          "rounded-lg border bg-card p-2",
+          issues.length > 0 ? "border-destructive" : "border-border"
+        )}
     >
       <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
         <span
@@ -103,7 +108,7 @@ function SegmentRow({
           ))}
         </Select>
 
-        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 sm:ml-auto">
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground sm:ml-auto">
           <span className="shrink-0">Posisi</span>
           <Input
             type="number"
@@ -143,16 +148,16 @@ function SegmentRow({
         <button
           type="button"
           onClick={onRemove}
-          title="Hapus segmen"
-          aria-label="Hapus segmen"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
+          title="Delete segment"
+          aria-label="Delete segment"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         >
           <Trash2 size={15} strokeWidth={2} />
         </button>
       </div>
 
       {issues.length > 0 && (
-        <p className="mt-1.5 pl-12 text-[11.5px] font-medium text-red-600">
+        <p className="mt-1.5 pl-12 text-[11.5px] font-medium text-destructive">
           {issues[0]}
         </p>
       )}
@@ -275,27 +280,18 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
   const canSave = dirty && !!name.trim() && validation.valid && !saving;
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* INFORMASI FORMAT */}
-      <section className="rounded-lg border border-zinc-200 bg-white p-5">
-        <div className="mb-4">
-          <h2 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">
-            Informasi format
-          </h2>
-          <p className="mt-0.5 text-[12px] text-zinc-400">
-            Informasi dasar mengenai format barcode.
-          </p>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
+      <FormSection title="Format information">
+        <FormGrid>
           <Input
-            label="Nama format"
-            placeholder="Contoh: Retail Produk"
+            label="Format name"
+            placeholder="e.g.: Retail Product"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <Input
-            label="Panjang barcode (digit)"
+            label="Barcode length (digits)"
             type="number"
             min={1}
             max={40}
@@ -310,56 +306,49 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
               }
             }}
           />
-        </div>
-        <div className="mt-4">
+        </FormGrid>
+        <div className="mt-5">
           <Input
-            label="Deskripsi"
-            placeholder="Opsional"
+            label="Description"
+            placeholder="Optional"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
 
-        <div className="mt-5 divide-y divide-zinc-100 border-t border-zinc-100">
+        <div className="mt-5 divide-y divide-border border-t border-border">
           <ToggleRow
-            label="Qty dari master item"
+            label="Qty from master item"
             checked={qtyPerFormat}
             onChange={setQtyPerFormat}
           />
           <ToggleRow
-            label="Barcode harus unik"
+            label="Barcode must be unique"
             checked={uniqueBarcode}
             onChange={setUniqueBarcode}
           />
           <ToggleRow
-            label="Format aktif"
+            label="Format active"
             checked={isActive}
             onChange={setIsActive}
           />
         </div>
-      </section>
+      </FormSection>
 
       {/* DEFINISI SEGMEN */}
-      <section className="rounded-lg border border-zinc-200 bg-white p-5">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">
-              Definisi segmen
-            </h2>
-            <p className="mt-0.5 text-[12px] text-zinc-400">
-              Tentukan bagian barcode yang digunakan untuk setiap atribut.
-            </p>
-          </div>
+      <FormSection
+        title="Segment definition"
+        actions={
           <Button variant="outline" size="sm" onClick={addSegment}>
             <Plus size={14} strokeWidth={2} />
-            Tambah segmen
+            Add segment
           </Button>
-        </div>
-
+        }
+      >
         <div className="flex flex-col gap-2">
           {segments.length === 0 && (
-            <p className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50/60 px-4 py-5 text-center text-sm text-zinc-400">
-              Belum ada segmen.
+            <p className="rounded-lg border border-dashed border-border bg-muted/50 px-4 py-5 text-center text-sm text-muted-foreground">
+              No segments yet.
             </p>
           )}
           {segments.map((seg) => (
@@ -375,8 +364,8 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
         </div>
 
         {segments.length > 0 && (
-          <div className="mt-5 border-t border-zinc-100 pt-4">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+          <div className="mt-5 border-t border-border pt-4">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Preview struktur barcode
             </p>
             <SegmentBar segments={segments} length={length} />
@@ -384,24 +373,24 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
         )}
 
         {!validation.valid && validation.errors.length > 0 && (
-          <div className="mt-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50/70 p-3.5">
-            <ul className="space-y-0.5 text-[12.5px] text-red-600">
+          <div className="mt-4 flex items-start gap-3 rounded-lg border border-destructive/20 bg-destructive/10 p-3.5">
+            <ul className="space-y-0.5 text-[12.5px] text-destructive">
               {validation.errors.map((err, i) => (
                 <li key={i}>{err}</li>
               ))}
             </ul>
           </div>
         )}
-      </section>
+      </FormSection>
 
       {saveError && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-[12.5px] text-red-600">
+        <p className="mb-5 rounded-lg bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">
           Gagal menyimpan: {saveError}
         </p>
       )}
 
       {/* ACTION FOOTER */}
-      <div className="flex items-center justify-end gap-2 border-t border-zinc-200 pt-5">
+      <FormActions>
         <Button
           variant="ghost"
           onClick={() => router.push("/app/setup/barcode-formats")}
@@ -414,9 +403,9 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
           disabled={!canSave}
           onClick={save}
         >
-          {saving ? "Menyimpan..." : isNew ? "Simpan Format" : "Simpan Perubahan"}
+          {saving ? "Menyimpan..." : isNew ? "Simpan Format" : "Simpan Changes"}
         </Button>
-      </div>
+      </FormActions>
     </div>
   );
 }
@@ -432,7 +421,7 @@ function ToggleRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3">
-      <span className="text-[13px] font-medium text-zinc-700">{label}</span>
+      <span className="text-[13px] font-medium text-foreground">{label}</span>
       <div className="shrink-0">
         <Toggle checked={checked} onChange={onChange} />
       </div>

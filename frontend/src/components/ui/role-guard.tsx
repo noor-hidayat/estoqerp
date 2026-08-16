@@ -7,29 +7,29 @@ import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 
-/** Layar "Akses terbatas" — dipakai RoleGuard dan MenuGate. */
+/** "Access restricted" screen — used by RoleGuard and MenuGate. */
 export function AccessDenied() {
   const router = useRouter();
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-      <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-lg bg-zinc-100 text-zinc-400">
+      <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-lg bg-muted text-muted-foreground">
         <LockKeyhole size={28} strokeWidth={2} />
       </div>
-      <h1 className="text-xl font-semibold tracking-tight text-zinc-900">
-        Akses terbatas
+      <h1 className="text-xl font-semibold tracking-tight text-foreground">
+        Access restricted
       </h1>
-      <p className="mt-2 max-w-sm text-sm leading-relaxed text-zinc-500">
-        Halaman ini hanya dapat diakses oleh role yang berwenang. Hubungi
-        admin untuk mendapatkan akses.
+      <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+        This page can only be accessed by authorized roles. Contact
+        admin to get access.
       </p>
       <Button variant="outline" className="mt-6" onClick={() => router.push("/app")}>
-        Kembali ke Dashboard
+        Back to Dashboard
       </Button>
     </div>
   );
 }
 
-/** Gate berbasis menu RBAC — user tanpa akses view menu tidak melihat children. */
+/** RBAC menu-based gate — users without view access to the menu don't see children. */
 export function MenuGate({
   menu,
   children,
@@ -48,9 +48,9 @@ export function RoleGuard({
   menus,
   children,
 }: {
-  /** Role id yang diizinkan (mis. role_sys_admin). */
+  /** Allowed role ids (e.g. role_sys_admin). */
   roles: string[];
-  /** Menu RBAC yang diizinkan — user cukup punya salah satu untuk lolos. */
+  /** Allowed RBAC menus — user only needs one to pass. */
   menus?: string[];
   children: ReactNode;
 }) {

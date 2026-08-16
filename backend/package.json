@@ -11,6 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",
+    "db:seed-dummy": "tsx src/db/seed-dummy.ts",
     "db:backfill-ids": "tsx src/db/backfill-ids.ts",
     "db:migrate-rbac": "tsx src/db/migrate-rbac.ts"
   },

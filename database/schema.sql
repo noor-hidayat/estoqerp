@@ -88,9 +88,18 @@ create table if not exists barcode_formats (
 -- ---------------------------------------------------------------------------
 -- OPNAME
 -- ---------------------------------------------------------------------------
+create table if not exists opname_projects (
+  id text primary key,
+  name text not null,
+  created_at timestamptz not null default now(),
+  deadline timestamptz,
+  created_by text references users (id)
+);
+
 create table if not exists projects (
   id text primary key,
   name text not null,
+  project_id text references opname_projects (id) on delete set null,
   branch_id text not null references branches (id),
   warehouse_id text not null references warehouses (id),
   mode text not null check (mode in ('COMPARE', 'SCRATCH')),
@@ -135,10 +144,26 @@ create table if not exists opname_entries (
   counted_qty int not null default 0
 );
 
+create table if not exists stock_balances (
+  id text primary key,
+  balance_date date not null default current_date,
+  warehouse_id text not null references warehouses (id) on delete cascade,
+  item_id text not null references items (id) on delete cascade,
+  opening_qty int not null default 0,
+  in_qty int not null default 0,
+  out_qty int not null default 0,
+  closing_qty int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (warehouse_id, item_id)
+);
+
 -- ---------------------------------------------------------------------------
 -- INDEXES
 -- ---------------------------------------------------------------------------
+create index if not exists idx_projects_project_id on projects (project_id);
 create index if not exists idx_scan_records_session on scan_records (session_id);
 create index if not exists idx_scan_records_project on scan_records (project_id);
-create index if not exists idx_scan_sessions_project on scan_sessions (project_id);
+create index if not exists idx_scan_sessions_project on scan_sessions (session_id);
 create index if not exists idx_opname_entries_project on opname_entries (project_id);
+create index if not exists idx_stock_balances_item on stock_balances (item_id);

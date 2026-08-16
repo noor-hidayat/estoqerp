@@ -4,25 +4,15 @@ import type {
 import type { OpnameMode, Project, ProjectStatus } from "@/types";
 
 export const MODE_LABELS: Record<OpnameMode, string> = {
-  COMPARE: "Bandingkan Stok Sistem",
-  SCRATCH: "Hitung Ulang dari Nol",
+  COMPARE: "Compare with System Stock",
+  SCRATCH: "Recount from Zero",
 };
 
 export const STATUS_LABELS: Record<ProjectStatus, string> = {
   DRAFT: "Draft",
-  IN_PROGRESS: "Berlangsung",
-  APPROVED: "Final",
-  CANCELLED: "Dibatalkan",
-};
-
-export const STATUS_TONE: Record<
-  ProjectStatus,
-  "neutral" | "emerald" | "amber" | "red" | "blue" | "violet"
-> = {
-  DRAFT: "neutral",
-  IN_PROGRESS: "amber",
-  APPROVED: "emerald",
-  CANCELLED: "neutral",
+  IN_PROGRESS: "In Progress",
+  APPROVED: "Finalized",
+  CANCELLED: "Cancelled",
 };
 
 export interface VarianceRow {
@@ -44,7 +34,7 @@ export function projectCounted(db: DB, project: Project): VarianceRow[] {
   const stockQty = (itemId: string) =>
     db.stockBalances.find(
       (sb) => sb.itemId === itemId && sb.warehouseId === warehouseId
-    )?.qty ?? 0;
+    )?.closingQty ?? 0;
 
   const candidateIds = new Set<string>([
     ...db.items

@@ -10,7 +10,7 @@ export const systemRoleId = "role_sys_admin";
 
 const systemRoleCache = new Map<string, boolean>();
 
-async function isAdminUser(roleId: string): Promise<boolean> {
+export async function isAdminUser(roleId: string): Promise<boolean> {
   if (systemRoleCache.has(roleId)) return systemRoleCache.get(roleId)!;
   const [r] = await db
     .select({ isSystem: roles.isSystem })

@@ -19,12 +19,16 @@ import { useSaveShortcut } from "@/lib/use-save-shortcut";
 import { cx } from "@/lib/utils";
 import type { Role, RolePermission, BranchAccess } from "@/types";
 import { EntityAccess, type CheckedIds } from "@/components/access/entity-access";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toggle } from "@/components/ui/toggle";
 import { RoleGuard } from "@/components/ui/role-guard";
-import { ShellLoader } from "@/components/ui/loader";
+import { FormSkeleton } from "@/components/ui/skeleton";
+import {
+  FormPage,
+  FormSection,
+  FormActions,
+} from "@/components/ui/form-page";
 
 interface MenuItem {
   key: string;
@@ -53,14 +57,14 @@ const MENU_GROUPS: MenuGroup[] = [
     masterKey: "opname",
     title: "Stock Opname",
     menus: [
-      { key: "opname", label: "Projects", parent: true },
-      { key: "opname.new", label: "Buat Project Baru" },
+      { key: "opname", label: "Stock Opname", parent: true },
+      { key: "opname.new", label: "Create Stock Opname" },
       { key: "opname.variance", label: "Variance Review" },
-      { key: "opname.detail", label: "Detail Project" },
+      { key: "opname.detail", label: "Stock Opname Details" },
       { key: "opname.detail.scan", label: "Scan" },
-      { key: "opname.detail.sessions", label: "Scan Session" },
-      { key: "opname.detail.sessions.detail", label: "Detail Session" },
-      { key: "opname.detail.variance", label: "Variance Project" },
+      { key: "opname.detail.sessions", label: "Scan Sessions" },
+      { key: "opname.detail.sessions.detail", label: "Session Details" },
+      { key: "opname.detail.variance", label: "Stock Opname Variance" },
     ],
   },
   {
@@ -69,10 +73,10 @@ const MENU_GROUPS: MenuGroup[] = [
     menus: [
       { key: "master", label: "Master", parent: true },
       { key: "master.items", label: "Item List" },
-      { key: "master.categories", label: "Kategori" },
-      { key: "master.barcodeFormats", label: "Format Barcode" },
-      { key: "master.barcodeFormats.new", label: "Format Barcode Baru" },
-      { key: "master.barcodeFormats.edit", label: "Edit Format Barcode" },
+      { key: "master.categories", label: "Categories" },
+      { key: "master.barcodeFormats", label: "Barcode Formats" },
+      { key: "master.barcodeFormats.new", label: "New Barcode Format" },
+      { key: "master.barcodeFormats.edit", label: "Edit Barcode Format" },
     ],
   },
   {
@@ -88,12 +92,12 @@ const MENU_GROUPS: MenuGroup[] = [
   },
   {
     masterKey: "reports",
-    title: "Laporan",
+    title: "Reports",
     menus: [
-      { key: "reports", label: "Laporan", parent: true },
-      { key: "reports.project", label: "Laporan per Project", supportsExport: true },
+      { key: "reports", label: "Reports", parent: true },
+      { key: "reports.project", label: "Report per Stock Opname", supportsExport: true },
       { key: "reports.summary", label: "Summary Report", supportsExport: true },
-      { key: "reports.history", label: "Riwayat Scan", supportsExport: true },
+      { key: "reports.history", label: "Scan History", supportsExport: true },
       { key: "reports.variance", label: "Variance Report", supportsExport: true },
     ],
   },
@@ -102,12 +106,18 @@ const MENU_GROUPS: MenuGroup[] = [
     title: "Settings",
     menus: [
       { key: "settings", label: "Settings", parent: true },
-      { key: "settings.users", label: "User & Role" },
-      { key: "settings.roles", label: "Role Management" },
-      { key: "settings.roles.new", label: "Tambah Role" },
+      { key: "settings.users", label: "Users" },
+      { key: "settings.roles", label: "Roles" },
+      { key: "settings.roles.new", label: "Add Role" },
       { key: "settings.roles.edit", label: "Edit Role" },
-      { key: "settings.columnWidth", label: "Atur Kolom Tabel" },
+      { key: "settings.columnWidth", label: "Adjust Table Columns" },
+      { key: "settings.import", label: "Import Data", supportsImport: true },
     ],
+  },
+  {
+    masterKey: "ai",
+    title: "AI Assistant",
+    menus: [{ key: "ai", label: "AI Assistant" }],
   },
 ];
 
@@ -148,7 +158,7 @@ function TriStateCheck({
       onChange={onChange}
       aria-label={label}
       title={label}
-      className="h-4 w-4 shrink-0 cursor-pointer rounded border-zinc-300 accent-emerald-600"
+      className="h-4 w-4 shrink-0 cursor-pointer rounded border-border accent-primary"
       ref={(el) => {
         if (el) el.indeterminate = !!indeterminate;
       }}
@@ -314,7 +324,7 @@ export function RoleForm({ role }: { role?: Role }) {
 
   const save = async () => {
     if (saving) return;
-    if (!name.trim()) { setError("Nama role wajib diisi."); return; }
+    if (!name.trim()) {       setError("Role name is required."); return; }
     setSaving(true);
     setError("");
     try {
@@ -329,7 +339,7 @@ export function RoleForm({ role }: { role?: Role }) {
         })) as Role;
         id = created.id;
       }
-      if (!id) throw new Error("Gagal membuat role.");
+      if (!id) throw new Error("Failed to create role.");
 
       // Hapus permission yang benar-benar ada di DB saat ini (bukan snapshot
       // lama) lalu insert ulang — sehingga save ulang setelah kegagalan
@@ -357,78 +367,72 @@ export function RoleForm({ role }: { role?: Role }) {
 
       router.push("/app/settings/roles");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal menyimpan role.");
+      setError(e instanceof Error ? e.message : "Failed to save role.");
       setSaving(false);
     }
   };
 
   useSaveShortcut(save, !saving);
 
-  if (isLoading) return <ShellLoader />;
+  if (isLoading) {
+    return (
+      <RoleGuard roles={["role_sys_admin"]} menus={["settings.roles"]}>
+        <FormSkeleton
+          sections={[
+            ["wide", "toggle"],
+            ["wide", "wide"],
+            ["block", "block", "block", "block", "block", "block"],
+          ]}
+        />
+      </RoleGuard>
+    );
+  }
 
   return (
     <RoleGuard roles={["role_sys_admin"]} menus={["settings.roles"]}>
-      <Breadcrumb
-        crumbs={[
-          { label: "Settings", href: "/app/settings" },
-          { label: "Role Management", href: "/app/settings/roles" },
-          { label: role ? "Edit Role" : "Tambah Role" },
-        ]}
-      />
-
-      <h1 className="mb-8 text-2xl font-semibold tracking-[-0.02em] text-zinc-900 sm:text-[28px]">
-        {role ? "Edit Role" : "Tambah Role"}
-      </h1>
-
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-        <div className="space-y-6">
-          <div className="rounded-lg border border-zinc-200 bg-white p-5">
-            <p className="mb-3 text-[12px] font-medium capitalize tracking-wider text-zinc-400">Detail</p>
-            <div className="space-y-4">
-              <Input label="Nama role" value={name} onChange={(e) => setName(e.target.value)} />
-              <div className="flex items-center gap-3">
-                <Toggle checked={active} onChange={(v) => setActive(v)} />
-                <span className="text-sm text-zinc-600">{active ? "Aktif" : "Nonaktif"}</span>
-              </div>
+      <FormPage
+        title={role ? "Edit Role" : "Add Role"}
+      >
+        <FormSection>
+          <div className="space-y-5">
+            <Input label="Role name" value={name} onChange={(e) => setName(e.target.value)} />
+            <div className="flex items-center gap-3">
+              <Toggle checked={active} onChange={(v) => setActive(v)} />
+              <span className="text-sm text-muted-foreground">{active ? "Active" : "Inactive"}</span>
             </div>
           </div>
+        </FormSection>
 
-          <div className="rounded-lg border border-zinc-200 bg-white p-5">
-            <p className="mb-3 text-[12px] font-medium capitalize tracking-wider text-zinc-400">Akses entitas</p>
-            <EntityAccess
-              branches={branches ?? []}
-              warehouses={warehouses ?? []}
-              locations={locations ?? []}
-              checked={checked}
-              toggle={toggleAccess}
-            />
-          </div>
-        </div>
+        <FormSection>
+          <EntityAccess
+            branches={branches ?? []}
+            warehouses={warehouses ?? []}
+            locations={locations ?? []}
+            checked={checked}
+            toggle={toggleAccess}
+          />
+        </FormSection>
 
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <p className="text-[12px] font-medium capitalize tracking-wider text-zinc-400">
-              Permission
-            </p>
-            <div className="flex items-center gap-2">
+        <FormSection>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => MENU_GROUPS.forEach((g) => toggleMasterAccess(g.masterKey, true))}
               >
-                Pilih semua
+                Select all
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => MENU_GROUPS.forEach((g) => toggleMasterAccess(g.masterKey, false))}
               >
-                Bersihkan
+                Clear
               </Button>
             </div>
           </div>
-
-          <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-1.5 sm:grid-cols-2">
             {MENU_GROUPS.map((g) => {
               const on = masterAllowed(g.masterKey);
               return (
@@ -437,17 +441,17 @@ export function RoleForm({ role }: { role?: Role }) {
                   className={cx(
                     "flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors",
                     on
-                      ? "border-emerald-500/60 bg-emerald-50/50"
-                      : "border-zinc-200 bg-white hover:border-zinc-300"
+                        ? "border-primary/60 bg-primary/10"
+                        : "border-border bg-card hover:bg-muted/50"
                   )}
                 >
                   <input
                     type="checkbox"
                     checked={on}
                     onChange={() => toggleMasterAccess(g.masterKey, !on)}
-                    className="h-4 w-4 cursor-pointer rounded border-zinc-300 accent-emerald-600"
+                    className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
                   />
-                  <span className={cx("text-[13px] font-medium", on ? "text-emerald-800" : "text-zinc-700")}>
+                  <span className={cx("text-[13px] font-medium", on ? "text-primary" : "text-foreground")}>
                     {g.title}
                   </span>
                 </label>
@@ -455,10 +459,10 @@ export function RoleForm({ role }: { role?: Role }) {
             })}
           </div>
 
-          <div className="mt-4 border-t border-zinc-100 pt-4">
+          <div className="mt-4 border-t border-border pt-4">
             {allowedGroups.length === 0 ? (
-              <p className="py-6 text-center text-[12.5px] text-zinc-400">
-                Centang menu induk di atas untuk mengatur permission.
+              <p className="py-6 text-center text-[12.5px] text-muted-foreground">
+                Check the parent menu above to set permissions.
               </p>
             ) : (
               <div className="max-h-[46vh] space-y-2 overflow-y-auto pr-1">
@@ -466,39 +470,39 @@ export function RoleForm({ role }: { role?: Role }) {
                   const gs = groupState(group.menus);
                   const isOpen = openGroups.has(group.title);
                   return (
-                    <div key={group.title} className="overflow-hidden rounded-lg border border-zinc-200">
-                      <div className="flex items-center gap-2 border-b border-zinc-200/70 bg-zinc-50 px-3 py-2">
+                    <div key={group.title} className="overflow-hidden rounded-lg border border-border">
+                      <div className="flex items-center gap-2 border-b border-border/70 bg-muted px-3 py-2">
                         <TriStateCheck
                           checked={gs.checked}
                           indeterminate={!gs.checked && !gs.none}
                           onChange={() => toggleGroupAccess(group.menus, !gs.checked)}
-                          label={`Pilih semua menu ${group.title}`}
+                          label={`Select all ${group.title} menus`}
                         />
                         <button
                           type="button"
                           onClick={() => toggleGroup(group.title)}
                           className="flex flex-1 items-center justify-between gap-2 text-left"
                         >
-                      <span className="text-[12.5px] font-bold uppercase tracking-wider text-zinc-600">
+                      <span className="text-[12.5px] font-bold uppercase tracking-wider text-muted-foreground">
                         {group.title}
                       </span>
                       <span className="flex items-center gap-2">
                         {gs.count > 0 && (
-                          <span className="rounded bg-emerald-50 px-1.5 py-px font-mono text-[10px] font-semibold text-emerald-600">
+                          <span className="rounded bg-primary/10 px-1.5 py-px font-mono text-[10px] font-semibold text-primary">
                             {gs.count}
                           </span>
                         )}
                         {isOpen ? (
-                          <ChevronDown size={14} strokeWidth={2} className="text-zinc-400" />
+                          <ChevronDown size={14} strokeWidth={2} className="text-muted-foreground" />
                         ) : (
-                          <ChevronRight size={14} strokeWidth={2} className="text-zinc-400" />
+                          <ChevronRight size={14} strokeWidth={2} className="text-muted-foreground" />
                         )}
                       </span>
                     </button>
                   </div>
 
                   {isOpen && (
-                    <div className="divide-y divide-zinc-100">
+                    <div className="divide-y divide-border">
                       {group.menus.map((m) => {
                         const ms = menuState(m.key, m);
                         const depth = m.key.split(".").length - 1;
@@ -506,22 +510,22 @@ export function RoleForm({ role }: { role?: Role }) {
                         return (
                           <div
                             key={m.key}
-                            className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 hover:bg-zinc-50/50"
+                            className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 hover:bg-muted/50"
                             style={{ paddingLeft: 12 + depth * 14 }}
                           >
                             <TriStateCheck
                               checked={ms.checked}
                               indeterminate={!ms.all && !ms.none}
                               onChange={() => toggleMenuAccess(m, !ms.checked)}
-                              label={`Akses ${m.label}`}
+                              label={`Access ${m.label}`}
                             />
                             <span className="flex min-w-[130px] flex-1 items-center gap-1.5 sm:flex-none">
                               {m.parent && (
-                                <span className="rounded bg-zinc-200/60 px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-zinc-500">
-                                  Induk
+                                <span className="rounded bg-secondary px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-secondary-foreground">
+                                  Parent
                                 </span>
                               )}
-                              <span className="text-[12.5px] font-medium text-zinc-700">
+                              <span className="text-[12.5px] font-medium text-foreground">
                                 {m.label}
                               </span>
                             </span>
@@ -531,13 +535,13 @@ export function RoleForm({ role }: { role?: Role }) {
                                 return (
                                   <label
                                     key={a}
-                                    className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-zinc-600 transition-colors hover:text-zinc-900"
+                                    className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-muted-foreground transition-colors hover:text-foreground"
                                   >
                                     <input
                                       type="checkbox"
                                       checked={on}
                                       onChange={() => togglePerm(m.key, a)}
-                                      className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 accent-emerald-600"
+                                      className="h-3.5 w-3.5 cursor-pointer rounded border-border accent-primary"
                                     />
                                     {ACTION_LABELS[a]}
                                   </label>
@@ -555,15 +559,15 @@ export function RoleForm({ role }: { role?: Role }) {
               </div>
             )}
           </div>
-        </div>
-      </div>
+        </FormSection>
 
-      {error && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-[12.5px] text-red-600">{error}</p>}
+        {error && <p className="mb-5 rounded-lg bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">{error}</p>}
 
-      <div className="mt-6 flex gap-3">
-        <Button variant="ghost" onClick={() => router.push("/app/settings/roles")}>Batal</Button>
-        <Button variant="secondary" onClick={save} disabled={saving}>{saving ? "Menyimpan..." : "Simpan"}</Button>
-      </div>
+        <FormActions>
+          <Button variant="ghost" onClick={() => router.push("/app/settings/roles")}>Cancel</Button>
+          <Button variant="primary" onClick={save} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+        </FormActions>
+      </FormPage>
     </RoleGuard>
   );
 }

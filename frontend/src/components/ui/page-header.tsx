@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
-import { cx } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export function PageHeader({
+  title,
+  description,
+  eyebrow,
   actions,
   className,
 }: {
@@ -11,10 +14,27 @@ export function PageHeader({
   actions?: ReactNode;
   className?: string;
 }) {
-  if (!actions) return null;
+  const hasTitle = title || description || eyebrow;
 
   return (
-    <div className={cx("mb-6 flex items-center justify-end gap-3", className)}>
+    <div className={cn("mb-6 flex items-start justify-between gap-4", className)}>
+      {hasTitle && (
+        <div className="min-w-0">
+          {eyebrow && (
+            <p className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {eyebrow}
+            </p>
+          )}
+          {title && (
+            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-[28px]">
+              {title}
+            </h1>
+          )}
+          {description && (
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
+      )}
       {actions && <div className="flex shrink-0 items-center gap-3">{actions}</div>}
     </div>
   );

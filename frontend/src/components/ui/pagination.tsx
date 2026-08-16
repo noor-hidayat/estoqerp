@@ -1,6 +1,6 @@
-"use client";
+"use client"
 
-import { cx } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export interface PaginationProps {
   page: number;
@@ -21,15 +21,15 @@ export function Pagination({
 }: PaginationProps) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <div className="inline-flex items-center overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div className="inline-flex items-center overflow-hidden rounded-lg border bg-card">
         {PAGE_SIZES.map((size, i) => (
           <button
             key={size}
             onClick={() => onPageSizeChange(size)}
-            className={cx(
-              "px-3 py-2 text-sm font-medium text-gray-700 transition-colors",
-              i < PAGE_SIZES.length - 1 && "border-r border-gray-200",
-              pageSize === size && "bg-gray-50"
+            className={cn(
+              "px-3 py-2 text-sm font-medium text-foreground transition-colors",
+              i < PAGE_SIZES.length - 1 && "border-r border-border",
+              pageSize === size && "bg-muted"
             )}
           >
             {size}
@@ -37,14 +37,14 @@ export function Pagination({
         ))}
       </div>
 
-      <div className="flex items-center gap-2 text-sm text-gray-500">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <span>
-          {total > 0 ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, total)} dari {total}
+          {total > 0 ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, total)} of {total}
         </span>
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
-          className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+          className="rounded-lg bg-muted px-4 py-2 text-sm font-medium text-foreground hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
         >
           Load More
         </button>

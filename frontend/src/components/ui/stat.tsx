@@ -1,64 +1,41 @@
 import type { ReactNode } from "react";
-import { cx } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export function Stat({
   label,
   value,
   sub,
   icon,
-  accent = false,
-  compact = false,
+  accent,
+  compact,
 }: {
   label: string;
   value: ReactNode;
   sub?: ReactNode;
-  icon?: ReactNode;
+  icon: ReactNode;
   accent?: boolean;
   compact?: boolean;
 }) {
   return (
-    <div
-      className={cx(
-        "rounded-2xl border border-zinc-200/80 bg-white shadow-[0_10px_30px_-12px_rgb(17_17_17/0.08)] transition-shadow duration-300 hover:shadow-[0_14px_36px_-12px_rgb(17_17_17/0.12)]",
-        compact ? "p-3.5" : "p-5"
-      )}
-    >
-      {icon && (
-        <div
-          className={cx(
-            "inline-flex items-center justify-center rounded-md",
-            compact ? "mb-2.5 h-7 w-7" : "mb-4 h-8 w-8",
-            accent
-              ? "bg-emerald-50 text-emerald-700"
-              : "bg-zinc-100 text-zinc-500"
-          )}
-        >
-          {icon}
-        </div>
-      )}
-      <p
-        className={cx(
-          "font-medium text-zinc-400",
-          compact ? "text-[11px]" : "text-[12px]"
-        )}
-      >
-        {label}
-      </p>
-      <p
-        className={cx(
-          "font-mono tracking-tight text-zinc-900",
-          compact ? "mt-0.5 text-[20px] font-bold" : "mt-1 text-2xl font-semibold"
-        )}
-      >
-        {value}
-      </p>
-      {sub && (
-        <div
-          className={cx("text-xs text-zinc-500", compact ? "mt-1" : "mt-1.5")}
-        >
-          {sub}
-        </div>
-      )}
+    <div className={cn(
+      "flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md",
+      accent && "border-l-4 border-l-primary"
+    )}>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <p className={cn(
+          "mt-0.5 font-mono font-bold leading-tight tracking-tight text-foreground",
+          compact ? "text-lg" : "text-[21px]"
+        )}>
+          {value}
+        </p>
+        {sub && <p className="truncate text-[11.5px] text-muted-foreground">{sub}</p>}
+      </div>
     </div>
   );
 }

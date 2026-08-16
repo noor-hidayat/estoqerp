@@ -78,7 +78,11 @@ export interface StockBalance {
   id: string;
   warehouseId: string;
   itemId: string;
-  qty: number;
+  balanceDate: string;
+  openingQty: number;
+  inQty: number;
+  outQty: number;
+  closingQty: number;
 }
 
 export type SegmentField =
@@ -116,9 +120,43 @@ export type ProjectStatus =
   | "APPROVED"
   | "CANCELLED";
 
+export interface OpnameProject {
+  id: string;
+  name: string;
+  createdAt: string;
+  deadline?: string;
+  createdBy: string;
+}
+
+export interface OpnameProjectDetail {
+  parent: OpnameProject;
+  children: {
+    id: string;
+    name: string;
+    warehouseId: string;
+    branchId: string;
+    mode: OpnameMode;
+    status: ProjectStatus;
+    createdAt: string;
+    totalLokasi: number;
+    countedLokasi: number;
+    pct: number;
+    warehouseName: string;
+    branchName: string;
+  }[];
+  summary: {
+    jumlahGudang: number;
+    totalLokasi: number;
+    countedLokasi: number;
+    pct: number;
+    status: ProjectStatus;
+  };
+}
+
 export interface Project {
   id: string;
   name: string;
+  projectId?: string;
   branchId: string;
   warehouseId: string;
   mode: OpnameMode;

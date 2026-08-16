@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
+import { useNavigate } from "react-router-dom";
 import {
   Barcode,
+  MoreHorizontal,
   Pencil,
   Plus,
 } from "lucide-react";
@@ -12,16 +13,21 @@ import { formatDate } from "@/lib/utils";
 import { SEGMENT_FIELD_LABELS, sortSegments } from "@/lib/barcode/parser";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Table, Td } from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
-import { EmptyState } from "@/components/ui/empty-state";
 import { ShellLoader } from "@/components/ui/loader";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { FIELD_COLORS, FIELD_LABEL_SHORT } from "@/components/barcode/segment-visualizer";
 import { cx } from "@/lib/utils";
-import type { BarcodeSegment } from "@/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { BarcodeFormat, BarcodeSegment } from "@/types";
 
 function SegmentChips({ segments }: { segments: BarcodeSegment[] }) {
   return (
@@ -49,6 +55,7 @@ function SegmentChips({ segments }: { segments: BarcodeSegment[] }) {
 }
 
 export default function BarcodeFormatsPage() {
+  const navigate = useNavigate();
   const { data: formats = [], isLoading } = useBarcodeFormats();
   const update = useUpdate("barcodeFormats");
 
@@ -65,99 +72,117 @@ export default function BarcodeFormatsPage() {
     return (
       <RoleGuard roles={MANAGER_ROLES} menus={["master.barcodeFormats"]}>
         <PageHeader
-          eyebrow="Master"
-          title="Format Barcode"
-          description="Konfigurasi format barcode berbasis segmen. Perubahan langsung berlaku tanpa perlu perubahan kode program."
+          title="Barcode Formats"
+
         />
         <ShellLoader />
       </RoleGuard>
     );
   }
 
+  const columns: DataTableColumn<BarcodeFormat>[] = [
+    {
+      id: "name",
+      header: "Format",
+      sortValue: (f) => f.name,
+      cell: (f) => (
+        <div className="flex items-center gap-3">
+          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
+            <Barcode size={15} strokeWidth={2} />
+          </span>
+          <span className="truncate font-medium text-foreground">{f.name}</span>
+        </div>
+      ),
+      className: "min-w-[180px]",
+    },
+    {
+      id: "segments",
+      header: "Segment Definition",
+      cell: (f) => <SegmentChips segments={f.segments} />,
+      className: "min-w-[260px]",
+    },
+    {
+      id: "qty",
+      header: "Qty",
+      cell: (f) => (
+        <Badge tone={f.qtyPerFormat ? "violet" : "amber"}>
+          {f.qtyPerFormat ? "Auto from item" : "Manual per scan"}
+        </Badge>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (f) => (
+        <div className="flex items-center gap-3">
+          <Toggle checked={f.isActive} onChange={(next) => toggleActive(f.id, next)} />
+          <Badge tone={f.isActive ? "emerald" : "neutral"} dot>
+            {f.isActive ? "Active" : "Inactive"}
+          </Badge>
+        </div>
+      ),
+    },
+    {
+      id: "updated",
+      header: "Updated",
+      sortValue: (f) => f.updatedAt,
+      cell: (f) => (
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
+          {formatDate(f.updatedAt)}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      cell: (f) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              aria-label={`Actions for ${f.name}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={() => navigate(`/app/setup/barcode-formats/${f.id}`)}>
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Edit
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
+
   return (
     <RoleGuard roles={MANAGER_ROLES} menus={["master.barcodeFormats"]}>
       <PageHeader
-        eyebrow="Master"
         title="Format Barcode"
-        description="Konfigurasi format barcode berbasis segmen. Perubahan langsung berlaku tanpa perlu perubahan kode program."
+
         actions={
-          <Link href="/app/setup/barcode-formats/new">
-            <Button variant="secondary">
-              <Plus size={15} strokeWidth={2} />
-              Buat Format
-            </Button>
-          </Link>
+          <Button onClick={() => navigate("/app/setup/barcode-formats/new")}>
+            <Plus size={15} strokeWidth={2} />
+            Create Format
+          </Button>
         }
       />
 
-      {sorted.length === 0 ? (
-        <EmptyState
-          icon={<Barcode size={26} strokeWidth={2} />}
-          title="Belum ada format barcode"
-          description="Buat format pertama Anda untuk mendefinisikan bagaimana barcode di-parse menjadi segmen data."
-          action={
-            <Link href="/app/setup/barcode-formats/new">
-              <Button variant="secondary">Buat Format Baru</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white">
-          <Table
-            storageKey="barcode-formats"
-            columns={["Format", "Definisi Segmen", "Qty", "Status", "Diperbarui", ""]}
-          >
-            {sorted.map((f) => {
-              return (
-                <tr key={f.id} className="transition-colors hover:bg-zinc-50/60">
-                  <Td>
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
-                        <Barcode size={17} strokeWidth={2} />
-                      </span>
-                      <div>
-                        <p className="truncate text-[13.5px] font-semibold text-zinc-900">
-                          {f.name}
-                        </p>
-                      </div>
-                    </div>
-                  </Td>
-                  <Td>
-                    <SegmentChips segments={f.segments} />
-                  </Td>
-                  <Td>
-                    <Badge tone={f.qtyPerFormat ? "violet" : "amber"}>
-                      {f.qtyPerFormat ? "Otomatis dari item" : "Manual per scan"}
-                    </Badge>
-                  </Td>
-                  <Td>
-                    <div className="flex items-center gap-3">
-                      <Toggle
-                        checked={f.isActive}
-                        onChange={(next) => toggleActive(f.id, next)}
-                      />
-                      <Badge tone={f.isActive ? "emerald" : "neutral"} dot>
-                        {f.isActive ? "Aktif" : "Nonaktif"}
-                      </Badge>
-                    </div>
-                  </Td>
-                  <Td className="whitespace-nowrap text-[12.5px] text-zinc-500">
-                    {formatDate(f.updatedAt)}
-                  </Td>
-                  <Td>
-                    <Link
-                      href={`/app/setup/barcode-formats/${f.id}`}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
-                    >
-                      <Pencil size={15} strokeWidth={2} />
-                    </Link>
-                  </Td>
-                </tr>
-              );
-            })}
-          </Table>
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        data={sorted}
+        getRowId={(f) => f.id}
+        searchPlaceholder="Search formats..."
+        getSearchText={(f) => f.name}
+        minWidth={900}
+        emptyIcon={<Barcode size={26} strokeWidth={2} />}
+        emptyTitle="No barcode formats yet"
+        emptyDescription="Create your first format to define how barcodes are parsed into data segments."
+      />
     </RoleGuard>
   );
 }

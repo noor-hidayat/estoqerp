@@ -1,158 +1,321 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
+  ArrowUpRight,
+  Barcode,
+  ChevronRight,
   ClipboardList,
   Gauge,
   Package,
   ScanLine,
 } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge, StatusBadge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboard } from "@/lib/api/query";
-import { formatId, formatNumber, relativeTime } from "@/lib/utils";
-import { Stat } from "@/components/ui/stat";
-import { ShellLoader } from "@/components/ui/loader";
+import { cn, formatId, formatNumber, relativeTime } from "@/lib/utils";
+import {
+  StockOpnameChart,
+  type WarehouseOpnameRow,
+} from "@/components/dashboard/stock-opname-chart";
+import { VarianceSummary } from "@/components/dashboard/variance-summary";
+
+function MetricCard({
+  label,
+  value,
+  icon,
+  tone = "primary",
+}: {
+  label: string;
+  value: ReactNode;
+  icon: ReactNode;
+  tone?: "primary" | "emerald" | "sky";
+}) {
+  const tones = {
+    primary: "bg-primary/10 text-primary",
+    emerald: "bg-emerald-50 text-emerald-600",
+    sky: "bg-sky-50 text-sky-600",
+  } as const;
+  return (
+    <Card className="@container/card">
+      <CardHeader className="relative">
+        <CardDescription>{label}</CardDescription>
+        <CardTitle className="mt-1 text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+          {value}
+        </CardTitle>
+        <div
+          className={cn(
+            "absolute right-4 top-4 flex size-9 items-center justify-center rounded-lg",
+            tones[tone]
+          )}
+        >
+          {icon}
+        </div>
+      </CardHeader>
+    </Card>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6" aria-hidden="true">
+      <div className="flex items-center justify-end">
+        <Skeleton className="h-8 w-44 rounded-md" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-36 rounded-xl" />
+        ))}
+      </div>
+      <div className="grid items-start gap-5 xl:grid-cols-[1.7fr_1fr]">
+        <Skeleton className="h-[420px] rounded-xl" />
+        <Skeleton className="h-[420px] rounded-xl" />
+      </div>
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        <Skeleton className="h-80 rounded-xl" />
+        <Skeleton className="h-80 rounded-xl" />
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { data: dashboard, isLoading, isError } = useDashboard();
+  const [chartExpanded, setChartExpanded] = useState(false);
 
-  if (isLoading) return <ShellLoader />;
+  const recentSessions = dashboard?.recentSessions ?? [];
+
+  if (isLoading) return <DashboardSkeleton />;
 
   if (isError || !dashboard) {
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center rounded-xl border border-zinc-200 bg-white p-14 text-center">
-        <p className="text-lg font-semibold text-zinc-800">Dashboard tidak dapat dimuat</p>
-        <p className="mt-2 max-w-sm text-sm text-zinc-500">
-          Role Anda mungkin tidak memiliki akses ke halaman ini.
+      <Card className="flex min-h-[50vh] flex-col items-center justify-center p-14 text-center">
+        <p className="text-lg font-semibold text-foreground">
+          Dashboard could not be loaded
         </p>
-        <Link
-          href="/app/opname"
-          className="mt-4 text-sm font-medium text-emerald-600 hover:text-emerald-700"
-        >
-          Buka Projects
-        </Link>
-      </div>
+        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+          Your role may not have access to this page.
+        </p>
+        <Button asChild variant="outline" className="mt-4">
+          <Link href="/app/so">Open Projects</Link>
+        </Button>
+      </Card>
     );
   }
 
+  const whOpname: WarehouseOpnameRow[] = dashboard.warehouseOpname ?? [];
+  const LIMIT = 7;
+
   return (
-    <div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat
-          compact
-          label="Project Aktif"
-          value={dashboard.active}
-          sub={`${dashboard.final} project final`}
-          icon={<ClipboardList size={16} strokeWidth={2} />}
+    <div className="space-y-6">
+      {/* ===== KPI SUMMARY ===== */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Active Projects"
+          value={formatNumber(dashboard.active)}
+          icon={<ClipboardList size={17} strokeWidth={2} />}
         />
-        <Stat
-          compact
-          label="Total Scan"
-          value={dashboard.totalScan}
-          sub="Total barcode di-scan"
-          icon={<ScanLine size={16} strokeWidth={2} />}
-          accent
+        <MetricCard
+          label="Total Scans"
+          value={formatNumber(dashboard.totalScan)}
+          icon={<ScanLine size={17} strokeWidth={2} />}
+          tone="emerald"
         />
-        <Stat
-          compact
+        <MetricCard
           label="Progress"
           value={`${dashboard.progressPct}%`}
-          sub={`${dashboard.progressCounted} dari ${dashboard.progressTotal} lokasi`}
-          icon={<Gauge size={16} strokeWidth={2} />}
+          icon={<Gauge size={17} strokeWidth={2} />}
+          tone="sky"
         />
-        <Stat
-          compact
-          label="Total Item"
-          value={dashboard.totalItems}
-          sub="Item di master data"
-          icon={<Package size={16} strokeWidth={2} />}
+        <MetricCard
+          label="Total Items"
+          value={formatNumber(dashboard.totalItems)}
+          icon={<Package size={17} strokeWidth={2} />}
         />
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        {/* AKTIVITAS TERBARU */}
-        <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_10px_30px_-12px_rgb(17_17_17/0.08)]">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
-            <h2 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">
-              Aktivitas terbaru
-            </h2>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10.5px] font-semibold text-emerald-600">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-              </span>
-              Live
-            </span>
-          </div>
-
-          <div className="divide-y divide-zinc-100">
-            {dashboard.recentSessions.length === 0 && (
-              <p className="px-5 py-8 text-center text-sm text-zinc-400">
-                Belum ada sesi scan.
-              </p>
-            )}
-            {dashboard.recentSessions.map((s, i) => (
-              <div
-                key={s.id}
-                className={`grid grid-cols-[100px_1fr_56px_110px_96px] items-center gap-3 px-5 py-2.5 ${
-                  i % 2 === 1 ? "bg-zinc-50/40" : ""
-                }`}
+      {/* ===== ANALYTICS: CHART + VARIANCE ===== */}
+      <section className="grid items-start gap-5 xl:grid-cols-[1.7fr_1fr]">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle>Stock Opname per Warehouse</CardTitle>
+            {whOpname.length > LIMIT && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setChartExpanded((v) => !v)}
+                className="shrink-0 text-primary"
               >
-                <span className="truncate font-mono text-[11px] font-semibold tracking-tight text-zinc-600">
-                  {formatId(s.code)}
-                </span>
-                <span className="truncate text-[13px] font-medium text-zinc-800">
-                  {s.product}
-                </span>
-                <span className="text-right font-mono text-[13px] font-semibold text-zinc-900">
-                  {formatNumber(s.qty)}
-                </span>
-                <span className="truncate text-[11.5px] text-zinc-500">
-                  {s.scannedBy}
-                </span>
-                <span className="truncate text-right text-[11px] text-zinc-400">
-                  {relativeTime(s.at)}
-                </span>
+                {chartExpanded ? "Collapse" : `View all (${whOpname.length})`}
+                <ChevronRight
+                  size={13}
+                  strokeWidth={2.5}
+                  className={cn(
+                    "transition-transform",
+                    chartExpanded && "rotate-90"
+                  )}
+                />
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent>
+            {whOpname.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                No warehouse data yet.
+              </p>
+            ) : (
+              <StockOpnameChart
+                warehouses={whOpname}
+                expanded={chartExpanded}
+              />
+            )}
+          </CardContent>
+          <CardFooter className="flex items-center justify-center gap-6 border-t text-sm">
+            <span className="flex items-center gap-2 font-medium leading-none">
+              <span className="size-2.5 rounded-sm bg-[var(--chart-1)]" />
+              Opname Result
+            </span>
+            <span className="flex items-center gap-2 font-medium leading-none">
+              <span className="size-2.5 rounded-sm bg-[var(--chart-2)]" />
+              System Stock
+            </span>
+          </CardFooter>
+        </Card>
+
+        <VarianceSummary warehouses={whOpname} />
+      </section>
+
+      {/* ===== BOTTOM: ACTIVITY + PROGRESS ===== */}
+      <section className="grid items-start gap-5 lg:grid-cols-2">
+        {/* AKTIVITAS TERBARU */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle>Recent Activity</CardTitle>
+            <Badge tone="success" dot>
+              Live
+            </Badge>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {recentSessions.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No scan sessions yet.
+              </p>
+            ) : (
+              <div className="divide-y divide-border">
+                {recentSessions.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-3 px-6 py-3.5"
+                  >
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Barcode size={14} strokeWidth={2} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-baseline gap-2">
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {formatId(s.code)}
+                        </span>
+                        <span className="truncate text-sm font-medium">
+                          {s.product}
+                        </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {s.scannedBy} · {formatNumber(s.qty)} scanned
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {relativeTime(s.at)}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
+            )}
+          </CardContent>
+
+          <CardFooter className="border-t px-6 py-3">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="text-primary"
+            >
+              <Link href="/app/reports/history">
+                View all activity
+                <ChevronRight size={13} strokeWidth={2.5} />
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
 
         {/* PROJECT PROGRESS */}
-        <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_10px_30px_-12px_rgb(17_17_17/0.08)]">
-          <div className="border-b border-zinc-100 px-5 py-4">
-            <h2 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">
-              Project Progress
-            </h2>
-          </div>
-
-          <div className="space-y-5 px-5 py-4">
-            {dashboard.projectProgressRows.length === 0 && (
-              <p className="py-6 text-center text-sm text-zinc-400">
-                Belum ada project.
+        <Card>
+          <CardHeader>
+            <CardTitle>Project Progress</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {dashboard.projectProgressRows.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No projects yet.
               </p>
+            ) : (
+              <div className="divide-y divide-border">
+                {dashboard.projectProgressRows.map((p) => {
+                  const done = p.pct >= 100;
+                  return (
+                    <Link
+                      key={p.id}
+                      href={`/app/projects/${p.id}`}
+                      className="group block px-6 py-4 transition-colors hover:bg-muted/50"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="truncate text-[13px] font-semibold text-foreground group-hover:text-primary">
+                          {p.name}
+                        </p>
+                        <div className="flex shrink-0 items-center gap-2.5">
+                          <span className="font-mono text-[12.5px] font-bold text-foreground">
+                            {p.pct}%
+                          </span>
+                          <StatusBadge
+                            status={done ? "APPROVED" : p.status}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-500"
+                          style={{ width: `${p.pct}%` }}
+                        />
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-3">
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {p.warehouse} · {p.counted} of {p.total} locations
+                          completed
+                        </p>
+                        <ArrowUpRight
+                          size={13}
+                          strokeWidth={2.5}
+                          className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                        />
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
             )}
-            {dashboard.projectProgressRows.map((p) => (
-              <Link key={p.id} href={`/app/opname/${p.id}`} className="group block">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="truncate text-[13px] font-semibold text-zinc-800 group-hover:text-emerald-700">
-                    {p.name}
-                  </p>
-                  <span className="font-mono text-[12.5px] font-semibold text-zinc-900">
-                    {p.pct}%
-                  </span>
-                </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100">
-                  <div
-                    className="h-full rounded-full bg-emerald-500"
-                    style={{ width: `${p.pct}%` }}
-                  />
-                </div>
-                <p className="mt-1.5 text-[11px] text-zinc-400">{p.warehouse}</p>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }

@@ -18,18 +18,15 @@ import {
   useBranches,
   useStockBalances,
 } from "@/lib/api/query";
-import {
-  STATUS_LABELS,
-  STATUS_TONE,
-} from "@/lib/compute";
 import { formatRupiah } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Table, Td } from "@/components/ui/table";
+import { Badge, StatusBadge } from "@/components/ui/badge";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { ALL_ROLES } from "@/lib/roles";
+import type { ProjectStatus } from "@/types";
 
 interface ProjectStatsResponse {
   projectId: string;
@@ -44,6 +41,18 @@ interface ProjectStatsResponse {
     diff: number;
   }[];
 }
+
+type ProjectRow = {
+  id: string;
+  name: string;
+  warehouse: string;
+  branch: string;
+  status: ProjectStatus;
+  mode: string;
+  counted: number;
+  total: number;
+  pct: number;
+};
 
 export default function SummaryReportPage() {
   const { data: items = [] } = useItemsList();
@@ -65,14 +74,14 @@ export default function SummaryReportPage() {
     const totalValue = items.reduce((acc, item) => {
       const qty = stockBalances
         .filter((sb) => sb.itemId === item.id)
-        .reduce((a, sb) => a + sb.qty, 0);
+        .reduce((a, sb) => a + sb.closingQty, 0);
       return acc + item.price * qty;
     }, 0);
 
     const warehouseMap = new Map(warehouses.map((w) => [w.id, w]));
     const branchMap = new Map(branches.map((b) => [b.id, b]));
 
-    const projectRows = projects.map((p, i) => {
+    const projectRows: ProjectRow[] = projects.map((p, i) => {
       const stats = projectStatsQueries[i]?.data;
       const progress = stats?.progress ?? { total: 0, counted: 0, pct: 0 };
       return {
@@ -99,10 +108,10 @@ export default function SummaryReportPage() {
 
   const exportColumns = [
     { key: "name" as const, header: "Project" },
-    { key: "branch" as const, header: "Cabang" },
-    { key: "warehouse" as const, header: "Gudang" },
-    { key: "counted" as const, header: "Lokasi Terhitung" },
-    { key: "total" as const, header: "Total Lokasi" },
+    { key: "branch" as const, header: "Branch" },
+    { key: "warehouse" as const, header: "Warehouse" },
+    { key: "counted" as const, header: "Locations Counted" },
+    { key: "total" as const, header: "Total Locations" },
     { key: "pct" as const, header: "Completion %", format: (v: unknown) => `${v}%` },
   ];
 
@@ -110,27 +119,79 @@ export default function SummaryReportPage() {
     const base = "summary-report";
     const meta = {
       title: "Summary Report — Stock Opname",
-      subtitle: `Total nilai stok ${formatRupiah(data.totalValue)} · ${data.totalItems} item master · completion ${data.overallPct}%`,
+      subtitle: `Total stock value ${formatRupiah(data.totalValue)} · ${data.totalItems} master items · completion ${data.overallPct}%`,
     };
     if (type === "xlsx")
       exportXlsx(data.projectRows, exportColumns, base, "Summary");
     else exportPdf(data.projectRows, exportColumns, base, meta);
   };
 
+  const columns: DataTableColumn<ProjectRow>[] = [
+    {
+      id: "name",
+      header: "Project",
+      sortValue: (p) => p.name,
+      cell: (p) => <span className="font-medium text-foreground">{p.name}</span>,
+      className: "min-w-[180px]",
+    },
+    {
+      id: "location",
+      header: "Cabang / Gudang",
+      cell: (p) => (
+        <span className="text-xs text-muted-foreground">
+          {p.branch} · {p.warehouse}
+        </span>
+      ),
+    },
+    {
+      id: "mode",
+      header: "Mode",
+      cell: (p) => (
+        <Badge tone={p.mode === "COMPARE" ? "emerald" : "violet"}>
+          {p.mode === "COMPARE" ? "Banding" : "Scratch"}
+        </Badge>
+      ),
+    },
+    {
+      id: "progress",
+      header: "Progress",
+      sortValue: (p) => p.pct,
+      cell: (p) => (
+        <div className="flex items-center gap-3">
+          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{ width: `${p.pct}%` }}
+            />
+          </div>
+          <span className="font-mono text-xs font-medium text-muted-foreground">
+            {p.counted}/{p.total} lokasi · {p.pct}%
+          </span>
+        </div>
+      ),
+      className: "min-w-[220px]",
+    },
+    {
+      id: "status",
+      header: "Status",
+      sortValue: (p) => p.status,
+      cell: (p) => <StatusBadge status={p.status} />,
+    },
+  ];
+
   return (
     <RoleGuard roles={ALL_ROLES} menus={["reports.summary"]}>
       <PageHeader
-        eyebrow="Laporan"
         title="Summary Report"
-        description="Ringkasan total nilai stok, jumlah item, dan persentase penyelesaian opname."
+
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
-              <FileSpreadsheet size={15} strokeWidth={2} className="text-emerald-600" />
+              <FileSpreadsheet size={15} strokeWidth={2} className="text-primary" />
               Excel
             </Button>
             <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
-              <FileDown size={15} strokeWidth={2} className="text-red-500" />
+              <FileDown size={15} strokeWidth={2} className="text-destructive" />
               PDF
             </Button>
           </div>
@@ -138,91 +199,66 @@ export default function SummaryReportPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500">
+        <div className="rounded-md border border-border bg-card p-5">
+          <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
             <Package size={18} strokeWidth={2} />
           </div>
-          <p className="text-[12px] font-medium text-zinc-400">Total item master</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
+          <p className="text-[12px] font-medium text-muted-foreground">Total master items</p>
+          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
             {data.totalItems}
           </p>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500">
+        <div className="rounded-md border border-border bg-card p-5">
+          <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
             <WarehouseIcon size={18} strokeWidth={2} />
           </div>
-          <p className="text-[12px] font-medium text-zinc-400">Total gudang</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
+          <p className="text-[12px] font-medium text-muted-foreground">Total warehouses</p>
+          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
             {warehouses.length}
           </p>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600/10 text-emerald-700">
+        <div className="rounded-md border border-border bg-card p-5">
+          <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Gauge size={18} strokeWidth={2} />
           </div>
-          <p className="text-[12px] font-medium text-zinc-400">Completion rata-rata</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
+          <p className="text-[12px] font-medium text-muted-foreground">Average completion</p>
+          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
             {data.overallPct}%
           </p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-emerald-500"
+              className="h-full rounded-full bg-primary"
               style={{ width: `${data.overallPct}%` }}
             />
           </div>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600/10 text-emerald-700">
+        <div className="rounded-md border border-border bg-card p-5">
+          <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Coins size={18} strokeWidth={2} />
           </div>
-          <p className="text-[12px] font-medium text-zinc-400">Total nilai stok sistem</p>
-          <p className="mt-1 font-mono text-xl font-semibold tracking-tight text-zinc-900">
+          <p className="text-[12px] font-medium text-muted-foreground">Total system stock value</p>
+          <p className="mt-1 font-mono text-xl font-semibold tracking-tight text-foreground">
             {formatRupiah(data.totalValue)}
           </p>
         </div>
       </div>
 
-      <div className="mt-8 rounded-lg border border-zinc-200 bg-white">
-        <div className="border-b border-zinc-100 px-5 py-4">
-          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">
-            Ringkasan per project
+      <div className="mt-8">
+          <h3 className="mb-3 text-[13px] font-medium text-muted-foreground">
+            Summary per project
           </h3>
-        </div>
-        <Table storageKey="reports-summary" columns={["Project", "Cabang / Gudang", "Mode", "Progress", "Status"]}>
-          {data.projectRows.map((p) => (
-            <tr key={p.id} className="transition-colors hover:bg-zinc-50/60">
-              <Td truncate className="text-[13.5px] font-semibold text-zinc-900">
-                {p.name}
-              </Td>
-              <Td className="text-[12px] text-zinc-500">
-                {p.branch} · {p.warehouse}
-              </Td>
-              <Td>
-                <Badge tone={p.mode === "COMPARE" ? "emerald" : "violet"}>
-                  {p.mode === "COMPARE" ? "Banding" : "Scratch"}
-                </Badge>
-              </Td>
-              <Td>
-                <div className="flex items-center gap-3">
-                  <div className="h-1.5 w-24 overflow-hidden rounded-full bg-zinc-100">
-                    <div
-                      className="h-full rounded-full bg-emerald-500"
-                      style={{ width: `${p.pct}%` }}
-                    />
-                  </div>
-                  <span className="font-mono text-[12px] font-medium text-zinc-600">
-                    {p.counted}/{p.total} lokasi · {p.pct}%
-                  </span>
-                </div>
-              </Td>
-              <Td>
-                <Badge tone={STATUS_TONE[p.status]} dot>
-                  {STATUS_LABELS[p.status]}
-                </Badge>
-              </Td>
-            </tr>
-          ))}
-        </Table>
+        <DataTable
+          columns={columns}
+          data={data.projectRows}
+          getRowId={(p) => p.id}
+          searchPlaceholder="Search projects..."
+          getSearchText={(p) => `${p.name} ${p.branch} ${p.warehouse}`}
+          initialSort={{ id: "name", dir: "asc" }}
+          minWidth={860}
+          emptyIcon={<Package size={26} strokeWidth={2} />}
+        emptyTitle="No projects yet"
+        emptyDescription="Stock opname projects will appear here after creation."
+        />
       </div>
     </RoleGuard>
   );

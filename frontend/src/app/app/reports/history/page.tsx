@@ -12,15 +12,13 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Table, Td } from "@/components/ui/table";
-import { EmptyState } from "@/components/ui/empty-state";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Pagination } from "@/components/ui/pagination";
 import { ShellLoader } from "@/components/ui/loader";
 
 const SOURCE_LABELS: Record<string, string> = {
   SCANNER: "Scanner",
-  CAMERA: "Kamera",
+  CAMERA: "Camera",
   MANUAL: "Manual",
 };
 
@@ -29,6 +27,7 @@ export default function ScanHistoryPage() {
   const [projectId, setProjectId] = useState("all");
   const [source, setSource] = useState("all");
   const [date, setDate] = useState("");
+  const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [exporting, setExporting] = useState(false);
@@ -37,9 +36,10 @@ export default function ScanHistoryPage() {
     projectId: projectId !== "all" ? projectId : undefined,
     source: source !== "all" ? source : undefined,
     date: date || undefined,
+    query: query || undefined,
     page,
     pageSize,
-  }), [projectId, source, date, page, pageSize]);
+  }), [projectId, source, date, query, page, pageSize]);
 
   const { data: recordsData, isLoading: recordsLoading } = useScanRecords(filterParams);
   const { data: items = [] } = useItemsList();
@@ -53,15 +53,15 @@ export default function ScanHistoryPage() {
   );
 
   const exportColumns = [
-    { key: "waktu" as const, header: "Waktu" },
+    { key: "waktu" as const, header: "Time" },
     { key: "project" as const, header: "Project" },
     { key: "barcode" as const, header: "Barcode" },
     { key: "item" as const, header: "Item" },
     { key: "qty" as const, header: "Qty", format: (v: unknown) => formatNumber(Number(v)) },
-    { key: "qtyMode" as const, header: "Mode Qty" },
-    { key: "source" as const, header: "Sumber" },
+    { key: "qtyMode" as const, header: "Qty Mode" },
+    { key: "source" as const, header: "Source" },
     { key: "user" as const, header: "User" },
-    { key: "location" as const, header: "Lokasi" },
+    { key: "location" as const, header: "Location" },
   ];
 
   const handleExport = async (type: "xlsx" | "pdf") => {
@@ -71,6 +71,7 @@ export default function ScanHistoryPage() {
       if (projectId !== "all") exportParams.projectId = projectId;
       if (source !== "all") exportParams.source = source;
       if (date) exportParams.date = date;
+      if (query) exportParams.query = query;
       exportParams.pageSize = String(recordsData?.total ?? 500);
 
       const sp = new URLSearchParams(exportParams);
@@ -89,15 +90,15 @@ export default function ScanHistoryPage() {
           barcode: r.barcode,
           item: item?.name ?? "—",
           qty: r.quantity,
-          qtyMode: r.qtyMode === "AUTO" ? "Otomatis" : "Manual",
+          qtyMode: r.qtyMode === "AUTO" ? "Auto" : "Manual",
           source: SOURCE_LABELS[r.source] ?? r.source,
           user: user?.name ?? "—",
           location: loc?.code ?? "—",
         };
       });
-      const base = "riwayat-scan";
-      const meta = { title: "Riwayat Scan (Audit Trail)", subtitle: `Total ${data.length} transaksi scan` };
-      if (type === "xlsx") exportXlsx(data, exportColumns, base, "Riwayat");
+      const base = "scan-history";
+      const meta = { title: "Scan History (Audit Trail)", subtitle: `Total ${data.length} scan transactions` };
+      if (type === "xlsx") exportXlsx(data, exportColumns, base, "History");
       else exportPdf(data, exportColumns, base, meta);
     } finally {
       setExporting(false);
@@ -109,124 +110,176 @@ export default function ScanHistoryPage() {
   const rows = recordsData?.rows ?? [];
   const total = recordsData?.total ?? 0;
 
+  const columns: DataTableColumn<ScanRecord>[] = [
+    {
+      id: "time",
+      header: "Time",
+      cell: (r) => (
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
+          {formatDateTime(r.scannedAt)}
+        </span>
+      ),
+      className: "whitespace-nowrap",
+    },
+    {
+      id: "project",
+      header: "Project",
+      cell: (r) => (
+        <span className="max-w-[160px] truncate text-[12.5px] text-muted-foreground">
+          {projects.find((p) => p.id === r.projectId)?.name ?? "—"}
+        </span>
+      ),
+      className: "max-w-[160px]",
+    },
+    {
+      id: "barcode",
+      header: "Barcode",
+      cell: (r) => <span className="font-mono text-xs">{r.barcode}</span>,
+      className: "whitespace-nowrap",
+    },
+    {
+      id: "item",
+      header: "Item",
+      cell: (r) => {
+        const item = items.find((i) => i.id === r.itemId);
+        return (
+          <span className="max-w-[220px] truncate text-[12.5px]">
+            {item?.name ?? <span className="text-muted-foreground">Unknown</span>}
+          </span>
+        );
+      },
+      className: "max-w-[220px]",
+    },
+    {
+      id: "qty",
+      header: "Qty",
+      align: "right",
+      cell: (r) => (
+        <span className="font-mono text-[13px] font-semibold tabular-nums">
+          {formatNumber(r.quantity)}
+        </span>
+      ),
+    },
+    {
+      id: "source",
+      header: "Source",
+      cell: (r) => (
+        <Badge tone="neutral">
+          {SOURCE_LABELS[r.source] ?? r.source}
+        </Badge>
+      ),
+    },
+    {
+      id: "location",
+      header: "Location",
+      cell: (r) => (
+        <span className="font-mono text-xs">
+          {locations.find((l) => l.id === r.locationId)?.code ?? "—"}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div>
       <PageHeader
-        eyebrow="Laporan"
-        title="Riwayat Scan"
-        description="Log transaksi scan mentah untuk keperluan audit trail."
-      />
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <Select
-            label="Project"
-            value={projectId}
-            onChange={(e) => { setProjectId(e.target.value); setPage(1); }}
-            className="sm:w-56"
-          >
-            <option value="all">Semua project</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Sumber"
-            value={source}
-            onChange={(e) => { setSource(e.target.value); setPage(1); }}
-            className="sm:w-40"
-          >
-            <option value="all">Semua sumber</option>
-            <option value="SCANNER">Scanner</option>
-            <option value="CAMERA">Kamera</option>
-            <option value="MANUAL">Manual</option>
-          </Select>
-          <Input
-            label="Tanggal"
-            type="date"
-            value={date}
-            onChange={(e) => { setDate(e.target.value); setPage(1); }}
-            className="sm:w-40"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")} disabled={exporting}>
-            <FileSpreadsheet size={15} strokeWidth={2} className="text-emerald-600" />
-            Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleExport("pdf")} disabled={exporting}>
-            <FileDown size={15} strokeWidth={2} className="text-red-500" />
-            PDF
-          </Button>
-        </div>
-      </div>
+        title="Scan History"
 
-      {recordsLoading ? (
-        <ShellLoader />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon={<History size={26} strokeWidth={2} />}
-          title="Belum ada data scan"
-          description="Sesuaikan filter atau mulai sesi scan untuk mencatat transaksi."
-        />
-      ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
-            <p className="text-[13px] text-zinc-500">
-              <span className="font-semibold text-zinc-900">{total}</span>{" "}
-              transaksi
-            </p>
-            <Badge tone="neutral">Audit trail</Badge>
-          </div>
-          <Table
-            storageKey="reports-history"
-            columns={["Waktu", "Project", "Barcode", "Item", "Qty", "Sumber", "Lokasi"]}
-          >
-            {rows.map((r) => {
-              const item = items.find((i) => i.id === r.itemId);
-              const project = projects.find((p) => p.id === r.projectId);
-              const loc = locations.find((l) => l.id === r.locationId);
-              return (
-                <tr key={r.id} className="transition-colors hover:bg-zinc-50/60">
-                  <Td className="whitespace-nowrap text-[12px] text-zinc-500">
-                    {formatDateTime(r.scannedAt)}
-                  </Td>
-                  <Td truncate className="max-w-[160px] text-[12.5px] text-zinc-600">
-                    {project?.name ?? "—"}
-                  </Td>
-                  <Td mono className="text-[12px]">
-                    {r.barcode}
-                  </Td>
-                  <Td truncate className="max-w-[220px] text-[12.5px]">
-                    {item?.name ?? <span className="text-zinc-400">Tidak dikenal</span>}
-                  </Td>
-                  <Td mono className="text-right text-[13px] font-semibold">
-                    {formatNumber(r.quantity)}
-                  </Td>
-                  <Td>
-                    <Badge tone="neutral">
-                      {SOURCE_LABELS[r.source] ?? r.source}
-                    </Badge>
-                  </Td>
-                  <Td mono className="text-[12px]">
-                    {loc?.code ?? "—"}
-                  </Td>
-                </tr>
-              );
-            })}
-          </Table>
-          <div className="border-t border-zinc-100 px-5 py-3">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={setPage}
-              onPageSizeChange={(ps) => { setPageSize(ps); setPage(1); }}
+      />
+
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(r) => r.id}
+        loading={recordsLoading}
+        searchPlaceholder="Search barcode, item, project, user, location..."
+        searchValue={query}
+        onSearchChange={(q) => {
+          setQuery(q);
+          setPage(1);
+        }}
+        filters={
+          <>
+            <Select
+              value={projectId}
+              onChange={(e) => { setProjectId(e.target.value); setPage(1); }}
+              className="h-8 w-48 text-xs"
+            >
+              <option value="all">All projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={source}
+              onChange={(e) => { setSource(e.target.value); setPage(1); }}
+              className="h-8 w-36 text-xs"
+            >
+              <option value="all">All sources</option>
+              <option value="SCANNER">Scanner</option>
+              <option value="CAMERA">Camera</option>
+              <option value="MANUAL">Manual</option>
+            </Select>
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => { setDate(e.target.value); setPage(1); }}
+              className="h-8 w-36 text-xs"
             />
-          </div>
-        </div>
-      )}
+          </>
+        }
+        toolbarRight={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs"
+              onClick={() => handleExport("xlsx")}
+              disabled={exporting}
+            >
+              <FileSpreadsheet size={14} strokeWidth={2} className="text-primary" />
+              Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs"
+              onClick={() => handleExport("pdf")}
+              disabled={exporting}
+            >
+              <FileDown size={14} strokeWidth={2} className="text-destructive" />
+              PDF
+            </Button>
+          </>
+        }
+        pagination="server"
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+        onPageSizeChange={(ps) => { setPageSize(ps); setPage(1); }}
+        footerLeft={
+          <>
+            <span className="tabular-nums">
+              <span className="font-semibold text-foreground">{total}</span> transactions
+            </span>
+            <Badge tone="neutral">Audit trail</Badge>
+          </>
+        }
+        minWidth={980}
+        emptyIcon={<History size={26} strokeWidth={2} />}
+        emptyTitle="No scan data yet"
+        emptyDescription="Adjust filters or start a scan session to record transactions."
+        onResetFilters={() => {
+          setProjectId("all");
+          setSource("all");
+          setDate("");
+          setQuery("");
+          setPage(1);
+        }}
+      />
     </div>
   );
 }

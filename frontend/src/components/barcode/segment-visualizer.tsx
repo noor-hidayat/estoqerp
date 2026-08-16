@@ -8,16 +8,16 @@ export const FIELD_COLORS: Record<SegmentField, { bg: string; text: string; dot:
   DATE: { bg: "bg-sky-100", text: "text-sky-700", dot: "bg-sky-500", border: "border-sky-200" },
   SEQUENCE: { bg: "bg-amber-100", text: "text-amber-700", dot: "bg-amber-500", border: "border-amber-200" },
   BARCODE_ID: { bg: "bg-rose-100", text: "text-rose-700", dot: "bg-rose-500", border: "border-rose-200" },
-  CUSTOM: { bg: "bg-zinc-100", text: "text-zinc-600", dot: "bg-zinc-400", border: "border-zinc-200" },
+  CUSTOM: { bg: "bg-muted", text: "text-muted-foreground", dot: "bg-muted-foreground", border: "border-border" },
 };
 
 export const FIELD_LABEL_SHORT: Record<SegmentField, string> = {
   ITEM_CODE: "Item",
-  CATEGORY: "Kat.",
-  DATE: "Tgl",
+  CATEGORY: "Cat.",
+  DATE: "Date",
   SEQUENCE: "Seq",
   BARCODE_ID: "Barcode",
-  CUSTOM: "Kus.",
+  CUSTOM: "Cust.",
 };
 
 function coveringSegments(
@@ -46,14 +46,14 @@ export function SegmentBar({
       return "bg-red-50 text-red-500 ring-1 ring-inset ring-red-300";
     }
     const seg = covering[0];
-    if (!seg) return "bg-zinc-50 text-zinc-300";
+    if (!seg) return "bg-muted text-muted-foreground/40";
     const color = FIELD_COLORS[seg.field];
     return cx(color.bg, color.text);
   };
 
   const digitTitle = (i: number) => {
     const covering = coveringSegments(sorted, i);
-    if (covering.length === 0) return "Tidak ada segmen";
+    if (covering.length === 0) return "No segment";
     if (covering.length > 1) {
       return `Overlap: ${covering
         .map((s) => `${s.start}–${s.end} ${FIELD_LABEL_SHORT[s.field]}`)
@@ -67,7 +67,7 @@ export function SegmentBar({
     <div className="space-y-2">
       <div
         className={cx(
-          "overflow-x-auto rounded-lg border border-zinc-200 bg-white p-2",
+          "overflow-x-auto rounded-lg border border-border bg-card p-2",
           className
         )}
       >

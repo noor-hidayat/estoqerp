@@ -37,6 +37,7 @@ export const MENU_CHILDREN: Record<string, string[]> = {
     "settings.roles.edit",
     "settings.columnWidth",
   ],
+  ai: [],
   dashboard: [],
 };
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
-import Link from "next/link";
-import { Pencil, Plus, SquareAsterisk } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { MoreHorizontal, Pencil, Plus, SquareAsterisk, Trash2 } from "lucide-react";
 import {
   useRoles,
   useRolePermissions,
@@ -14,12 +14,20 @@ import { ShellLoader } from "@/components/ui/loader";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
-import { Table, Td } from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Toggle } from "@/components/ui/toggle";
-import { EmptyState } from "@/components/ui/empty-state";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { Role } from "@/types";
 
 export default function RolesPage() {
+  const navigate = useNavigate();
   const { data: roles, isLoading: rolesLoading } = useRoles();
   const { data: rolePermissions, isLoading: permsLoading } = useRolePermissions();
   const { data: branchAccesses, isLoading: accessesLoading } = useBranchAccesses();
@@ -27,11 +35,12 @@ export default function RolesPage() {
   const removeRole = useRemove("roles");
   const removePerm = useRemove("rolePermissions");
   const removeAccess = useRemove("branchAccesses");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const sorted = useMemo(() => (roles ?? []).slice().sort((a, b) => a.name.localeCompare(b.name)), [roles]);
 
-  const handleDelete = async (r: typeof sorted[0]) => {
-    if (!confirm(`Hapus role "${r.name}"?`)) return;
+  const handleDelete = async (r: Role) => {
+    if (!confirm(`Delete role "${r.name}"?`)) return;
     if (rolePermissions) {
       for (const p of rolePermissions.filter((x) => x.roleId === r.id)) {
         await removePerm.mutateAsync(p.id);
@@ -45,55 +54,167 @@ export default function RolesPage() {
     await removeRole.mutateAsync(r.id);
   };
 
+  const handleBulkDelete = async () => {
+    const deletableIds = new Set(sorted.filter((r) => !r.isSystem).map((r) => r.id));
+    const ids = [...selected].filter((id) => deletableIds.has(id));
+    const skipped = selected.size - ids.length;
+    if (ids.length === 0) {
+      alert("System roles cannot be deleted.");
+      return;
+    }
+    if (
+      !confirm(
+        `Delete ${ids.length} selected role${ids.length > 1 ? "s" : ""}?` +
+          (skipped > 0 ? ` ${skipped} system role${skipped > 1 ? "s" : ""} will be skipped.` : "")
+      )
+    )
+      return;
+    try {
+      for (const id of ids) {
+        if (rolePermissions) {
+          for (const p of rolePermissions.filter((x) => x.roleId === id)) {
+            await removePerm.mutateAsync(p.id);
+          }
+        }
+        if (branchAccesses) {
+          for (const a of branchAccesses.filter((x) => x.roleId === id)) {
+            await removeAccess.mutateAsync(a.id);
+          }
+        }
+        await removeRole.mutateAsync(id);
+      }
+      setSelected(new Set());
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to delete roles");
+    }
+  };
+
   if (rolesLoading || permsLoading || accessesLoading) return <ShellLoader />;
+
+  const columns: DataTableColumn<Role>[] = [
+    {
+      id: "name",
+      header: "Role",
+      sortValue: (r) => r.name,
+      cell: (r) => <span className="font-medium text-foreground">{r.name}</span>,
+      className: "min-w-[160px]",
+    },
+    {
+      id: "system",
+      header: "System",
+      sortValue: (r) => (r.isSystem ? 1 : 0),
+      cell: (r) => (
+        <Badge tone={r.isSystem ? "violet" : "neutral"} dot>
+          {r.isSystem ? "System" : "Custom"}
+        </Badge>
+      ),
+    },
+    {
+      id: "perms",
+      header: "Permission",
+      cell: (r) => (
+        <span className="text-xs text-muted-foreground">
+          {(rolePermissions ?? []).filter((p) => p.roleId === r.id).length} actions
+        </span>
+      ),
+    },
+    {
+      id: "access",
+      header: "Entity access",
+      cell: (r) => (
+        <span className="text-xs text-muted-foreground">
+          {(branchAccesses ?? []).filter((a) => a.roleId === r.id).length} entities
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (r) => (
+        <div className="flex items-center gap-2.5">
+          <Toggle checked={r.active} onChange={(next) => updateRole.mutate({ id: r.id, patch: { active: next } })} />
+          <Badge tone={r.active ? "emerald" : "neutral"} dot>{r.active ? "Active" : "Inactive"}</Badge>
+        </div>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      cell: (r) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              aria-label={`Actions for ${r.name}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={() => navigate(`/app/settings/roles/${r.id}`)}>
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Edit
+            </DropdownMenuItem>
+            {!r.isSystem && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => handleDelete(r)}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
 
   return (
     <RoleGuard roles={["role_sys_admin"]} menus={["settings.roles"]}>
       <PageHeader
-        title="Role &amp; Permission"
-        description="Kelola role dan permission. Role sistem tidak bisa dihapus."
+        title="Roles"
+
         actions={
-          <Link href="/app/settings/roles/new">
-            <Button variant="secondary"><Plus size={15} strokeWidth={2} /> Tambah Role</Button>
-          </Link>
+          <Button onClick={() => navigate("/app/settings/roles/new")}>
+            <Plus size={15} strokeWidth={2} /> Add Role
+          </Button>
         }
       />
 
-      {sorted.length === 0 ? (
-        <EmptyState icon={<SquareAsterisk size={26} strokeWidth={2} />} title="Tidak ada role" description="Tambahkan role untuk permission akses." />
-      ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white">
-          <Table storageKey="roles" columns={["Role", "Sistem", "Permission", "Akses entitas", "Status", "", ""]}>
-            {sorted.map((r) => (
-              <tr key={r.id} className="transition-colors hover:bg-zinc-50/60">
-                <Td truncate className="text-[13.5px] font-semibold text-zinc-900">{r.name}</Td>
-                <Td><Badge tone={r.isSystem ? "violet" : "neutral"} dot>{r.isSystem ? "Sistem" : "Custom"}</Badge></Td>
-                <Td><span className="text-[11.5px] text-zinc-400">{(rolePermissions ?? []).filter((p) => p.roleId === r.id).length} actions</span></Td>
-                <Td><span className="text-[11.5px] text-zinc-400">{(branchAccesses ?? []).filter((a) => a.roleId === r.id).length} entitas</span></Td>
-                <Td>
-                  <div className="flex items-center gap-2.5">
-                    <Toggle checked={r.active} onChange={(next) => updateRole.mutate({ id: r.id, patch: { active: next } })} />
-                    <Badge tone={r.active ? "emerald" : "neutral"} dot>{r.active ? "Aktif" : "Nonaktif"}</Badge>
-                  </div>
-                </Td>
-                <Td>
-                  <Link href={`/app/settings/roles/${r.id}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700">
-                    <Pencil size={15} strokeWidth={2} />
-                  </Link>
-                </Td>
-                <Td>
-                  {!r.isSystem && (
-                    <button
-                      onClick={() => handleDelete(r)}
-                      className="text-[11px] text-red-500 hover:text-red-700"
-                    >Hapus</button>
-                  )}
-                </Td>
-              </tr>
-            ))}
-          </Table>
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        data={sorted}
+        getRowId={(r) => r.id}
+        searchPlaceholder="Search roles..."
+        getSearchText={(r) => r.name}
+        selectable
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        toolbarRight={
+          selected.size > 0 ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={handleBulkDelete}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete ({selected.size})
+            </Button>
+          ) : null
+        }
+        minWidth={680}
+        emptyIcon={<SquareAsterisk size={26} strokeWidth={2} />}
+        emptyTitle="No roles"
+        emptyDescription="Add a role for access permissions."
+      />
     </RoleGuard>
   );
 }

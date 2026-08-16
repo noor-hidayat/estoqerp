@@ -1,21 +1,23 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
-import { X } from "lucide-react";
+import { useEffect, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "@/lib/session";
-import { SidebarContent, type SidebarMode } from "./sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
 import { Topbar } from "./topbar";
+import { BottomNav } from "./bottom-nav";
 import { ShellLoader } from "@/components/ui/loader";
-import { cx } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import {
+  SidebarInset,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, loading } = useSession();
   const router = useRouter();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>("expanded");
-  const sidebarExpanded = sidebarMode === "expanded";
+  const pathname = usePathname();
+  const isAiChat = pathname === "/app/ai";
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -24,60 +26,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (loading || !user) return <ShellLoader />;
 
   return (
-    <div className="min-h-[100dvh] bg-white">
-      <div
-        className={cx(
-          "hidden lg:fixed lg:left-0 lg:top-0 lg:bottom-0 lg:z-40 lg:flex lg:flex-col lg:border-r lg:border-zinc-200 lg:bg-white lg:transition-[width] lg:duration-300 lg:ease-[cubic-bezier(0.4,0,0.2,1)]",
-          sidebarExpanded ? "lg:w-[232px]" : "lg:w-[68px]"
-        )}
-      >
-        <SidebarContent
-          collapsed={!sidebarExpanded}
-          mode={sidebarMode}
-          onModeChange={setSidebarMode}
-        />
-      </div>
-
-      <AnimatePresence>
-        {drawerOpen && (
-          <>
-            <motion.div
-              className="fixed inset-0 z-40 bg-zinc-950/40 backdrop-blur-sm lg:hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setDrawerOpen(false)}
-            />
-            <motion.aside
-              className="fixed inset-y-0 left-0 z-50 w-[280px] bg-white shadow-2xl lg:hidden"
-              initial={{ x: -320 }}
-              animate={{ x: 0 }}
-              exit={{ x: -320 }}
-              transition={{ type: "spring", stiffness: 340, damping: 34 }}
-            >
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="absolute right-3 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900"
-              >
-                <X size={16} strokeWidth={2} />
-              </button>
-              <SidebarContent onNavigate={() => setDrawerOpen(false)} />
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
-
-      <div
-        className={cx(
-          "transition-[padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
-          sidebarExpanded ? "lg:pl-[232px]" : "lg:pl-[68px]"
-        )}
-      >
-        <Topbar onMenu={() => setDrawerOpen(true)} />
-        <main className="mx-auto min-w-0 max-w-[1400px] px-4 py-8 sm:px-8 sm:py-10 lg:pr-8">
+    <SidebarProvider className="overflow-hidden">
+      <AppSidebar />
+      <SidebarInset>
+        <Topbar />
+        <main
+          className={cn(
+            "min-w-0 flex-1 min-h-0 overflow-y-auto px-4 pt-8 sm:px-8 sm:pt-10",
+            isAiChat
+              ? "pb-0"
+              : "pb-[calc(80px+env(safe-area-inset-bottom))] lg:pb-10"
+          )}
+        >
           {children}
         </main>
-      </div>
-    </div>
+      </SidebarInset>
+      <BottomNav />
+    </SidebarProvider>
   );
 }

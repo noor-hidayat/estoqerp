@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, Video, X } from "lucide-react";
 
-const SCAN_COOLDOWN_MS = 600;
 const MAX_DECODE_WIDTH = 560;
+const DEDUP_MS = 200;           // debounce barcode yang sama
+const ROI_W_PCT = 0.80;         // lebar ROI = 80% frame (sesuai viewfinder)
+const ROI_H_PCT = 0.45;         // tinggi ROI = 45% frame (sesuai viewfinder)
 
 let audioCtx: AudioContext | null = null;
 
@@ -50,10 +52,11 @@ export function CameraScanner({
   const videoRef = useRef<HTMLVideoElement>(null);
   const onScanRef = useRef(onScan);
   const streamRef = useRef<MediaStream | null>(null);
-  const timerRef = useRef<number | null>(null);
   const workerRef = useRef<Worker | null>(null);
-  const pendingRef = useRef(new Map<number, (text: string) => void>());
+  const workerBusyRef = useRef(false);
   const seqRef = useRef(0);
+  const lastScanRef = useRef<{ text: string; at: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(true);
 
@@ -64,58 +67,90 @@ export function CameraScanner({
   useEffect(() => {
     let cancelled = false;
 
-    const worker = new Worker(new URL("./decode-worker.ts", import.meta.url), {
-      type: "module",
-    });
+    const worker = new Worker(
+      new URL("./decode-worker.ts", import.meta.url),
+      { type: "module" }
+    );
     workerRef.current = worker;
+
     worker.onmessage = (e: MessageEvent<DecodeResponse>) => {
-      const { id, text } = e.data;
-      const cb = pendingRef.current.get(id);
-      pendingRef.current.delete(id);
-      if (cb) cb(text);
+      const { text } = e.data;
+      workerBusyRef.current = false;
+      if (cancelled) return;
+      if (!text) return;
+
+      const now = Date.now();
+      const last = lastScanRef.current;
+      if (last && last.text === text && now - last.at < DEDUP_MS) return;
+
+      lastScanRef.current = { text, at: now };
+      playBeep();
+      onScanRef.current(text);
     };
 
-    const decodeLoop = async (video: HTMLVideoElement) => {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return;
-      let busy = false;
-      const loop = async () => {
-        if (cancelled || busy) return;
-        if (
-          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-          video.videoWidth > 0
-        ) {
-          const scale = Math.min(1, MAX_DECODE_WIDTH / video.videoWidth);
-          canvas.width = Math.max(1, Math.floor(video.videoWidth * scale));
-          canvas.height = Math.max(1, Math.floor(video.videoHeight * scale));
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          let imageData: ImageData;
-          try {
-            imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          } catch {
-            timerRef.current = window.setTimeout(loop, 100);
-            return;
-          }
-          busy = true;
-          const id = ++seqRef.current;
-          pendingRef.current.set(id, (text) => {
-            busy = false;
-            if (cancelled) return;
-            if (text) {
-              playBeep();
-              onScanRef.current(text);
-              timerRef.current = window.setTimeout(loop, SCAN_COOLDOWN_MS);
-              return;
-            }
-            void loop();
-          });
-          worker.postMessage({ id, imageData }, [imageData.data.buffer]);
-        } else {
-          timerRef.current = window.setTimeout(loop, 100);
-        }
-      };
-      await loop();
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) {
+      setStarting(false);
+      setError("Browser does not support canvas 2D.");
+      return;
+    }
+
+    const sendFrame = (video: HTMLVideoElement) => {
+      if (cancelled || workerBusyRef.current) return;
+      if (
+        video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+        video.videoWidth <= 0
+      ) {
+        return;
+      }
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+
+      // ROI: tengah 80% x 45% — sesuai viewfinder overlay di UI
+      const roiW = vw * ROI_W_PCT;
+      const roiH = vh * ROI_H_PCT;
+      const roiX = (vw - roiW) / 2;
+      const roiY = (vh - roiH) / 2;
+
+      const scale = Math.min(1, MAX_DECODE_WIDTH / roiW);
+      canvas.width = Math.max(1, Math.floor(roiW * scale));
+      canvas.height = Math.max(1, Math.floor(roiH * scale));
+
+      ctx.drawImage(
+        video,
+        roiX, roiY, roiW, roiH,
+        0, 0, canvas.width, canvas.height
+      );
+
+      let imageData: ImageData;
+      try {
+        imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      } catch {
+        return;
+      }
+
+      workerBusyRef.current = true;
+      const id = ++seqRef.current;
+      worker.postMessage({ id, imageData }, [imageData.data.buffer]);
+    };
+
+    const video = videoRef.current;
+    const schedule = () => {
+      if (cancelled) return;
+      if (!video) return;
+      if (video.requestVideoFrameCallback) {
+        video.requestVideoFrameCallback(() => {
+          sendFrame(video);
+          schedule();
+        });
+      } else {
+        rafRef.current = requestAnimationFrame(() => {
+          sendFrame(video);
+          schedule();
+        });
+      }
     };
 
     const start = async () => {
@@ -147,12 +182,12 @@ export function CameraScanner({
           // ignore
         }
         setStarting(false);
-        void decodeLoop(video);
+        schedule();
       } catch {
         if (!cancelled) {
           setStarting(false);
           setError(
-            "Kamera tidak dapat diakses. Pastikan izin kamera diberikan dan gunakan HTTPS atau localhost."
+            "Camera cannot be accessed. Make sure camera permission is granted and use HTTPS or localhost."
           );
         }
       }
@@ -162,25 +197,24 @@ export function CameraScanner({
 
     return () => {
       cancelled = true;
-      if (timerRef.current) window.clearTimeout(timerRef.current);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       workerRef.current?.terminate();
       workerRef.current = null;
-      pendingRef.current.clear();
     };
   }, []);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-zinc-200 bg-zinc-950">
+    <div className="overflow-hidden rounded-lg border border-border bg-background">
       <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-2 text-zinc-200">
-          <Camera size={16} strokeWidth={2} className="text-emerald-400" />
-          <span className="text-[13px] font-medium">Scan dengan kamera</span>
+        <div className="flex items-center gap-2 text-foreground">
+          <Camera size={16} strokeWidth={2} className="text-primary" />
+          <span className="text-[13px] font-medium">Scan with camera</span>
         </div>
         <button
           onClick={onClose}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-100"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         >
           <X size={15} strokeWidth={2} />
         </button>
@@ -196,29 +230,29 @@ export function CameraScanner({
         />
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="relative h-1/3 w-[80%]">
-            <span className="absolute -left-1 -top-1 h-4 w-4 border-l-2 border-t-2 border-emerald-400" />
-            <span className="absolute -right-1 -top-1 h-4 w-4 border-r-2 border-t-2 border-emerald-400" />
-            <span className="absolute -bottom-1 -left-1 h-4 w-4 border-b-2 border-l-2 border-emerald-400" />
-            <span className="absolute -bottom-1 -right-1 h-4 w-4 border-b-2 border-r-2 border-emerald-400" />
+            <span className="absolute -left-1 -top-1 h-4 w-4 border-l-2 border-t-2 border-emerald-600" />
+            <span className="absolute -right-1 -top-1 h-4 w-4 border-r-2 border-t-2 border-emerald-600" />
+            <span className="absolute -bottom-1 -left-1 h-4 w-4 border-b-2 border-l-2 border-emerald-600" />
+            <span className="absolute -bottom-1 -right-1 h-4 w-4 border-b-2 border-r-2 border-emerald-600" />
           </div>
         </div>
         {starting && !error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950 text-zinc-300">
-            <Video size={28} strokeWidth={2} className="animate-pulse text-emerald-400" />
-            <span className="text-[13px]">Mengaktifkan kamera...</span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background text-muted-foreground">
+            <Video size={28} strokeWidth={2} className="animate-pulse text-emerald-600" />
+            <span className="text-[13px]">Activating camera...</span>
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-950 px-6">
-            <p className="text-center text-[13px] leading-relaxed text-amber-300">
+          <div className="absolute inset-0 flex items-center justify-center bg-background px-6">
+            <p className="text-center text-[13px] leading-relaxed text-amber-600">
               {error}
             </p>
           </div>
         )}
       </div>
 
-      <p className="px-4 py-3 text-center text-[11.5px] text-zinc-500">
-        Arahkan kamera ke barcode. Kode terdeteksi otomatis diproses.
+      <p className="px-4 py-3 text-center text-[11.5px] text-muted-foreground">
+        Point camera at barcode. Detected codes are automatically processed.
       </p>
     </div>
   );

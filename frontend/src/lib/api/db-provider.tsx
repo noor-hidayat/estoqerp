@@ -183,11 +183,11 @@ export function DBProvider({ children }: { children: ReactNode }) {
   if (user && (loading || (!db && !error))) return <ShellLoader />;
   if (user && !db && error) {
     return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-zinc-50 px-6 text-center">
-        <p className="text-sm text-zinc-600">{error}</p>
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+        <p className="text-sm text-muted-foreground">{error}</p>
         <button
           onClick={() => void refresh()}
-          className="rounded-md bg-zinc-900 px-5 py-2.5 text-sm font-medium text-zinc-50"
+          className="rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground"
         >
           Coba lagi
         </button>

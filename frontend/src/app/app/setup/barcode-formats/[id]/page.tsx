@@ -1,11 +1,11 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { ShellLoader } from "@/components/ui/loader";
+import { FormSkeleton } from "@/components/ui/skeleton";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { FormatEditor } from "@/components/barcode/format-editor";
+import { FormPage } from "@/components/ui/form-page";
 import { useBarcodeFormats } from "@/lib/api/query";
 
 export default function EditBarcodeFormatPage() {
@@ -16,7 +16,12 @@ export default function EditBarcodeFormatPage() {
   if (isLoading) {
     return (
       <RoleGuard roles={MANAGER_ROLES} menus={["master.barcodeFormats"]}>
-        <ShellLoader />
+        <FormSkeleton
+          sections={[
+            ["half", "half", "wide", "toggle", "toggle", "toggle"],
+            ["segment", "segment", "segment"],
+          ]}
+        />
       </RoleGuard>
     );
   }
@@ -26,15 +31,15 @@ export default function EditBarcodeFormatPage() {
   if (!format) {
     return (
       <RoleGuard roles={MANAGER_ROLES} menus={["master.barcodeFormats"]}>
-        <p className="py-20 text-center text-lg font-semibold text-zinc-800">
-          Format tidak ditemukan
+        <p className="py-20 text-center text-lg font-semibold text-foreground">
+          Format not found
         </p>
         <div className="text-center">
           <button
             onClick={() => router.push("/app/setup/barcode-formats")}
-            className="text-sm text-emerald-600 hover:text-emerald-700"
+            className="text-sm text-primary hover:text-primary/80"
           >
-            Kembali ke Format Barcode
+            Back to Barcode Formats
           </button>
         </div>
       </RoleGuard>
@@ -43,22 +48,11 @@ export default function EditBarcodeFormatPage() {
 
   return (
     <RoleGuard roles={MANAGER_ROLES} menus={["master.barcodeFormats"]}>
-      <Breadcrumb
-        crumbs={[
-          { label: "Master", href: "/app/setup" },
-          { label: "Format Barcode", href: "/app/setup/barcode-formats" },
-          { label: format.name },
-        ]}
-      />
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-zinc-900 sm:text-[28px]">
-          Edit Format
-        </h1>
-        <p className="mt-1 text-[13px] text-zinc-500">
-          Atur informasi format dan struktur posisi barcode.
-        </p>
-      </div>
-      <FormatEditor key={format.id} format={format} />
+      <FormPage
+        title="Edit Format"
+      >
+        <FormatEditor key={format.id} format={format} />
+      </FormPage>
     </RoleGuard>
   );
 }

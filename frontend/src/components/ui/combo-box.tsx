@@ -15,7 +15,7 @@ export function ComboBox({
   value,
   onChange,
   placeholder = "Cari...",
-  emptyText = "Tidak ada hasil",
+  emptyText = "No results",
   className,
 }: {
   label?: string;
@@ -52,46 +52,46 @@ export function ComboBox({
   return (
     <div className={cx("flex flex-col gap-1.5", className)}>
       {label && (
-        <label className="text-[13px] font-medium text-zinc-700">{label}</label>
+        <label className="text-sm font-medium leading-none">{label}</label>
       )}
       <div ref={wrapRef} className="relative">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="flex h-10 w-full items-center justify-between gap-2 rounded-md border border-zinc-300 bg-white px-3.5 text-sm text-zinc-900 transition-colors focus:outline-none focus:ring-1 focus:ring-zinc-900/20 focus:border-zinc-400"
+          className="flex h-10 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3.5 text-sm text-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring"
         >
-          <span className={cx("truncate", !selected && "text-zinc-400")}>
+          <span className={cx("truncate", !selected && "text-muted-foreground")}>
             {selected ? selected.label : placeholder}
           </span>
           <ChevronDown
             size={14}
             strokeWidth={2}
             className={cx(
-              "shrink-0 text-zinc-400 transition-transform",
+              "shrink-0 text-muted-foreground transition-transform",
               open && "rotate-180"
             )}
           />
         </button>
 
         {open && (
-          <div className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-md border border-zinc-200 bg-white shadow-lg">
-            <div className="relative border-b border-zinc-100">
+          <div className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+            <div className="relative border-b border-border">
               <Search
                 size={14}
                 strokeWidth={2}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
               />
               <input
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Cari kode / nama lokasi..."
-                className="h-10 w-full bg-transparent pl-9 pr-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
+                className="h-10 w-full bg-transparent pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
               />
             </div>
             <div className="max-h-56 overflow-y-auto">
               {filtered.length === 0 ? (
-                <p className="px-3.5 py-3 text-[12.5px] text-zinc-400">
+                <p className="px-3.5 py-3 text-[12.5px] text-muted-foreground">
                   {emptyText}
                 </p>
               ) : (
@@ -104,11 +104,11 @@ export function ComboBox({
                       setOpen(false);
                       setQuery("");
                     }}
-                    className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[13.5px] text-zinc-700 transition-colors hover:bg-zinc-50"
+                    className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[13.5px] text-foreground transition-colors hover:bg-accent"
                   >
                     <span className="min-w-0 flex-1 truncate">{o.label}</span>
                     {o.value === value && (
-                      <Check size={14} strokeWidth={2.5} className="shrink-0 text-emerald-600" />
+                      <Check size={14} strokeWidth={2.5} className="shrink-0 text-primary" />
                     )}
                   </button>
                 ))
