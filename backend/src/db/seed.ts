@@ -8,6 +8,7 @@ import {
   categories,
   items,
   locations,
+  movementTypes,
   opnameEntries,
   opnameProjects,
   projects,
@@ -16,6 +17,7 @@ import {
   scanRecords,
   scanSessions,
   stockBalances,
+  uom,
   users,
   warehouses,
 } from "./schema";
@@ -181,14 +183,32 @@ async function seedDummyData(adminId: string) {
         .set({ qty })
         .where(eq(items.name, name));
     }
+    // Pastikan tipe transaksi bawaan (Receipt/Issue/Transfer) selalu ada.
+    await db
+      .insert(movementTypes)
+      .values([
+        { id: "mvt_receipt", code: "RECEIPT", name: "Receipt", kind: "RECEIPT", series: "RCV", builtin: true },
+        { id: "mvt_issue", code: "ISSUE", name: "Issue", kind: "ISSUE", series: "ISS", builtin: true },
+        { id: "mvt_transfer", code: "TRANSFER", name: "Transfer", kind: "TRANSFER", series: "TRF", builtin: true },
+      ])
+      .onConflictDoUpdate({
+        target: movementTypes.code,
+        set: {
+          kind: sql`excluded.kind`,
+          series: sql`excluded.series`,
+          builtin: sql`excluded.builtin`,
+          name: sql`excluded.name`,
+          updatedAt: sql`now()`,
+        },
+      });
     console.log("Dummy data sudah ada, qty master diperbarui.");
     return;
   }
 
   await db.transaction(async (tx) => {
     // --- Struktur organisasi ---
-    const brJkt = { id: nextId("br"), code: "JKT", name: "Plant Jakarta", city: "Jakarta" };
-    const brSby = { id: nextId("br"), code: "SBY", name: "Plant Surabaya", city: "Surabaya" };
+    const brJkt = { id: nextId("br"), code: "JKT", name: "Branch Jakarta", city: "Jakarta" };
+    const brSby = { id: nextId("br"), code: "SBY", name: "Branch Surabaya", city: "Surabaya" };
     await tx.insert(branches).values([brJkt, brSby]);
 
     const whJkt1 = { id: nextId("wh"), branchId: brJkt.id, code: "JKT-W01", name: "Gudang Pusat Jakarta" };
@@ -235,6 +255,19 @@ async function seedDummyData(adminId: string) {
     const catFin = { id: nextId("cat"), code: "03", name: "Barang Jadi" };
     const catSp = { id: nextId("cat"), code: "04", name: "Sparepart" };
     await tx.insert(categories).values([catRaw, catPack, catFin, catSp]);
+
+    // --- Satuan (UoM) & tipe transaksi stok (builtin: Receipt, Issue, Transfer) ---
+    await tx.insert(uom).values([
+      { id: nextId("uom"), code: "PCS", name: "Pieces" },
+      { id: nextId("uom"), code: "KG", name: "Kilogram" },
+      { id: nextId("uom"), code: "CRT", name: "Karton" },
+      { id: nextId("uom"), code: "LTR", name: "Liter" },
+    ]);
+    await tx.insert(movementTypes).values([
+      { id: nextId("mvt"), code: "RECEIPT", name: "Receipt", kind: "RECEIPT", series: "RCV", builtin: true },
+      { id: nextId("mvt"), code: "ISSUE", name: "Issue", kind: "ISSUE", series: "ISS", builtin: true },
+      { id: nextId("mvt"), code: "TRANSFER", name: "Transfer", kind: "TRANSFER", series: "TRF", builtin: true },
+    ]);
 
     const itemDefs = [
       { code: "00001", name: "Gula Pasir 1kg", unit: "pcs", categoryId: catRaw.id, stock: [[whJkt1.id, 120], [whJkt2.id, 300], [whSby1.id, 80]] as [string, number][], price: 14500, hue: 25 },

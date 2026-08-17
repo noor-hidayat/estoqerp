@@ -13,7 +13,6 @@ import {
   MoreHorizontal,
   type LucideIcon,
 } from "lucide-react";
-import { navForPermissions, type NavItem } from "./nav";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -31,10 +30,10 @@ const ICONS: Record<string, LucideIcon> = {
 
 const BOTTOM_NAV_ITEMS: { label: string; href: string; icon: string; menu: string }[] = [
   { label: "Dashboard", href: "/app", icon: "SquaresFour", menu: "dashboard" },
-  { label: "Stock Opname", href: "/app/so", icon: "ClipboardText", menu: "opname" },
-  { label: "Master Data", href: "/app/setup", icon: "Archive", menu: "master" },
-  { label: "Inventory", href: "/app/stock", icon: "Boxes", menu: "inventory" },
-  { label: "Reports", href: "/app/reports", icon: "ChartBar", menu: "reports" },
+  { label: "Project", href: "/app/project", icon: "ClipboardText", menu: "opname" },
+  { label: "Inventory", href: "/app/inventory", icon: "Boxes", menu: "inventory" },
+  { label: "Transaction", href: "/app/transaction", icon: "ArrowLeftRight", menu: "inventory.transactions" },
+  { label: "Reports", href: "/app/report", icon: "ChartBar", menu: "reports" },
   { label: "AI", href: "/app/ai", icon: "Bot", menu: "ai" },
   { label: "Settings", href: "/app/settings", icon: "GearSix", menu: "settings" },
 ];

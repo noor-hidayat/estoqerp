@@ -7,44 +7,53 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import LoginPage from "@/app/login/page";
 import AppLayout from "@/app/app/layout";
 import DashboardPage from "@/app/app/page";
-import OpnamePage from "@/app/app/so/page";
-import NewOpnamePage from "@/app/app/so/new/page";
-import VarianceListPage from "@/app/app/so/variance/page";
-import ProjectLayout from "@/app/app/so/[id]/layout";
-import ProjectDetailPage from "@/app/app/so/[id]/page";
-import ScanPage from "@/app/app/so/[id]/scan/page";
-import ProjectVariancePage from "@/app/app/so/[id]/variance/page";
-import ScanSessionsPage from "@/app/app/so/[id]/sessions/page";
-import ScanSessionDetailPage from "@/app/app/so/[id]/sessions/[sessionId]/page";
-import ProjectsPage from "@/app/app/projects/page";
-import NewProjectPage from "@/app/app/projects/new/page";
-import ProjectParentDetailPage from "@/app/app/projects/[id]/page";
-import ReportsPage from "@/app/app/reports/page";
-import ReportsProjectPage from "@/app/app/reports/project/page";
-import ReportsHistoryPage from "@/app/app/reports/history/page";
-import ReportsSummaryPage from "@/app/app/reports/summary/page";
-import ReportsVariancePage from "@/app/app/reports/variance/page";
-import StockBalancePage from "@/app/app/stock/balance/page";
-import StockPage from "@/app/app/stock/page";
-import StockLocationsPage from "@/app/app/stock/locations/page";
-import NewLocationPage from "@/app/app/stock/locations/new/page";
-import EditLocationPage from "@/app/app/stock/locations/[id]/page";
-import StockBranchesPage from "@/app/app/stock/branches/page";
-import NewBranchPage from "@/app/app/stock/branches/new/page";
-import EditBranchPage from "@/app/app/stock/branches/[id]/page";
-import StockWarehousesPage from "@/app/app/stock/warehouses/page";
-import NewWarehousePage from "@/app/app/stock/warehouses/new/page";
-import EditWarehousePage from "@/app/app/stock/warehouses/[id]/page";
-import CategoriesPage from "@/app/app/setup/categories/page";
-import NewCategoryPage from "@/app/app/setup/categories/new/page";
-import EditCategoryPage from "@/app/app/setup/categories/[id]/page";
-import ItemsPage from "@/app/app/setup/items/page";
-import NewItemPage from "@/app/app/setup/items/new/page";
-import EditItemPage from "@/app/app/setup/items/[id]/page";
-import SetupPage from "@/app/app/setup/page";
-import BarcodeFormatsPage from "@/app/app/setup/barcode-formats/page";
-import BarcodeFormatNewPage from "@/app/app/setup/barcode-formats/new/page";
-import BarcodeFormatDetailPage from "@/app/app/setup/barcode-formats/[id]/page";
+import OpnamePage from "@/app/app/project/so/page";
+import NewOpnamePage from "@/app/app/project/so/new/page";
+import VarianceListPage from "@/app/app/project/so/variance/page";
+import ProjectLayout from "@/app/app/project/so/[id]/layout";
+import ProjectDetailPage from "@/app/app/project/so/[id]/page";
+import ScanPage from "@/app/app/project/so/[id]/scan/page";
+import ProjectVariancePage from "@/app/app/project/so/[id]/variance/page";
+import ScanSessionsPage from "@/app/app/project/so/[id]/sessions/page";
+import ScanSessionDetailPage from "@/app/app/project/so/[id]/sessions/[sessionId]/page";
+import ProjectsPage from "@/app/app/project/page";
+import NewProjectPage from "@/app/app/project/new/page";
+import ProjectParentDetailPage from "@/app/app/project/[id]/page";
+import ReportsPage from "@/app/app/report/page";
+import ReportsProjectPage from "@/app/app/report/project/page";
+import ReportsHistoryPage from "@/app/app/report/history/page";
+import ReportsSummaryPage from "@/app/app/report/summary/page";
+import ReportsVariancePage from "@/app/app/report/variance/page";
+import StockBalancePage from "@/app/app/inventory/balance/page";
+import StockPage from "@/app/app/inventory/page";
+import TransactionsPage from "@/app/app/transaction/page";
+import NewTransactionPage from "@/app/app/transaction/new/page";
+import TransactionDetailPage from "@/app/app/transaction/[id]/page";
+import EditTransactionPage from "@/app/app/transaction/[id]/edit/page";
+import StockLedgerPage from "@/app/app/inventory/ledger/page";
+import BatchesPage from "@/app/app/inventory/batches/page";
+import StockLocationsPage from "@/app/app/data-library/locations/page";
+import NewLocationPage from "@/app/app/data-library/locations/new/page";
+import EditLocationPage from "@/app/app/data-library/locations/[id]/page";
+import StockBranchesPage from "@/app/app/data-library/branches/page";
+import NewBranchPage from "@/app/app/data-library/branches/new/page";
+import EditBranchPage from "@/app/app/data-library/branches/[id]/page";
+import StockWarehousesPage from "@/app/app/data-library/warehouses/page";
+import NewWarehousePage from "@/app/app/data-library/warehouses/new/page";
+import EditWarehousePage from "@/app/app/data-library/warehouses/[id]/page";
+import CategoriesPage from "@/app/app/data-library/categories/page";
+import NewCategoryPage from "@/app/app/data-library/categories/new/page";
+import EditCategoryPage from "@/app/app/data-library/categories/[id]/page";
+import TransactionTypesPage from "@/app/app/data-library/transaction-types/page";
+import NewTransactionTypePage from "@/app/app/data-library/transaction-types/new/page";
+import EditTransactionTypePage from "@/app/app/data-library/transaction-types/[id]/page";
+import ItemsPage from "@/app/app/data-library/items/page";
+import NewItemPage from "@/app/app/data-library/items/new/page";
+import EditItemPage from "@/app/app/data-library/items/[id]/page";
+import SetupPage from "@/app/app/data-library/page";
+import BarcodeFormatsPage from "@/app/app/data-library/barcode-formats/page";
+import BarcodeFormatNewPage from "@/app/app/data-library/barcode-formats/new/page";
+import BarcodeFormatDetailPage from "@/app/app/data-library/barcode-formats/[id]/page";
 import UsersPage from "@/app/app/settings/users/page";
 import NewUserPage from "@/app/app/settings/users/new/page";
 import EditUserPage from "@/app/app/settings/users/[id]/page";
@@ -67,7 +76,7 @@ function HomeRoute() {
   const firstHref =
     navForPermissions((menu) => can(isSystem, permissions, menu, "view"))
       .flatMap((g) => g.items.flatMap((i) => [i.href, ...(i.children ?? []).map((c) => c.href)]))
-      .find((href) => href !== "/app") ?? "/app/so";
+      .find((href) => href !== "/app") ?? "/app/project/so";
   return <Navigate to={firstHref} replace />;
 }
 
@@ -81,13 +90,13 @@ export default function App() {
 
         <Route path="/app" element={<AppLayout />}>
           <Route index element={<HomeRoute />} />
-          <Route path="projects" element={<ProjectsPage />} />
-          <Route path="projects/new" element={<NewProjectPage />} />
-          <Route path="projects/:id" element={<ProjectParentDetailPage />} />
-          <Route path="so" element={<OpnamePage />} />
-          <Route path="so/new" element={<NewOpnamePage />} />
-          <Route path="so/variance" element={<VarianceListPage />} />
-          <Route path="so/:id" element={<ProjectLayout />}>
+          <Route path="project" element={<ProjectsPage />} />
+          <Route path="project/new" element={<NewProjectPage />} />
+          <Route path="project/:id" element={<ProjectParentDetailPage />} />
+          <Route path="project/so" element={<OpnamePage />} />
+          <Route path="project/so/new" element={<NewOpnamePage />} />
+          <Route path="project/so/variance" element={<VarianceListPage />} />
+          <Route path="project/so/:id" element={<ProjectLayout />}>
             <Route index element={<ProjectDetailPage />} />
             <Route path="variance" element={<ProjectVariancePage />} />
             <Route
@@ -96,36 +105,45 @@ export default function App() {
             />
           </Route>
           <Route
-            path="so/:id/sessions/:sessionId"
+            path="project/so/:id/sessions/:sessionId"
             element={<ScanSessionDetailPage />}
           />
-          <Route path="so/:id/scan" element={<ScanPage />} />
-          <Route path="reports" element={<ReportsPage />} />
-          <Route path="reports/project" element={<ReportsProjectPage />} />
-          <Route path="reports/history" element={<ReportsHistoryPage />} />
-          <Route path="reports/summary" element={<ReportsSummaryPage />} />
-          <Route path="reports/variance" element={<ReportsVariancePage />} />
-          <Route path="stock" element={<StockPage />} />
-          <Route path="stock/balance" element={<StockBalancePage />} />
-          <Route path="stock/locations" element={<StockLocationsPage />} />
-          <Route path="stock/locations/new" element={<NewLocationPage />} />
-          <Route path="stock/locations/:id" element={<EditLocationPage />} />
-          <Route path="stock/branches" element={<StockBranchesPage />} />
-          <Route path="stock/branches/new" element={<NewBranchPage />} />
-          <Route path="stock/branches/:id" element={<EditBranchPage />} />
-          <Route path="stock/warehouses" element={<StockWarehousesPage />} />
-          <Route path="stock/warehouses/new" element={<NewWarehousePage />} />
-          <Route path="stock/warehouses/:id" element={<EditWarehousePage />} />
-          <Route path="setup" element={<SetupPage />} />
-          <Route path="setup/categories" element={<CategoriesPage />} />
-          <Route path="setup/categories/new" element={<NewCategoryPage />} />
-          <Route path="setup/categories/:id" element={<EditCategoryPage />} />
-          <Route path="setup/items" element={<ItemsPage />} />
-          <Route path="setup/items/new" element={<NewItemPage />} />
-          <Route path="setup/items/:id" element={<EditItemPage />} />
-          <Route path="setup/barcode-formats" element={<BarcodeFormatsPage />} />
-          <Route path="setup/barcode-formats/new" element={<BarcodeFormatNewPage />} />
-          <Route path="setup/barcode-formats/:id" element={<BarcodeFormatDetailPage />} />
+          <Route path="project/so/:id/scan" element={<ScanPage />} />
+          <Route path="report" element={<ReportsPage />} />
+          <Route path="report/project" element={<ReportsProjectPage />} />
+          <Route path="report/history" element={<ReportsHistoryPage />} />
+          <Route path="report/summary" element={<ReportsSummaryPage />} />
+          <Route path="report/variance" element={<ReportsVariancePage />} />
+          <Route path="inventory" element={<StockPage />} />
+          <Route path="inventory/balance" element={<StockBalancePage />} />
+          <Route path="transaction" element={<TransactionsPage />} />
+          <Route path="transaction/new" element={<NewTransactionPage />} />
+          <Route path="transaction/:id" element={<TransactionDetailPage />} />
+          <Route path="transaction/:id/edit" element={<EditTransactionPage />} />
+          <Route path="inventory/ledger" element={<StockLedgerPage />} />
+          <Route path="inventory/batches" element={<BatchesPage />} />
+          <Route path="data-library/locations" element={<StockLocationsPage />} />
+          <Route path="data-library/locations/new" element={<NewLocationPage />} />
+          <Route path="data-library/locations/:id" element={<EditLocationPage />} />
+          <Route path="data-library/branches" element={<StockBranchesPage />} />
+          <Route path="data-library/branches/new" element={<NewBranchPage />} />
+          <Route path="data-library/branches/:id" element={<EditBranchPage />} />
+          <Route path="data-library/warehouses" element={<StockWarehousesPage />} />
+          <Route path="data-library/warehouses/new" element={<NewWarehousePage />} />
+          <Route path="data-library/warehouses/:id" element={<EditWarehousePage />} />
+          <Route path="data-library" element={<SetupPage />} />
+          <Route path="data-library/categories" element={<CategoriesPage />} />
+          <Route path="data-library/categories/new" element={<NewCategoryPage />} />
+          <Route path="data-library/categories/:id" element={<EditCategoryPage />} />
+          <Route path="data-library/transaction-types" element={<TransactionTypesPage />} />
+          <Route path="data-library/transaction-types/new" element={<NewTransactionTypePage />} />
+          <Route path="data-library/transaction-types/:id" element={<EditTransactionTypePage />} />
+          <Route path="data-library/items" element={<ItemsPage />} />
+          <Route path="data-library/items/new" element={<NewItemPage />} />
+          <Route path="data-library/items/:id" element={<EditItemPage />} />
+          <Route path="data-library/barcode-formats" element={<BarcodeFormatsPage />} />
+          <Route path="data-library/barcode-formats/new" element={<BarcodeFormatNewPage />} />
+          <Route path="data-library/barcode-formats/:id" element={<BarcodeFormatDetailPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="settings/users" element={<UsersPage />} />
           <Route path="settings/users/new" element={<NewUserPage />} />

@@ -72,6 +72,12 @@ export interface Item {
   hue: number;
   barcodeId?: string;
   qty?: number;
+  uomId?: string;
+  groupId?: string;
+  alternativeCode?: string;
+  uomQty?: number;
+  description?: string;
+  isActive?: boolean;
 }
 
 export interface StockBalance {
@@ -91,6 +97,7 @@ export type SegmentField =
   | "DATE"
   | "SEQUENCE"
   | "BARCODE_ID"
+  | "BATCH"
   | "CUSTOM";
 
 export interface BarcodeSegment {
@@ -201,6 +208,141 @@ export interface OpnameEntry {
   locationId?: string;
   systemQty: number;
   countedQty: number;
+}
+
+export interface MovementType {
+  id: string;
+  code: string;
+  name: string;
+  kind: "RECEIPT" | "ISSUE" | "TRANSFER" | "OTHER" | string;
+  series: string;
+  builtin: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Uom {
+  id: string;
+  code: string;
+  name: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MovementStatus = "DRAFT" | "POSTED";
+
+export interface StockMovement {
+  id: string;
+  movementNumber: string;
+  typeId: string;
+  movementDate: string;
+  status: MovementStatus;
+  referenceType?: string;
+  referenceId?: string;
+  description?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StockMovementListRow extends StockMovement {
+  typeCode?: string;
+  typeName?: string;
+  createdByName?: string;
+  detailCount: number;
+  totalQty: number;
+}
+
+export interface StockMovementDetailRow {
+  id: string;
+  movementId: string;
+  itemId: string;
+  itemCode?: string;
+  itemName?: string;
+  unit?: string;
+  fromWarehouseId?: string;
+  fromWarehouseCode?: string;
+  fromWarehouseName?: string;
+  toWarehouseId?: string;
+  toWarehouseCode?: string;
+  toWarehouseName?: string;
+  qty: number;
+  uomId?: string;
+  uomCode?: string;
+  uomName?: string;
+  batchId?: string;
+  batchNumber?: string;
+  createdAt: string;
+}
+
+export interface StockMovementDetailFull extends StockMovementListRow {
+  details: StockMovementDetailRow[];
+}
+
+export type StockLedgerRow = {
+  id: string;
+  transactionId: string;
+  transactionType: string;
+  transactionDate: string;
+  itemId: string;
+  itemCode?: string;
+  itemName?: string;
+  unit?: string;
+  warehouseId: string;
+  warehouseCode?: string;
+  warehouseName?: string;
+  locationId?: string;
+  locationName?: string;
+  qtyIn: number;
+  qtyOut: number;
+  qtyBalance: number;
+  referenceType?: string;
+  referenceId?: string;
+  batchId?: string;
+  batchNumber?: string;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: string;
+};
+
+export type BatchStatus = "ACTIVE" | "EMPTY";
+
+export interface Batch {
+  id: string;
+  itemId: string;
+  batchNumber: string;
+  status: BatchStatus;
+  notes?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StockBatch {
+  id: string;
+  batchId: string;
+  warehouseId: string;
+  qty: number;
+  updatedAt: string;
+}
+
+export interface MovementInput {
+  typeId: string;
+  movementDate?: string | null;
+  status: MovementStatus;
+  referenceType?: string | null;
+  referenceId?: string | null;
+  description?: string | null;
+  details: {
+    itemId: string;
+    fromWarehouseId?: string | null;
+    toWarehouseId?: string | null;
+    qty: number;
+    uomId?: string | null;
+    batchNumber?: string | null;
+  }[];
 }
 
 

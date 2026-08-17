@@ -8,6 +8,7 @@ export const FIELD_COLORS: Record<SegmentField, { bg: string; text: string; dot:
   DATE: { bg: "bg-sky-100", text: "text-sky-700", dot: "bg-sky-500", border: "border-sky-200" },
   SEQUENCE: { bg: "bg-amber-100", text: "text-amber-700", dot: "bg-amber-500", border: "border-amber-200" },
   BARCODE_ID: { bg: "bg-rose-100", text: "text-rose-700", dot: "bg-rose-500", border: "border-rose-200" },
+  BATCH: { bg: "bg-orange-100", text: "text-orange-700", dot: "bg-orange-500", border: "border-orange-200" },
   CUSTOM: { bg: "bg-muted", text: "text-muted-foreground", dot: "bg-muted-foreground", border: "border-border" },
 };
 
@@ -17,6 +18,7 @@ export const FIELD_LABEL_SHORT: Record<SegmentField, string> = {
   DATE: "Date",
   SEQUENCE: "Seq",
   BARCODE_ID: "Barcode",
+  BATCH: "Batch",
   CUSTOM: "Cust.",
 };
 

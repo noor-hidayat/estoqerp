@@ -5,6 +5,8 @@ import type {
   BarcodeFormat, Project, ProjectStatus, ScanSession, ScanRecord, OpnameEntry,
   User, Role, RolePermission, BranchAccess,
   OpnameProject, OpnameProjectDetail,
+  MovementType, Uom, StockMovementListRow, StockMovementDetailFull,
+  StockLedgerRow, MovementInput, Batch, StockBatch,
 } from "@/types";
 
 function qs(params: Record<string, unknown>): string {
@@ -184,6 +186,109 @@ export function useStockBalanceSummary(params?: {
 
 export function useBarcodeFormats() {
   return useResourceList<BarcodeFormat>("barcodeFormats");
+}
+
+export function useMovementTypes() {
+  return useResourceList<MovementType>("movementTypes");
+}
+
+export function useUoms() {
+  return useResourceList<Uom>("uom");
+}
+
+export function useBatches(params?: { itemId?: string }) {
+  return useResourceList<Batch>("batches", params as Record<string, unknown>);
+}
+
+export function useStockBatches(params?: { warehouseId?: string; batchId?: string }) {
+  return useResourceList<StockBatch>(
+    "stockBatches",
+    params as Record<string, unknown>
+  );
+}
+
+export function useStockMovements(params?: {
+  query?: string;
+  status?: string;
+  typeId?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  return usePaginatedList<StockMovementListRow>(
+    "transactions",
+    params as Record<string, unknown>
+  );
+}
+
+export function useStockMovement(id?: string) {
+  return useQuery({
+    queryKey: ["transactions", id],
+    queryFn: () => api.get<StockMovementDetailFull>(`/transactions/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useStockLedger(params?: {
+  query?: string;
+  warehouseId?: string;
+  itemId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  return usePaginatedList<StockLedgerRow>(
+    "stock-ledger",
+    params as Record<string, unknown>
+  );
+}
+
+export function useCreateMovement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: MovementInput) => api.post("/transactions", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
+      qc.invalidateQueries({ queryKey: ["stockBalances"] });
+    },
+  });
+}
+
+export function useUpdateMovement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: MovementInput }) =>
+      api.patch(`/transactions/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
+      qc.invalidateQueries({ queryKey: ["stockBalances"] });
+    },
+  });
+}
+
+export function usePostMovement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/transactions/${id}/post`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
+      qc.invalidateQueries({ queryKey: ["stockBalances"] });
+    },
+  });
+}
+
+export function useDeleteMovement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/transactions/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
+    },
+  });
 }
 
 export function useProjects(params?: { branchId?: string; projectId?: string }) {

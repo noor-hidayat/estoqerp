@@ -35,11 +35,11 @@ const MULT_BY_CODE: Record<string, number> = {
 };
 
 const DUMMY_BRANCHES = [
-  { code: "PL1", name: "Plant 1", city: "Jakarta" },
-  { code: "PL2", name: "Plant 2", city: "Bekasi" },
-  { code: "PL3", name: "Plant 3", city: "Karawang" },
-  { code: "PL4", name: "Plant 4", city: "Tangerang" },
-  { code: "PL5", name: "Plant 5", city: "Bogor" },
+  { code: "PL1", name: "Branch 1", city: "Jakarta" },
+  { code: "PL2", name: "Branch 2", city: "Bekasi" },
+  { code: "PL3", name: "Branch 3", city: "Karawang" },
+  { code: "PL4", name: "Branch 4", city: "Tangerang" },
+  { code: "PL5", name: "Branch 5", city: "Bogor" },
 ];
 
 const DUMMY_WAREHOUSES = [

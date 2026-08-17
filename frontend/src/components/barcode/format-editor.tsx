@@ -32,7 +32,8 @@ const FIELD_OPTIONS: SegmentField[] = [
   "CATEGORY",
   "DATE",
   "SEQUENCE",
-    "BARCODE_ID",
+  "BARCODE_ID",
+  "BATCH",
   "CUSTOM",
 ];
 
@@ -268,7 +269,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
       } else {
         await update.mutateAsync({ id: format.id, patch: next });
       }
-      router.push("/app/setup/barcode-formats");
+      router.push("/app/data-library/barcode-formats");
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
       setSaving(false);
@@ -393,7 +394,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
       <FormActions>
         <Button
           variant="ghost"
-          onClick={() => router.push("/app/setup/barcode-formats")}
+          onClick={() => router.push("/app/data-library/barcode-formats")}
           disabled={saving}
         >
           Batal

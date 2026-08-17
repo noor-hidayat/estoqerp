@@ -13,6 +13,7 @@ import { crudRouter } from "./routes/crud";
 import { dashboardRouter } from "./routes/dashboard";
 import { importRouter } from "./routes/import";
 import opnameProjectsRouter from "./routes/opname-projects";
+import { stockLedgerRouter, transactionsRouter } from "./routes/transactions";
 
 const app = express();
 
@@ -34,6 +35,8 @@ app.use("/api", resolveScope);
 app.use("/api", dashboardRouter);
 app.use("/api/import", importRouter);
 app.use("/api/opname-projects", opnameProjectsRouter);
+app.use("/api/transactions", transactionsRouter);
+app.use("/api/stock-ledger", stockLedgerRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api", crudRouter);
 

@@ -6,7 +6,7 @@ export interface NavItem {
   icon: string;
   /** RBAC menu key — item shows when role has view access to this menu. */
   menu: string;
-  /** Submenu (Master Data, Inventory) — rendered as expandable group. */
+  /** Submenu (Data Library, Settings) — rendered as expandable group. */
   children?: NavItem[];
 }
 
@@ -32,40 +32,21 @@ export const NAV: NavGroup[] = [
     items: [
       {
         label: "Project",
-        href: "/app/projects",
+        href: "/app/project",
         icon: "FolderKanban",
         menu: "opname",
       },
-    ],
-  },
-  {
-    title: "Master",
-    items: [
       {
-        label: "Master",
-        href: "/app/setup",
-        icon: "Database",
-        menu: "master",
-        children: [
-          {
-            label: "Item List",
-            href: "/app/setup/items",
-            icon: "Package",
-            menu: "master.items",
-          },
-          {
-            label: "Category",
-            href: "/app/setup/categories",
-            icon: "Tag",
-            menu: "master.categories",
-          },
-          {
-            label: "Barcode Format",
-            href: "/app/setup/barcode-formats",
-            icon: "Barcode",
-            menu: "master.barcodeFormats",
-          },
-        ],
+        label: "Transaction",
+        href: "/app/transaction",
+        icon: "ArrowLeftRight",
+        menu: "inventory.transactions",
+      },
+      {
+        label: "AI Assistant",
+        href: "/app/ai",
+        icon: "Bot",
+        menu: "ai",
       },
     ],
   },
@@ -74,33 +55,27 @@ export const NAV: NavGroup[] = [
     items: [
       {
         label: "Inventory",
-        href: "/app/stock",
+        href: "/app/inventory",
         icon: "Boxes",
         menu: "inventory",
         children: [
           {
             label: "Stock Balance",
-            href: "/app/stock/balance",
+            href: "/app/inventory/balance",
             icon: "Boxes",
             menu: "inventory.stockBalance",
           },
           {
-            label: "Plants",
-            href: "/app/stock/branches",
-            icon: "Buildings",
-            menu: "inventory.branches",
+            label: "Stock Ledger",
+            href: "/app/inventory/ledger",
+            icon: "NotebookText",
+            menu: "inventory.stockLedger",
           },
           {
-            label: "Warehouses",
-            href: "/app/stock/warehouses",
-            icon: "Warehouse",
-            menu: "inventory.warehouses",
-          },
-          {
-            label: "Locations",
-            href: "/app/stock/locations",
-            icon: "MapPin",
-            menu: "inventory.locations",
+            label: "Batch",
+            href: "/app/inventory/batches",
+            icon: "Layers",
+            menu: "inventory.batches",
           },
         ],
       },
@@ -111,31 +86,31 @@ export const NAV: NavGroup[] = [
     items: [
       {
         label: "Reports",
-        href: "/app/reports",
+        href: "/app/report",
         icon: "ChartColumn",
         menu: "reports",
         children: [
           {
             label: "Report per Project",
-            href: "/app/reports/project",
+            href: "/app/report/project",
             icon: "ChartColumn",
             menu: "reports.project",
           },
           {
             label: "Variance Report",
-            href: "/app/reports/variance",
+            href: "/app/report/variance",
             icon: "TriangleAlert",
             menu: "reports.variance",
           },
           {
             label: "Summary Report",
-            href: "/app/reports/summary",
+            href: "/app/report/summary",
             icon: "FileText",
             menu: "reports.summary",
           },
           {
             label: "Scan History",
-            href: "/app/reports/history",
+            href: "/app/report/history",
             icon: "History",
             menu: "reports.history",
           },
@@ -169,6 +144,56 @@ export const NAV: NavGroup[] = [
             href: "/app/settings/import",
             icon: "FileSpreadsheet",
             menu: "settings.import",
+          },
+        ],
+      },
+      {
+        label: "Data Library",
+        href: "/app/data-library",
+        icon: "Database",
+        menu: "master",
+        children: [
+          {
+            label: "Item List",
+            href: "/app/data-library/items",
+            icon: "Package",
+            menu: "master.items",
+          },
+          {
+            label: "Category",
+            href: "/app/data-library/categories",
+            icon: "Tag",
+            menu: "master.categories",
+          },
+          {
+            label: "Barcode Format",
+            href: "/app/data-library/barcode-formats",
+            icon: "Barcode",
+            menu: "master.barcodeFormats",
+          },
+          {
+            label: "Transaction Types",
+            href: "/app/data-library/transaction-types",
+            icon: "ArrowRightLeft",
+            menu: "master.movementTypes",
+          },
+          {
+            label: "Warehouses",
+            href: "/app/data-library/warehouses",
+            icon: "Warehouse",
+            menu: "inventory.warehouses",
+          },
+          {
+            label: "Locations",
+            href: "/app/data-library/locations",
+            icon: "MapPin",
+            menu: "inventory.locations",
+          },
+          {
+            label: "Branches",
+            href: "/app/data-library/branches",
+            icon: "Buildings",
+            menu: "inventory.branches",
           },
         ],
       },

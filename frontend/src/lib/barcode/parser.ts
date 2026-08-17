@@ -12,6 +12,7 @@ export const SEGMENT_FIELD_LABELS: Record<SegmentField, string> = {
   DATE: "Tanggal",
   SEQUENCE: "No. Urut",
   BARCODE_ID: "Barcode",
+  BATCH: "Batch",
   CUSTOM: "Kustom",
 };
 
@@ -97,6 +98,7 @@ export function parseWithFormat(
     DATE: "",
     SEQUENCE: "",
     BARCODE_ID: "",
+    BATCH: "",
     CUSTOM: "",
   };
 
@@ -172,7 +174,7 @@ export function parseBarcode(
   return {
     formatId: "",
     formatName: "",
-    values: { ITEM_CODE: "", CATEGORY: "", DATE: "", SEQUENCE: "", BARCODE_ID: "", CUSTOM: "" },
+    values: { ITEM_CODE: "", CATEGORY: "", DATE: "", SEQUENCE: "", BARCODE_ID: "", BATCH: "", CUSTOM: "" },
     raw: trimmed,
     matched: false,
   };

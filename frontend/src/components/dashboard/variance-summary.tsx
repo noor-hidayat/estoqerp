@@ -133,7 +133,7 @@ export function VarianceSummary({
 
       <CardFooter className="border-t bg-muted/50 px-6 py-3">
         <Link
-          href="/app/stock/warehouses"
+          href="/app/data-library/warehouses"
           className="flex items-center gap-1 text-[12px] font-semibold text-primary transition-colors hover:text-primary/80"
         >
           View all warehouses

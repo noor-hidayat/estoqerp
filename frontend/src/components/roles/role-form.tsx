@@ -77,6 +77,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { key: "master.barcodeFormats", label: "Barcode Formats" },
       { key: "master.barcodeFormats.new", label: "New Barcode Format" },
       { key: "master.barcodeFormats.edit", label: "Edit Barcode Format" },
+      { key: "master.movementTypes", label: "Transaction Types" },
     ],
   },
   {
@@ -85,9 +86,12 @@ const MENU_GROUPS: MenuGroup[] = [
     menus: [
       { key: "inventory", label: "Inventory", parent: true },
       { key: "inventory.stockBalance", label: "Stock Balance", supportsExport: true },
-      { key: "inventory.branches", label: "Plants" },
+      { key: "inventory.branches", label: "Branches" },
       { key: "inventory.warehouses", label: "Warehouses" },
       { key: "inventory.locations", label: "Locations" },
+      { key: "inventory.transactions", label: "Transactions" },
+      { key: "inventory.batches", label: "Batches" },
+      { key: "inventory.stockLedger", label: "Stock Ledger", supportsExport: true },
     ],
   },
   {

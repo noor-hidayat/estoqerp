@@ -1,22 +1,24 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/** Form page layout for New/Create/Edit — content centered, max 680px */
+/** Form page layout for New/Create/Edit — header full width, content full width */
 export function FormPage({
   breadcrumb,
   eyebrow,
   title,
   description,
+  actions,
   children,
 }: {
   breadcrumb?: ReactNode;
   eyebrow?: string;
   title: string;
   description?: string;
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto w-full max-w-[680px]">
+    <div className="w-full">
       {breadcrumb}
       <div className="mb-9 mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
@@ -34,8 +36,9 @@ export function FormPage({
             </p>
           )}
         </div>
+        {actions && <div className="shrink-0">{actions}</div>}
       </div>
-      {children}
+      <div className="w-full">{children}</div>
     </div>
   );
 }
@@ -82,7 +85,7 @@ export function FormGrid({
   className?: string;
 }) {
   return (
-    <div className={cn("grid gap-x-4 gap-y-5 sm:grid-cols-2", className)}>
+    <div className={cn("grid gap-x-8 gap-y-5 sm:grid-cols-2", className)}>
       {children}
     </div>
   );

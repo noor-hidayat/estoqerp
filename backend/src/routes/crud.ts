@@ -30,6 +30,12 @@ const ID_PREFIXES: Record<string, string> = {
   barcodeFormats: "fmt",
   stockBalances: "sb",
   opnameEntries: "ent",
+  uom: "uom",
+  groups: "grp",
+  movementTypes: "mvt",
+  batches: "bat",
+  opnameWarehouses: "opw",
+  opnameCounts: "opc",
 };
 
 // Tabel volume tinggi (sesi & record scan): id UUID berprefix — tidak perlu
@@ -37,6 +43,12 @@ const ID_PREFIXES: Record<string, string> = {
 const UUID_ID_TABLES: Record<string, string> = {
   scanSessions: "ses",
   scanRecords: "rec",
+  stockMovements: "smv",
+  stockMovementDetails: "smd",
+  stockLedger: "sld",
+  stockBatches: "stb",
+  opnameSessions: "ops",
+  opnameScans: "opsc",
 };
 
 function isUniqueViolation(e: unknown): boolean {
@@ -61,7 +73,7 @@ const DELETE_BLOCK_MESSAGES: Record<string, string> = {
   items:
     "Item ini masih tercatat dalam hasil stock opname (opname entries) — data opname yang sudah masuk perhitungan tidak bisa dihapus.",
   branches:
-    "Plant ini masih dipakai oleh gudang atau project — pindahkan atau hapus data terkait terlebih dahulu.",
+    "Branch ini masih dipakai oleh gudang atau project — pindahkan atau hapus data terkait terlebih dahulu.",
   warehouses:
     "Gudang ini masih dipakai oleh lokasi, project, atau stock balance — pindahkan atau hapus data terkait terlebih dahulu.",
   locations:
@@ -70,6 +82,14 @@ const DELETE_BLOCK_MESSAGES: Record<string, string> = {
     "Role ini masih dipakai oleh user — pindahkan user ke role lain terlebih dahulu.",
   users:
     "User ini masih terkait dengan data lain di sistem — tidak dapat dihapus.",
+  movementTypes:
+    "Tipe transaksi masih dipakai oleh transaksi stok — pindahkan atau hapus transaksi terkait terlebih dahulu.",
+  uom:
+    "Satuan ini masih dipakai oleh item atau transaksi — pindahkan atau hapus data terkait terlebih dahulu.",
+  groups:
+    "Grup item ini masih dipakai oleh item — pindahkan atau hapus item terkait terlebih dahulu.",
+  batches:
+    "Batch ini masih tercatat dalam transaksi atau ledger — hapus data terkait terlebih dahulu.",
 };
 
 async function ensureRowId(
@@ -121,6 +141,18 @@ const CRUD_TABLES: Record<string, AnyPgTable> = {
   scanRecords: schema.scanRecords,
   opnameEntries: schema.opnameEntries,
   userSettings: schema.userSettings,
+  uom: schema.uom,
+  groups: schema.groups,
+  movementTypes: schema.movementTypes,
+  stockMovements: schema.stockMovements,
+  stockMovementDetails: schema.stockMovementDetails,
+  stockLedger: schema.stockLedger,
+  batches: schema.batches,
+  stockBatches: schema.stockBatches,
+  opnameWarehouses: schema.opnameWarehouses,
+  opnameCounts: schema.opnameCounts,
+  opnameSessions: schema.opnameSessions,
+  opnameScans: schema.opnameScans,
 };
 
 export const crudRouter = Router();
@@ -201,6 +233,35 @@ function coerceDates(body: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
+/** Token tanggal yang dipakai di field series (lihat expandSeriesDate). */
+const SERIES_DATE_TOKENS = /YYYY|YY|DD|MM|HH/gi;
+
+/** Buat code tipe transaksi otomatis dari series: bagian statis (tanpa token
+ * tanggal) dijadikan code; kalau bentrok, ditambah angka (-2, -3, ...). */
+async function autoMovementTypeCode(
+  seriesRaw: string,
+  kind: string,
+  excludeId?: string
+): Promise<string> {
+  const series = String(seriesRaw ?? "").trim();
+  const base = (series.replace(SERIES_DATE_TOKENS, "").trim() || kind).toUpperCase();
+  const slug =
+    base.replace(/[^A-Z0-9_-]/g, "").replace(/^[-_]+|[-_]+$/g, "").slice(0, 12) ||
+    "TYPE";
+  const existing = await db
+    .select({ code: schema.movementTypes.code, id: schema.movementTypes.id })
+    .from(schema.movementTypes);
+  const used = new Set(
+    existing
+      .filter((r) => r.id !== excludeId)
+      .map((r) => r.code.toUpperCase())
+  );
+  if (!used.has(slug)) return slug;
+  let i = 2;
+  while (used.has(`${slug}-${i}`)) i += 1;
+  return `${slug}-${i}`;
+}
+
 const TABLE_MENU: Record<string, string | string[]> = {
   users: "settings.users",
   roles: "settings.roles",
@@ -220,6 +281,18 @@ const TABLE_MENU: Record<string, string | string[]> = {
   scanRecords: ["opname.detail.scan", "opname.detail.sessions", "opname.detail.sessions.detail"],
   opnameEntries: "opname",
   userSettings: "opname.variance.column",
+  uom: "master",
+  groups: "master",
+  movementTypes: "master.movementTypes",
+  stockMovements: "inventory.transactions",
+  stockMovementDetails: "inventory.transactions",
+  stockLedger: "inventory.stockLedger",
+  batches: "inventory.batches",
+  stockBatches: "inventory.batches",
+  opnameWarehouses: "opname",
+  opnameCounts: "opname",
+  opnameSessions: "opname",
+  opnameScans: "opname",
 };
 
 // MENULIS sesi/catatan scan (membuat sesi, menyimpan scan, menutup sesi)
@@ -314,6 +387,15 @@ const SORT_COLS: Record<string, AnyPgColumn> = {
   users: schema.users.name,
   roles: schema.roles.name,
   barcodeFormats: schema.barcodeFormats.updatedAt,
+  uom: schema.uom.code,
+  groups: schema.groups.code,
+  movementTypes: schema.movementTypes.code,
+  stockMovements: schema.stockMovements.movementDate,
+  stockLedger: schema.stockLedger.transactionDate,
+  batches: schema.batches.createdAt,
+  stockBatches: schema.stockBatches.updatedAt,
+  opnameSessions: schema.opnameSessions.startAt,
+  opnameScans: schema.opnameScans.scannedAt,
 };
 
 function getOrderBy(req: Request, tableName: string) {
@@ -326,6 +408,17 @@ function getOrderBy(req: Request, tableName: string) {
 // Kolom yang dicari via param `query` — filter dilakukan di SQL
 // (SELECT * FROM t WHERE <col> ILIKE ...), bukan ambil semua lalu filter.
 const SEARCHABLE_COLS: Record<string, AnyPgColumn[]> = {
+  uom: [schema.uom.code, schema.uom.name],
+  groups: [schema.groups.code, schema.groups.name],
+  movementTypes: [schema.movementTypes.code, schema.movementTypes.name],
+  batches: [schema.batches.batchNumber, schema.batches.status],
+  stockBatches: [schema.stockBatches.batchId],
+  stockMovements: [
+    schema.stockMovements.movementNumber,
+    schema.stockMovements.status,
+    schema.stockMovements.description,
+  ],
+  stockLedger: [schema.stockLedger.transactionId, schema.stockLedger.transactionType],
   items: [
     schema.items.code,
     schema.items.name,
@@ -432,6 +525,53 @@ async function applyEntityScope(req: Request, tableName: string) {
         db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, branchIds))
       ) as ReturnType<typeof sql>;
     }
+    return sql`FALSE`;
+  }
+  if (tableName === "stockLedger" || tableName === "stockBatches") {
+    const whCol = tableName === "stockLedger" ? s.stockLedger.warehouseId : s.stockBatches.warehouseId;
+    if (warehouseIds.length > 0) return inArray(whCol, warehouseIds);
+    if (branchIds.length > 0) {
+      return inArray(
+        whCol,
+        db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, branchIds))
+      ) as ReturnType<typeof sql>;
+    }
+    return sql`FALSE`;
+  }
+  if (tableName === "stockMovements" || tableName === "stockMovementDetails") {
+    if (warehouseIds.length > 0) {
+      const mvIds = db
+        .select({ id: s.stockMovements.id })
+        .from(s.stockMovements)
+        .innerJoin(s.stockMovementDetails, eq(s.stockMovementDetails.movementId, s.stockMovements.id))
+        .where(
+          or(
+            inArray(s.stockMovementDetails.fromWarehouseId, warehouseIds),
+            inArray(s.stockMovementDetails.toWarehouseId, warehouseIds)
+          )
+        );
+      return tableName === "stockMovements"
+        ? inArray(s.stockMovements.id, mvIds)
+        : inArray(s.stockMovementDetails.movementId, mvIds);
+    }
+    return sql`FALSE`;
+  }
+  if (
+    tableName === "opnameWarehouses" ||
+    tableName === "opnameCounts" ||
+    tableName === "opnameSessions" ||
+    tableName === "opnameScans"
+  ) {
+    const tbl: AnyPgTable =
+      tableName === "opnameWarehouses"
+        ? s.opnameWarehouses
+        : tableName === "opnameCounts"
+          ? s.opnameCounts
+          : tableName === "opnameSessions"
+            ? s.opnameSessions
+            : s.opnameScans;
+    const col = (tbl as unknown as { warehouseId: AnyPgColumn }).warehouseId;
+    if (warehouseIds.length > 0) return inArray(col, warehouseIds);
     return sql`FALSE`;
   }
   return undefined;
@@ -917,6 +1057,16 @@ crudRouter.post("/:table", async (req, res) => {
         return res.status(409).json({ error: "Kode item sudah digunakan." });
       }
     }
+    if (tableName === "movementTypes") {
+      if (!values.code || !String(values.code).trim()) {
+        values.code = await autoMovementTypeCode(
+          String(values.series ?? ""),
+          String(values.kind ?? "OTHER")
+        );
+      } else {
+        values.code = String(values.code).trim();
+      }
+    }
     let insertValues = await ensureRowId(tableName, values);
     let rows: Record<string, unknown>[];
     try {
@@ -991,6 +1141,18 @@ crudRouter.delete("/:table/:id", async (req, res) => {
 
   try {
     if (!(await enforceSettingsOwner(req, res))) return;
+    if (tableName === "movementTypes") {
+      const rowId = paramString(req, "id");
+      const [mt] = await db
+        .select({ builtin: schema.movementTypes.builtin })
+        .from(schema.movementTypes)
+        .where(eq(schema.movementTypes.id, rowId))
+        .limit(1);
+      if (mt?.builtin) {
+        res.status(409).json({ error: "Tipe transaksi bawaan (Receipt/Issue/Transfer) tidak dapat dihapus." });
+        return;
+      }
+    }
     const [row] = await db
       .delete(table)
       .where(eq(idColumn(table), paramString(req, "id")))

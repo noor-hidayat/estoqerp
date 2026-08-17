@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react"
 import {
   Archive,
+  ArrowLeftRight,
+  ArrowRightLeft,
   Barcode,
   Boxes,
   Building2,
@@ -13,9 +15,11 @@ import {
   FileText,
   FolderKanban,
   History,
+  Layers,
   LayoutDashboard,
   LayoutGrid,
   MapPin,
+  NotebookText,
   Package,
   Settings,
   SquareAsterisk,
@@ -68,6 +72,10 @@ const ICONS: Record<string, LucideIcon> = {
   FileText,
   History,
   Bot,
+  ArrowLeftRight,
+  ArrowRightLeft,
+  NotebookText,
+  Layers,
 }
 
 function isActive(href: string, pathname: string): boolean {
@@ -200,7 +208,7 @@ function NavCollapsibleItem({
   const Icon = ICONS[item.icon] ?? LayoutGrid
 
   // Mode kecil (ikon): klik parent langsung menuju halamannya
-  // (mis. /app/setup), bukan membuka submenu.
+  // (mis. /app/data-library), bukan membuka submenu.
   if (isCollapsed) {
     return (
       <SidebarMenuItem>

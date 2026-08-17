@@ -30,7 +30,7 @@ export const DATASETS: DatasetDescriptor[] = [
   {
     id: "branches",
     label: "Cabang (Branches)",
-    description: "Daftar cabang/plant. Wajib ada sebelum mengimpor gudang.",
+    description: "Daftar cabang. Wajib ada sebelum mengimpor gudang.",
     columns: [
       { key: "code", label: "Kode Cabang", required: true, hint: "Unik. Contoh: JKT, SBY" },
       { key: "name", label: "Nama Cabang", required: true, hint: "Contoh: Jakarta Pusat" },

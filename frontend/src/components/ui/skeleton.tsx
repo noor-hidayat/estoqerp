@@ -92,7 +92,7 @@ export function FormSkeleton({
             <Skeleton className="h-3 w-28 rounded" />
             <div className="h-px flex-1 bg-border/70" />
           </div>
-          <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+          <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
             {rows.map((row, i) => {
               switch (row) {
                 case "toggle":
