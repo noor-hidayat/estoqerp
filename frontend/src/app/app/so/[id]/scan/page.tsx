@@ -21,13 +21,13 @@ import {
   useScanRecords,
   useBarcodeFormats,
   useItemsList,
-  useCategories,
+  useItemGroups,
   useInsert,
   useUpdate,
 } from "@/lib/api/query";
 import { syncMasterCache, getAll } from "@/lib/local-cache";
 import { parseBarcode } from "@/lib/barcode/parser";
-import type { BarcodeFormat, Category, Item, ScanRecord, ScanSession } from "@/types";
+import type { BarcodeFormat, ItemGroup, Item, ScanRecord, ScanSession } from "@/types";
 import { formatNumber, formatTime, cx } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -79,14 +79,14 @@ export default function ScanSessionPage() {
   const sessionRecords = scanRecordsData?.rows ?? [];
   const { data: formats = [] } = useBarcodeFormats();
   const { data: allItems = [] } = useItemsList();
-  const { data: categories = [] } = useCategories();
+  const { data: itemGroups = [] } = useItemGroups();
 
   // Sync master data to IndexedDB so scan can lookup offline
   useEffect(() => {
-    if (formats.length && allItems.length && categories.length) {
-      void syncMasterCache({ items: allItems, categories, barcodeFormats: formats });
+    if (formats.length && allItems.length && itemGroups.length) {
+      void syncMasterCache({ items: allItems, itemGroups, barcodeFormats: formats });
     }
-  }, [formats, allItems, categories]);
+  }, [formats, allItems, itemGroups]);
 
   const insertScanSession = useInsert("scanSessions");
   const insertScanRecord = useInsert("scanRecords");
@@ -119,7 +119,7 @@ export default function ScanSessionPage() {
     matched?: boolean;
     detail?: string;
     item?: Item;
-    category?: { id: string; code: string; name: string } | null;
+    itemGroup?: { id: string; code: string; name: string } | null;
     formatId?: string;
     formatName?: string;
     values?: Record<string, string>;
@@ -137,6 +137,8 @@ export default function ScanSessionPage() {
       if (initial) setLocationId(initial);
     }
   }, [activeSession?.locationId, locationId, locations]);
+
+  useSaveShortcut(confirmSave, saveOpen);
 
   if (!can(isSystem, permissions, "opname.detail.scan", "view")) {
     return <AccessDenied />;
@@ -229,21 +231,21 @@ export default function ScanSessionPage() {
       matched?: boolean;
       detail?: string;
       item?: Item;
-      category?: { id: string; code: string; name: string } | null;
+      itemGroup?: { id: string; code: string; name: string } | null;
       formatId?: string;
       formatName?: string;
       values?: Record<string, string>;
     };
 
     // 1. In-memory parse (online — fastest)
-    if (formats.length && allItems.length && categories.length) {
-      const parsed = parseBarcode(barcode, formats, { items: allItems, categories });
+    if (formats.length && allItems.length && itemGroups.length) {
+      const parsed = parseBarcode(barcode, formats, { items: allItems, itemGroups });
       if (parsed && parsed.matched) {
         if (parsed.item) {
-          const category = categories.find((c) => c.id === parsed.item!.categoryId) ?? null;
+          const itemGroup = itemGroups.find((c) => c.id === parsed.item!.itemGroupId) ?? null;
           return {
             found: true, matched: true,
-            item: parsed.item, category,
+            item: parsed.item, itemGroup,
             formatId: parsed.formatId, formatName: parsed.formatName, values: parsed.values,
           } as LookupResponse;
         }
@@ -253,19 +255,19 @@ export default function ScanSessionPage() {
 
     // 2. IndexedDB parse (offline fallback)
     try {
-      const [dbFormats, dbItems, dbCategories] = await Promise.all([
+      const [dbFormats, dbItems, dbItemGroups] = await Promise.all([
         getAll<BarcodeFormat>("barcodeFormats"),
         getAll<Item>("items"),
-        getAll<Category>("categories"),
+        getAll<ItemGroup>("itemGroups"),
       ]);
       if (dbFormats.length && dbItems.length) {
-        const parsed = parseBarcode(barcode, dbFormats, { items: dbItems, categories: dbCategories });
+        const parsed = parseBarcode(barcode, dbFormats, { items: dbItems, itemGroups: dbItemGroups });
         if (parsed && parsed.matched) {
           if (parsed.item) {
-            const category = dbCategories.find((c) => c.id === parsed.item!.categoryId) ?? null;
+            const itemGroup = dbItemGroups.find((c) => c.id === parsed.item!.itemGroupId) ?? null;
             return {
               found: true, matched: true,
-              item: parsed.item, category,
+              item: parsed.item, itemGroup,
               formatId: parsed.formatId, formatName: parsed.formatName, values: parsed.values,
             } as LookupResponse;
           }
@@ -416,7 +418,7 @@ export default function ScanSessionPage() {
     inputRef.current?.focus();
   };
 
-  const confirmSave = async () => {
+  async function confirmSave() {
     if (saving) return;
     const session = activeSessionRef.current;
     const items: Array<{
@@ -490,8 +492,6 @@ export default function ScanSessionPage() {
     inputRef.current?.focus();
   };
 
-  useSaveShortcut(confirmSave, saveOpen);
-
   const closeSession = () => {
     const session = activeSessionRef.current;
     if (!session) return;
@@ -557,7 +557,7 @@ export default function ScanSessionPage() {
                 }}
                 options={locations.map((l) => ({
                   value: l.id,
-                  label: `${l.code} — ${l.name}`,
+                  label: l.name,
                 }))}
                 placeholder="Select rack/bin location..."
                 emptyText="Location not found"

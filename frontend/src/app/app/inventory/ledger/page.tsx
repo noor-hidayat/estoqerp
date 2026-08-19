@@ -239,7 +239,7 @@ export default function StockLedgerPage() {
               <option value="all">All warehouses</option>
               {allowedWhs.map((w) => (
                 <option key={w.id} value={w.id}>
-                  {w.code} — {w.name}
+                  {w.name}
                 </option>
               ))}
             </Select>

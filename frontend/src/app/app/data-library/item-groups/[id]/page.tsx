@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Save } from "lucide-react";
-import { useCategory, useCategories, useUpdate } from "@/lib/api/query";
+import { useItemGroup, useItemGroups, useUpdate } from "@/lib/api/query";
 import { useSaveShortcut } from "@/lib/use-save-shortcut";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
@@ -18,41 +18,41 @@ import {
 } from "@/components/ui/form-page";
 import Link from "next/link";
 
-export default function EditCategoryPage() {
+export default function EditItemGroupPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: category, isLoading: categoryLoading } = useCategory(id);
-  const { data: categoriesRaw = [] } = useCategories();
-  const updateCategory = useUpdate("categories");
+  const { data: itemGroup, isLoading: itemGroupLoading } = useItemGroup(id);
+  const { data: itemGroupsRaw = [] } = useItemGroups();
+  const updateItemGroup = useUpdate("itemGroups");
 
   const [form, setForm] = useState({ code: "", name: "" });
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (category) {
-      setForm({ code: category.code, name: category.name });
+    if (itemGroup) {
+      setForm({ code: itemGroup.code, name: itemGroup.name });
     }
-  }, [category]);
+  }, [itemGroup]);
 
   const save = async () => {
     if (!form.code.trim() || !form.name.trim()) {
-      setError("Code and category name are required.");
+      setError("Code and item group name are required.");
       return;
     }
     if (
-      categoriesRaw.some(
+      itemGroupsRaw.some(
         (c) =>
           c.code.toLowerCase() === form.code.trim().toLowerCase() &&
           c.id !== id
       )
     ) {
-      setError("Category code already in use.");
+      setError("Item group code already in use.");
       return;
     }
     if (!id) return;
     try {
-      await updateCategory.mutateAsync({ id, patch: { ...form } });
-      navigate("/app/data-library/categories");
+      await updateItemGroup.mutateAsync({ id, patch: { ...form } });
+      navigate("/app/data-library/item-groups");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
     }
@@ -60,9 +60,9 @@ export default function EditCategoryPage() {
 
   useSaveShortcut(save, true);
 
-  if (categoryLoading) {
+  if (itemGroupLoading) {
     return (
-      <RoleGuard roles={MANAGER_ROLES} menus={["master.categories"]}>
+      <RoleGuard roles={MANAGER_ROLES} menus={["master.itemGroups"]}>
         <FormSkeleton
           sections={[["half", "half"]]}
         />
@@ -70,32 +70,32 @@ export default function EditCategoryPage() {
     );
   }
 
-  if (!category) {
+  if (!itemGroup) {
     return (
-      <RoleGuard roles={MANAGER_ROLES} menus={["master.categories"]}>
-        <p className="py-20 text-center text-lg font-semibold text-foreground">Category not found</p>
+      <RoleGuard roles={MANAGER_ROLES} menus={["master.itemGroups"]}>
+        <p className="py-20 text-center text-lg font-semibold text-foreground">Item group not found</p>
         <div className="text-center">
-          <Link href="/app/data-library/categories" className="text-sm text-primary hover:text-primary/80">Back to Categories</Link>
+          <Link href="/app/data-library/item-groups" className="text-sm text-primary hover:text-primary/80">Back to Item Groups</Link>
         </div>
       </RoleGuard>
     );
   }
 
   return (
-    <RoleGuard roles={MANAGER_ROLES} menus={["master.categories"]}>
+    <RoleGuard roles={MANAGER_ROLES} menus={["master.itemGroups"]}>
       <FormPage
-        title="Edit Category"
+        title="Edit Item Group"
       >
         <FormSection>
           <FormGrid>
             <Input
-              label="Category code"
-              placeholder="CTGRY"
+              label="Item group code"
+              placeholder="GROUP"
               value={form.code}
               onChange={(e) => setForm({ ...form, code: e.target.value })}
             />
             <Input
-              label="Category name"
+              label="Item group name"
               placeholder="Snacks"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -109,7 +109,7 @@ export default function EditCategoryPage() {
         </FormSection>
 
         <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/data-library/categories")}>
+          <Button variant="ghost" onClick={() => navigate("/app/data-library/item-groups")}>
             <ArrowLeft size={15} strokeWidth={2} />
             Back
           </Button>

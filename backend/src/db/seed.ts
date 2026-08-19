@@ -5,7 +5,7 @@ import {
   branches,
   branchAccesses,
   barcodeFormats,
-  categories,
+  itemGroups,
   items,
   locations,
   movementTypes,
@@ -59,19 +59,19 @@ function nextParentId(): string {
   return `PRJ-${String(parentSeq).padStart(3, "0")}`;
 }
 
-// Barcode 11 digit: CATEGORY(2) + ITEM_CODE(5) + SEQUENCE(4)
-function barcode(catCode: string, itemCode: string, seq: string) {
-  return `${catCode}${itemCode}${seq}`;
+// Barcode 11 digit: ITEM_GROUP(2) + ITEM_CODE(5) + SEQUENCE(4)
+function barcode(igCode: string, itemCode: string, seq: string) {
+  return `${igCode}${itemCode}${seq}`;
 }
 
 function parsedFor(
-  catCode: string,
+  igCode: string,
   itemCode: string,
   seq: string
 ): Record<string, string> {
   return {
     ITEM_CODE: itemCode,
-    CATEGORY: catCode,
+    ITEM_GROUP: igCode,
     DATE: "",
     SEQUENCE: seq,
     BARCODE_ID: "",
@@ -142,7 +142,7 @@ async function ensureSystemRoles() {
   ]);
 
   // Permission dasar untuk role non-administrator (isSystem bypass).
-  const allMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","settings.columnWidth","master","master.items","master.categories","master.barcodeFormats","master.barcodeFormats.new","master.barcodeFormats.edit","inventory","inventory.stockBalance","inventory.branches","inventory.warehouses","inventory.locations","reports","reports.project","reports.summary","reports.history","reports.variance","settings","settings.users","settings.roles","settings.roles.new","settings.roles.edit","ai"];
+  const allMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","settings.columnWidth","master","master.items","master.itemGroups","master.barcodeFormats","master.barcodeFormats.new","master.barcodeFormats.edit","inventory","inventory.stockBalance","inventory.branches","inventory.warehouses","inventory.locations","reports","reports.project","reports.summary","reports.history","reports.variance","settings","settings.users","settings.roles","settings.roles.new","settings.roles.edit","ai"];
   // Menu yang punya tombol Export (Export/Import hanya untuk menu ini).
   const exportMenus = new Set(["inventory.stockBalance","reports.project","reports.summary","reports.history","reports.variance"]);
   const baseActions = ["view","create","update","delete"];
@@ -250,11 +250,11 @@ async function seedDummyData(adminId: string) {
     await tx.insert(locations).values([...locJkt1, ...locJkt2, ...locSby1]);
 
     // --- Master data ---
-    const catRaw = { id: nextId("cat"), code: "01", name: "Bahan Baku" };
-    const catPack = { id: nextId("cat"), code: "02", name: "Kemasan" };
-    const catFin = { id: nextId("cat"), code: "03", name: "Barang Jadi" };
-    const catSp = { id: nextId("cat"), code: "04", name: "Sparepart" };
-    await tx.insert(categories).values([catRaw, catPack, catFin, catSp]);
+    const igRaw = { id: nextId("igr"), code: "01", name: "Bahan Baku" };
+    const igPack = { id: nextId("igr"), code: "02", name: "Kemasan" };
+    const igFin = { id: nextId("igr"), code: "03", name: "Barang Jadi" };
+    const igSp = { id: nextId("igr"), code: "04", name: "Sparepart" };
+    await tx.insert(itemGroups).values([igRaw, igPack, igFin, igSp]);
 
     // --- Satuan (UoM) & tipe transaksi stok (builtin: Receipt, Issue, Transfer) ---
     await tx.insert(uom).values([
@@ -270,18 +270,18 @@ async function seedDummyData(adminId: string) {
     ]);
 
     const itemDefs = [
-      { code: "00001", name: "Gula Pasir 1kg", unit: "pcs", categoryId: catRaw.id, stock: [[whJkt1.id, 120], [whJkt2.id, 300], [whSby1.id, 80]] as [string, number][], price: 14500, hue: 25 },
-      { code: "00002", name: "Tepung Terigu 1kg", unit: "pcs", categoryId: catRaw.id, stock: [[whJkt1.id, 90], [whJkt2.id, 250], [whSby1.id, 60]] as [string, number][], price: 12000, hue: 40 },
-      { code: "00003", name: "Minyak Goreng 1L", unit: "botol", categoryId: catRaw.id, stock: [[whJkt1.id, 75], [whJkt2.id, 180], [whSby1.id, 50]] as [string, number][], price: 19500, hue: 30 },
-      { code: "00004", name: "Beras Premium 5kg", unit: "karung", categoryId: catRaw.id, stock: [[whJkt1.id, 40], [whJkt2.id, 90], [whSby1.id, 25]] as [string, number][], price: 72000, hue: 45 },
-      { code: "00005", name: "Kardus Polos 60x40", unit: "pcs", categoryId: catPack.id, stock: [[whJkt1.id, 500], [whJkt2.id, 800], [whSby1.id, 300]] as [string, number][], price: 3500, hue: 15 },
-      { code: "00006", name: "Plastik Wrap 30cm", unit: "rol", categoryId: catPack.id, stock: [[whJkt1.id, 150], [whJkt2.id, 400], [whSby1.id, 100]] as [string, number][], price: 8500, hue: 170 },
-      { code: "00007", name: "Botol PET 600ml", unit: "pcs", categoryId: catPack.id, stock: [[whJkt1.id, 600], [whJkt2.id, 1200], [whSby1.id, 350]] as [string, number][], price: 1200, hue: 200 },
-      { code: "00008", name: "Sarden Kaleng 425g", unit: "kaleng", categoryId: catFin.id, stock: [[whJkt1.id, 85], [whSby1.id, 55]] as [string, number][], price: 23500, hue: 350 },
-      { code: "00009", name: "Kecap Manis 620ml", unit: "botol", categoryId: catFin.id, stock: [[whJkt1.id, 95], [whSby1.id, 60]] as [string, number][], price: 18500, hue: 355 },
-      { code: "00010", name: "Susu UHT 1L", unit: "pcs", categoryId: catFin.id, stock: [[whJkt1.id, 130], [whSby1.id, 90]] as [string, number][], price: 16500, hue: 210 },
-      { code: "00011", name: "Baut M8x30", unit: "pcs", categoryId: catSp.id, stock: [[whJkt1.id, 1000], [whSby1.id, 500]] as [string, number][], price: 500, hue: 280 },
-      { code: "00012", name: "Lampu LED 9W", unit: "pcs", categoryId: catSp.id, stock: [[whJkt1.id, 70], [whSby1.id, 40]] as [string, number][], price: 28000, hue: 45 },
+      { code: "00001", name: "Gula Pasir 1kg", unit: "pcs", itemGroupId: igRaw.id, stock: [[whJkt1.id, 120], [whJkt2.id, 300], [whSby1.id, 80]] as [string, number][], price: 14500, hue: 25 },
+      { code: "00002", name: "Tepung Terigu 1kg", unit: "pcs", itemGroupId: igRaw.id, stock: [[whJkt1.id, 90], [whJkt2.id, 250], [whSby1.id, 60]] as [string, number][], price: 12000, hue: 40 },
+      { code: "00003", name: "Minyak Goreng 1L", unit: "botol", itemGroupId: igRaw.id, stock: [[whJkt1.id, 75], [whJkt2.id, 180], [whSby1.id, 50]] as [string, number][], price: 19500, hue: 30 },
+      { code: "00004", name: "Beras Premium 5kg", unit: "karung", itemGroupId: igRaw.id, stock: [[whJkt1.id, 40], [whJkt2.id, 90], [whSby1.id, 25]] as [string, number][], price: 72000, hue: 45 },
+      { code: "00005", name: "Kardus Polos 60x40", unit: "pcs", itemGroupId: igPack.id, stock: [[whJkt1.id, 500], [whJkt2.id, 800], [whSby1.id, 300]] as [string, number][], price: 3500, hue: 15 },
+      { code: "00006", name: "Plastik Wrap 30cm", unit: "rol", itemGroupId: igPack.id, stock: [[whJkt1.id, 150], [whJkt2.id, 400], [whSby1.id, 100]] as [string, number][], price: 8500, hue: 170 },
+      { code: "00007", name: "Botol PET 600ml", unit: "pcs", itemGroupId: igPack.id, stock: [[whJkt1.id, 600], [whJkt2.id, 1200], [whSby1.id, 350]] as [string, number][], price: 1200, hue: 200 },
+      { code: "00008", name: "Sarden Kaleng 425g", unit: "kaleng", itemGroupId: igFin.id, stock: [[whJkt1.id, 85], [whSby1.id, 55]] as [string, number][], price: 23500, hue: 350 },
+      { code: "00009", name: "Kecap Manis 620ml", unit: "botol", itemGroupId: igFin.id, stock: [[whJkt1.id, 95], [whSby1.id, 60]] as [string, number][], price: 18500, hue: 355 },
+      { code: "00010", name: "Susu UHT 1L", unit: "pcs", itemGroupId: igFin.id, stock: [[whJkt1.id, 130], [whSby1.id, 90]] as [string, number][], price: 16500, hue: 210 },
+      { code: "00011", name: "Baut M8x30", unit: "pcs", itemGroupId: igSp.id, stock: [[whJkt1.id, 1000], [whSby1.id, 500]] as [string, number][], price: 500, hue: 280 },
+      { code: "00012", name: "Lampu LED 9W", unit: "pcs", itemGroupId: igSp.id, stock: [[whJkt1.id, 70], [whSby1.id, 40]] as [string, number][], price: 28000, hue: 45 },
     ];
 
     const seededItems = itemDefs.map((d) => ({
@@ -289,7 +289,7 @@ async function seedDummyData(adminId: string) {
       code: d.code,
       name: d.name,
       unit: d.unit,
-      categoryId: d.categoryId,
+      itemGroupId: d.itemGroupId,
       price: d.price,
       hue: d.hue,
       barcodeId: d.code,
@@ -321,12 +321,12 @@ async function seedDummyData(adminId: string) {
     await tx.insert(barcodeFormats).values({
       id: nextId("fmt"),
       name: "Format Umum 11 Digit",
-      description: "Format default: 2 digit kategori + 5 digit kode item + 4 digit urutan.",
+      description: "Format default: 2 digit grup item + 5 digit kode item + 4 digit urutan.",
       isActive: true,
       qtyPerFormat: true,
       uniqueBarcode: false,
       segments: [
-        { id: "seg_01", field: "CATEGORY", start: 1, end: 2 },
+        { id: "seg_01", field: "ITEM_GROUP", start: 1, end: 2 },
         { id: "seg_02", field: "ITEM_CODE", start: 3, end: 7 },
         { id: "seg_03", field: "SEQUENCE", start: 8, end: 11 },
       ],
@@ -457,10 +457,10 @@ async function seedDummyData(adminId: string) {
     await tx.insert(scanSessions).values([sesAct, sesCls, sesFinal]);
 
     // --- Scan records ---
-    const catOf = (code: string) =>
-      itemDefs.find((x) => x.code === code)?.categoryId ?? "";
-    const catCode = (categoryId: string) =>
-      categoryId === catRaw.id ? "01" : categoryId === catPack.id ? "02" : categoryId === catFin.id ? "03" : "04";
+    const igOf = (code: string) =>
+      itemDefs.find((x) => x.code === code)?.itemGroupId ?? "";
+    const igCode = (itemGroupId: string) =>
+      itemGroupId === igRaw.id ? "01" : itemGroupId === igPack.id ? "02" : itemGroupId === igFin.id ? "03" : "04";
 
     const scans: {
       sessionId: string;
@@ -494,7 +494,7 @@ async function seedDummyData(adminId: string) {
     await tx.insert(scanRecords).values(
       scans.map((s) => {
         const scannedAt = new Date(Date.now() - s.minutesAgo * 60_000);
-        const cCode = catCode(catOf(s.itemCode));
+        const cCode = igCode(igOf(s.itemCode));
         const serial = String(s.minutesAgo).padStart(4, "0");
         const raw = barcode(cCode, s.itemCode, serial);
         return {

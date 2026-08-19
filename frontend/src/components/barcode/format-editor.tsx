@@ -29,7 +29,7 @@ import { nextSegId } from "@/lib/mock/store";
 
 const FIELD_OPTIONS: SegmentField[] = [
   "ITEM_CODE",
-  "CATEGORY",
+  "ITEM_GROUP",
   "DATE",
   "SEQUENCE",
   "BARCODE_ID",

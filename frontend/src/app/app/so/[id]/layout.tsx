@@ -11,12 +11,10 @@ import {
   useProject,
   useAllWarehouses,
   useBranches,
-  useScanSessions,
-  useScanRecords,
-  useOpnameEntries,
   useRemove,
   useUpdate,
 } from "@/lib/api/query";
+import { api } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { cx } from "@/lib/utils";
@@ -40,9 +38,6 @@ export default function ProjectLayout() {
   const { data: project, isLoading: projectLoading } = useProject(params.id);
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: branches = [] } = useBranches();
-  const { data: sessions = [] } = useScanSessions({ projectId: params.id });
-  const { data: recordsData } = useScanRecords({ projectId: params.id, pageSize: 10000 });
-  const { data: entries = [] } = useOpnameEntries(params.id);
 
   const removeProject = useRemove("projects");
   const removeRecord = useRemove("scanRecords");
@@ -59,7 +54,7 @@ export default function ProjectLayout() {
           Stock opname not found
         </p>
         <Link
-          href="/app/project/so"
+          href="/app/so"
           className="mt-2 inline-block text-sm text-primary hover:text-primary/80"
         >
           Back to Stock Opname
@@ -76,7 +71,7 @@ export default function ProjectLayout() {
           This stock opname is outside the branches allowed for your account.
         </p>
         <Link
-          href="/app/project/so"
+          href="/app/so"
           className="mt-4 inline-block text-sm font-medium text-primary hover:text-primary/80"
         >
           Back to Stock Opname
@@ -87,7 +82,7 @@ export default function ProjectLayout() {
 
   const wh = warehouses.find((w) => w.id === project.warehouseId);
   const branch = branches.find((b) => b.id === project.branchId);
-  const isActive = pathname === `/app/project/so/${project.id}`;
+  const isActive = pathname === `/app/so/${project.id}`;
   const canFinalize =
     can(isSystem, permissions, "opname", "update") && project.status === "IN_PROGRESS";
   const canDelete = can(isSystem, permissions, "opname", "delete");
@@ -102,17 +97,22 @@ export default function ProjectLayout() {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      for (const r of recordsData?.rows ?? []) {
+      const [recordsRes, sessionsRes, entriesRes] = await Promise.all([
+        api.get<{ rows: { id: string }[] }>(`/scanRecords?projectId=${project.id}&pageSize=10000`),
+        api.get<{ rows: { id: string }[] }>(`/scanSessions?projectId=${project.id}`),
+        api.get<{ rows: { id: string }[] }>(`/opnameEntries?projectId=${project.id}`),
+      ]);
+      for (const r of recordsRes.rows ?? []) {
         await removeRecord.mutateAsync(r.id);
       }
-      for (const s of sessions) {
+      for (const s of sessionsRes.rows ?? []) {
         await removeSession.mutateAsync(s.id);
       }
-      for (const e of entries) {
+      for (const e of entriesRes.rows ?? []) {
         await removeEntry.mutateAsync(e.id);
       }
       await removeProject.mutateAsync(project.id);
-      router.replace("/app/project/so");
+      router.replace("/app/so");
     } catch {
       setDeleting(false);
     }
@@ -160,8 +160,8 @@ export default function ProjectLayout() {
         {visibleTabs.map((tab) => {
           const href =
             tab.id === ""
-              ? `/app/project/so/${project.id}`
-              : `/app/project/so/${project.id}/${tab.id}`;
+              ? `/app/so/${project.id}`
+              : `/app/so/${project.id}/${tab.id}`;
           const activeTab =
             tab.id === ""
               ? isActive

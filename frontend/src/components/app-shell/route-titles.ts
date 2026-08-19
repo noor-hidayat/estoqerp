@@ -3,8 +3,8 @@
 
 const STATIC_TITLES: Record<string, string> = {
   "/app/project/new": "Create Project",
-  "/app/project/so/new": "Create Stock Opname",
-  "/app/project/so/variance": "Variance Review",
+  "/app/so/new": "Create Stock Opname",
+  "/app/so/variance": "Variance Review",
   "/app/report/project": "Report per Stock Opname",
   "/app/report/variance": "Variance Report",
   "/app/report/summary": "Summary Report",
@@ -22,12 +22,11 @@ const STATIC_TITLES: Record<string, string> = {
 const PATTERNS: { regex: RegExp; title: string }[] = [
   // All sub-pages in Project Details → label "Project Details",
   // except Session Details which shows the full hierarchy.
-  { regex: /^\/app\/project\/[^/]+$/, title: "Project Details" },
-  { regex: /^\/app\/project\/so\/[^/]+\/sessions\/[^/]+$/, title: "Session Details" },
-  { regex: /^\/app\/project\/so\/[^/]+$/, title: "Stock Opname Details" },
-  { regex: /^\/app\/project\/so\/[^/]+\/scan$/, title: "Stock Opname Details" },
-  { regex: /^\/app\/project\/so\/[^/]+\/sessions$/, title: "Stock Opname Details" },
-  { regex: /^\/app\/project\/so\/[^/]+\/variance$/, title: "Stock Opname Details" },
+  { regex: /^\/app\/so\/[^/]+\/sessions\/[^/]+$/, title: "Session Details" },
+  { regex: /^\/app\/so\/[^/]+$/, title: "Stock Opname Details" },
+  { regex: /^\/app\/so\/[^/]+\/scan$/, title: "Stock Opname Details" },
+  { regex: /^\/app\/so\/[^/]+\/sessions$/, title: "Stock Opname Details" },
+  { regex: /^\/app\/so\/[^/]+\/variance$/, title: "Stock Opname Details" },
   { regex: /^\/app\/data-library\/barcode-formats\/[^/]+$/, title: "Edit Format" },
   { regex: /^\/app\/settings\/roles\/[^/]+$/, title: "Edit Role" },
   { regex: /^\/app\/data-library\/transaction-types\/[^/]+$/, title: "Edit Transaction Type" },

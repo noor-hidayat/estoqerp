@@ -39,7 +39,7 @@ export async function buildDataContext(scope: AiScope): Promise<string> {
         ? all.filter((l) => warehouseIds.includes(l.warehouseId))
         : all
     );
-  const categories = await db.select().from(s.categories);
+  const itemGroups = await db.select().from(s.itemGroups);
   const items = await db.select().from(s.items).then((all) => all.slice(0, MAX_ITEMS));
   const barcodeFormats = await db.select().from(s.barcodeFormats).limit(20);
   const users = await db
@@ -49,7 +49,7 @@ export async function buildDataContext(scope: AiScope): Promise<string> {
   const itemById = new Map(items.map((i) => [i.id, i]));
   const whById = new Map(warehouses.map((w) => [w.id, w]));
   const locById = new Map(locations.map((l) => [l.id, l]));
-  const catById = new Map(categories.map((c) => [c.id, c]));
+  const igById = new Map(itemGroups.map((c) => [c.id, c]));
 
   // ---- stock balances: agregat per gudang + top item ----
   const sbs = await db
@@ -206,7 +206,7 @@ export async function buildDataContext(scope: AiScope): Promise<string> {
     cabang: branches.length,
     gudang: warehouses.length,
     lokasi: locations.length,
-    kategori: categories.length,
+    grupItem: itemGroups.length,
     totalBarangDiMaster: items.length,
     barcodeFormat: barcodeFormats.length,
     totalSaldoRecord: sbs.length,
@@ -217,13 +217,13 @@ export async function buildDataContext(scope: AiScope): Promise<string> {
   push("cabang", branches);
   push("gudang", warehouses);
   push("lokasi", locations);
-  push("kategori", categories);
+  push("grup_item", itemGroups);
   push("barang_master", items.map((i) => ({
     id: i.id,
     kode: i.code,
     nama: i.name,
     satuan: i.unit,
-    kategori: catById.get(i.categoryId)?.name ?? null,
+    grupItem: igById.get(i.itemGroupId)?.name ?? null,
     harga: i.price,
   })));
   push("barcode_formats", barcodeFormats.map((b) => ({
@@ -356,7 +356,7 @@ function toProgressRows(
 const DATA_KEYWORDS = [
   "stok", "stock", "barang", "item", "gudang", "warehouse", "cabang", "branch",
   "proyek", "project", "opname", "scan", "sesi", "laporan", "report", "selisih",
-  "qty", "jumlah", "total", "kategori", "barcode", "rak", "lokasi", "saldo",
+  "qty", "jumlah", "total", "kategori", "grup", "barcode", "rak", "lokasi", "saldo",
   "masuk", "keluar", "persediaan", "inventory", "analisis", "analisa", "data",
   "hitung", "berapa", "banyak", "ringkasan", "summary", "terbanyak", "terbesar",
   "user", "pengguna", "akun", "role", "harga", "pemasok", "supplier", "mutasi",
@@ -388,18 +388,18 @@ function lookupTokens(q: string): string[] {
 }
 
 /** Cari entitas spesifik yang disebut user (nama item/gudang/cabang/proyek/
- *  kategori) via pencocokan nama (ILIKE). Hasil kompak melengkapi snapshot. */
+ *  grup item) via pencocokan nama (ILIKE). Hasil kompak melengkapi snapshot. */
 export async function lookupEntities(q: string, scope: AiScope): Promise<string> {
   const tokens = lookupTokens(q);
   if (tokens.length === 0) return "";
   const match = (col: AnyColumn) => or(...tokens.map((t) => ilike(col, `%${t}%`)));
 
-  const [itemsM, whM, brM, projM, catM] = await Promise.all([
+  const [itemsM, whM, brM, projM, igM] = await Promise.all([
     db.select().from(schema.items).where(match(schema.items.name)).limit(25),
     db.select().from(schema.warehouses).where(match(schema.warehouses.name)).limit(10),
     db.select().from(schema.branches).where(match(schema.branches.name)).limit(10),
     db.select().from(schema.projects).where(match(schema.projects.name)).limit(10),
-    db.select().from(schema.categories).where(match(schema.categories.name)).limit(10),
+    db.select().from(schema.itemGroups).where(match(schema.itemGroups.name)).limit(10),
   ]);
 
   const sections: string[] = [];
@@ -415,19 +415,19 @@ export async function lookupEntities(q: string, scope: AiScope): Promise<string>
   if (brM.length > 0) {
     push("cabang_terkait", brM.map((b) => ({ kode: b.code, nama: b.name, kota: b.city })));
   }
-  if (catM.length > 0) {
+  if (igM.length > 0) {
     const counts = await db
       .select({
-        categoryId: schema.items.categoryId,
+        itemGroupId: schema.items.itemGroupId,
         cnt: sql<number>`COUNT(*)`,
       })
       .from(schema.items)
-      .where(inArray(schema.items.categoryId, catM.map((c) => c.id)))
-      .groupBy(schema.items.categoryId);
-    push("kategori_terkait", catM.map((c) => ({
+      .where(inArray(schema.items.itemGroupId, igM.map((c) => c.id)))
+      .groupBy(schema.items.itemGroupId);
+    push("grup_item_terkait", igM.map((c) => ({
       kode: c.code,
       nama: c.name,
-      jumlahBarang: Number(counts.find((x) => x.categoryId === c.id)?.cnt ?? 0),
+      jumlahBarang: Number(counts.find((x) => x.itemGroupId === c.id)?.cnt ?? 0),
     })));
   }
 

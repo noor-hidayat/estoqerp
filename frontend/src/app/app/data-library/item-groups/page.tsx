@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MoreHorizontal, Pencil, Plus, Tag, Trash2 } from "lucide-react";
-import { useCategories, useItemsList, useRemove } from "@/lib/api/query";
-import type { Category } from "@/types";
+import { useItemGroups, useItemGroupCounts, useRemove } from "@/lib/api/query";
+import type { ItemGroup } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
@@ -19,22 +19,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ShellLoader } from "@/components/ui/loader";
 
-export default function CategoriesPage() {
+export default function ItemGroupsPage() {
   const navigate = useNavigate();
-  const { data: categoriesRaw = [], isLoading: categoriesLoading } = useCategories();
-  const { data: items = [] } = useItemsList();
-  const removeCategory = useRemove("categories");
+  const { data: itemGroupsRaw = [], isLoading: itemGroupsLoading } = useItemGroups();
+  const { data: countsData } = useItemGroupCounts();
+  const removeItemGroup = useRemove("itemGroups");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const categories = useMemo(
-    () => [...categoriesRaw].sort((a, b) => a.code.localeCompare(b.code)),
-    [categoriesRaw]
+  const itemGroups = useMemo(
+    () => [...itemGroupsRaw].sort((a, b) => a.code.localeCompare(b.code)),
+    [itemGroupsRaw]
   );
 
-  const handleRemove = async (cat: Category) => {
-    if (!confirm(`Delete category "${cat.code}"?`)) return;
+  const handleRemove = async (ig: ItemGroup) => {
+    if (!confirm(`Delete item group "${ig.code}"?`)) return;
     try {
-      await removeCategory.mutateAsync(cat.id);
+      await removeItemGroup.mutateAsync(ig.id);
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Failed to delete");
     }
@@ -43,21 +43,20 @@ export default function CategoriesPage() {
   const handleBulkRemove = async () => {
     const n = selected.size;
     if (n === 0) return;
-    if (!confirm(`Delete ${n} selected categor${n > 1 ? "ies" : "y"}?`)) return;
+    if (!confirm(`Delete ${n} selected item group${n > 1 ? "s" : ""}?`)) return;
     try {
-      await Promise.all([...selected].map((id) => removeCategory.mutateAsync(id)));
+      await Promise.all([...selected].map((id) => removeItemGroup.mutateAsync(id)));
       setSelected(new Set());
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Failed to delete");
     }
   };
 
-  const itemCount = (catId: string) =>
-    items.filter((i) => i.categoryId === catId).length;
+  const itemCount = (igId: string) => countsData?.counts[igId] ?? 0;
 
-  if (categoriesLoading) return <ShellLoader />;
+  if (itemGroupsLoading) return <ShellLoader />;
 
-  const columns: DataTableColumn<Category>[] = [
+  const columns: DataTableColumn<ItemGroup>[] = [
     {
       id: "code",
       header: "Code",
@@ -66,7 +65,7 @@ export default function CategoriesPage() {
     },
     {
       id: "name",
-      header: "Category Name",
+      header: "Item Group Name",
       sortValue: (c) => c.name,
       cell: (c) => <span className="font-medium text-foreground">{c.name}</span>,
       className: "min-w-[220px]",
@@ -94,7 +93,7 @@ export default function CategoriesPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={() => navigate(`/app/data-library/categories/${c.id}`)}>
+            <DropdownMenuItem onClick={() => navigate(`/app/data-library/item-groups/${c.id}`)}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
               Edit
             </DropdownMenuItem>
@@ -113,23 +112,23 @@ export default function CategoriesPage() {
   ];
 
   return (
-    <RoleGuard roles={MANAGER_ROLES} menus={["master.categories"]}>
+    <RoleGuard roles={MANAGER_ROLES} menus={["master.itemGroups"]}>
       <PageHeader
-        title="Categories"
+        title="Item Groups"
 
         actions={
-          <Button onClick={() => navigate("/app/data-library/categories/new")}>
+          <Button onClick={() => navigate("/app/data-library/item-groups/new")}>
             <Plus size={15} strokeWidth={2} />
-            Add Category
+            Add Item Group
           </Button>
         }
       />
 
       <DataTable
         columns={columns}
-        data={categories}
+        data={itemGroups}
         getRowId={(c) => c.id}
-        searchPlaceholder="Search categories..."
+        searchPlaceholder="Search item groups..."
         getSearchText={(c) => `${c.code} ${c.name}`}
         selectable
         selectedKeys={selected}
@@ -149,8 +148,8 @@ export default function CategoriesPage() {
         }
         minWidth={560}
         emptyIcon={<Tag size={26} strokeWidth={2} />}
-        emptyTitle="No categories yet"
-        emptyDescription="Add a category to group items."
+        emptyTitle="No item groups yet"
+        emptyDescription="Add an item group to group items."
       />
     </RoleGuard>
   );

@@ -6,7 +6,7 @@ import {
   FileSpreadsheet,
   BarChart3,
 } from "lucide-react";
-import { useProjects, useProjectStats, useAllWarehouses, useBranches, useCategories, useItemsList } from "@/lib/api/query";
+import { useProjects, useProjectStats, useAllWarehouses, useBranches, useItemGroups, useItemsList } from "@/lib/api/query";
 import { formatNumber } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
 import { PageHeader } from "@/components/ui/page-header";
@@ -41,7 +41,7 @@ export default function ProjectReportPage() {
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: branches = [] } = useBranches();
   const { data: items = [] } = useItemsList();
-  const { data: categories = [] } = useCategories();
+  const { data: itemGroups = [] } = useItemGroups();
 
   if (projectsLoading) return <ShellLoader />;
 
@@ -62,7 +62,7 @@ export default function ProjectReportPage() {
   const exportColumns = [
     { key: "code" as const, header: "Code" },
     { key: "name" as const, header: "Item Name" },
-    { key: "category" as const, header: "Category" },
+    { key: "itemGroup" as const, header: "Item Group" },
     { key: "unit" as const, header: "Unit" },
     { key: "systemQty" as const, header: "System Qty", format: (v: unknown) => formatNumber(Number(v)) },
     { key: "countedQty" as const, header: "Counted Qty", format: (v: unknown) => formatNumber(Number(v)) },
@@ -71,11 +71,11 @@ export default function ProjectReportPage() {
 
   const exportRows = rows.map((r) => {
     const item = items.find((i) => i.id === r.itemId);
-    const cat = categories.find((c) => c.id === item?.categoryId);
+    const ig = itemGroups.find((c) => c.id === item?.itemGroupId);
     return {
       code: item?.code ?? r.code,
       name: item?.name ?? r.name,
-      category: cat?.name ?? "—",
+      itemGroup: ig?.name ?? "—",
       unit: item?.unit ?? r.unit,
       systemQty: r.systemQty,
       countedQty: r.countedQty,
@@ -119,12 +119,12 @@ export default function ProjectReportPage() {
       className: "min-w-[200px]",
     },
     {
-      id: "category",
-      header: "Category",
+      id: "itemGroup",
+      header: "Item Group",
       cell: (r) => {
         const item = items.find((i) => i.id === r.itemId);
-        const cat = categories.find((c) => c.id === item?.categoryId);
-        return <span className="text-xs text-muted-foreground">{cat?.name ?? "—"}</span>;
+        const ig = itemGroups.find((c) => c.id === item?.itemGroupId);
+        return <span className="text-xs text-muted-foreground">{ig?.name ?? "—"}</span>;
       },
     },
     {

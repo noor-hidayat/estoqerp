@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus } from "lucide-react";
-import { useCategories, useInsert } from "@/lib/api/query";
+import { useItemGroups, useInsert, useUoms } from "@/lib/api/query";
 import { useSaveShortcut } from "@/lib/use-save-shortcut";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import {
   FormPage,
@@ -21,11 +21,12 @@ import {
 const EMPTY = {
   code: "",
   name: "",
-  unit: "pcs",
-  categoryId: "",
-  price: 0,
-  barcodeId: "",
-  qty: undefined as number | undefined,
+  unit: "",
+  uomId: "",
+  itemGroupId: "",
+  alternativeCode: "",
+  uomQty: undefined as number | undefined,
+  description: "",
 };
 
 export default function NewItemPage() {
@@ -33,19 +34,29 @@ export default function NewItemPage() {
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState("");
 
-  const { data: categories, isLoading: categoriesLoading } = useCategories();
+  const { data: itemGroups, isLoading: itemGroupsLoading } = useItemGroups();
+  const { data: uoms = [], isLoading: uomsLoading } = useUoms();
   const insertItem = useInsert("items");
 
   const save = async () => {
-    if (!form.code.trim() || !form.name.trim() || !form.categoryId) {
-      setError("Code, name, and category are required.");
+    if (!form.code.trim() || !form.name.trim() || !form.itemGroupId) {
+      setError("Code, name, and item group are required.");
       return;
     }
+    if (!form.uomId) {
+      setError("UOM is required.");
+      return;
+    }
+    const uom = uoms.find((u) => u.id === form.uomId);
     try {
       await insertItem.mutateAsync({
         ...form,
         code: form.code.trim(),
         name: form.name.trim(),
+        unit: uom?.name ?? "",
+        uomId: form.uomId,
+        alternativeCode: form.alternativeCode.trim() || null,
+        description: form.description.trim() || null,
         hue: Math.floor(Math.random() * 360),
       });
       navigate("/app/data-library/items");
@@ -56,7 +67,7 @@ export default function NewItemPage() {
 
   useSaveShortcut(save, true);
 
-  if (categoriesLoading) {
+  if (itemGroupsLoading || uomsLoading) {
     return (
       <RoleGuard roles={MANAGER_ROLES} menus={["master.items"]}>
         <FormSkeleton
@@ -81,11 +92,12 @@ export default function NewItemPage() {
               value={form.code}
               onChange={(e) => setForm({ ...form, code: e.target.value })}
             />
-            <Input
-              label="Unit"
-              placeholder="pcs / box / sack"
-              value={form.unit}
-              onChange={(e) => setForm({ ...form, unit: e.target.value })}
+            <SearchableSelect
+              label="UOM"
+              placeholder="Type to search UOM..."
+              options={uoms.map((u) => ({ value: u.id, label: u.name }))}
+              value={form.uomId}
+              onChange={(v) => setForm({ ...form, uomId: v })}
             />
             <div className="sm:col-span-2">
               <Input
@@ -94,46 +106,40 @@ export default function NewItemPage() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </div>
-            <Select
-              label="Category"
-              value={form.categoryId}
-              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-            >
-              <option value="">Select category...</option>
-              {(categories ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.code} — {c.name}
-                </option>
-              ))}
-            </Select>
-            <Input
-              label="Unit price (Rp)"
-              type="number"
-              min={0}
-              value={form.price}
-              onChange={(e) =>
-                setForm({ ...form, price: Math.max(0, Number(e.target.value) || 0) })
-              }
+            <SearchableSelect
+              label="Item Group"
+              placeholder="Type to search item group..."
+              options={(itemGroups ?? []).map((c) => ({ value: c.id, label: c.name }))}
+              value={form.itemGroupId}
+              onChange={(v) => setForm({ ...form, itemGroupId: v })}
             />
             <Input
-              label="Barcode ID (optional)"
-              placeholder="Enter item barcode"
-              value={form.barcodeId ?? ""}
-              onChange={(e) => setForm({ ...form, barcodeId: e.target.value })}
+              label="Alternative code"
+              placeholder="Enter alternative code"
+              value={form.alternativeCode}
+              onChange={(e) => setForm({ ...form, alternativeCode: e.target.value })}
             />
             <Input
-              label="Master qty (qty per barcode)"
+              label="UOM qty"
               type="number"
               min={0}
-              placeholder="e.g.: 1 barcode = 12 pcs"
-              value={form.qty ?? ""}
+              placeholder="e.g.: 1 UOM = 12 pcs"
+              value={form.uomQty ?? ""}
               onChange={(e) =>
                 setForm({
                   ...form,
-                  qty: e.target.value === "" ? undefined : Math.max(0, Number(e.target.value) || 0),
+                  uomQty: e.target.value === "" ? undefined : Math.max(0, Number(e.target.value) || 0),
                 })
               }
             />
+            <div className="sm:col-span-2">
+              <Input
+                label="Description"
+                placeholder="Optional description"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </div>
           </FormGrid>
 
           {error && (

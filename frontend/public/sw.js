@@ -1,9 +1,9 @@
-const CACHE_NAME = "stockops-v20";
+const CACHE_NAME = "estoq-v22";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
   "/manifest.json",
-  "/stockops.svg",
+  "/estoq.svg",
   "/pwa-icons/icon-72x72.svg",
   "/pwa-icons/icon-96x96.svg",
   "/pwa-icons/icon-128x128.svg",

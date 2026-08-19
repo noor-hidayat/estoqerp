@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ScanLine } from "lucide-react";
-import { useProject, useScanSessions, useScanRecords, useItemsList } from "@/lib/api/query";
+import { useProject, useProjectSessions } from "@/lib/api/query";
 import { formatDateTime, formatId, formatNumber } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Stat } from "@/components/ui/stat";
@@ -26,9 +26,7 @@ interface SessionRow {
 export default function ScanSessionsPage() {
   const params = useParams<{ id: string }>();
   const { data: project, isLoading: projectLoading } = useProject(params.id);
-  const { data: sessions = [], isLoading: sessionsLoading } = useScanSessions({ projectId: params.id });
-  const { data: recordsData } = useScanRecords({ projectId: params.id, pageSize: 10000 });
-  const { data: items = [] } = useItemsList();
+  const { data: sessionsData, isLoading: sessionsLoading } = useProjectSessions(params.id);
   const { isSystem, permissions } = useSession();
   const canDetail = can(isSystem, permissions, "opname.detail.sessions.detail", "view");
   const canScan = can(isSystem, permissions, "opname.detail.scan", "view");
@@ -40,36 +38,14 @@ export default function ScanSessionsPage() {
   if (projectLoading || sessionsLoading) return <ShellLoader />;
   if (!project) return null;
 
-  const records = recordsData?.rows ?? [];
+  const sessions = sessionsData?.sessions ?? [];
 
-  const stats = sessions.map((s) => {
-    const recs = records
-      .filter((r) => r.sessionId === s.id)
-      .sort((a, b) => b.scannedAt.localeCompare(a.scannedAt));
-    return {
-      session: s,
-      recs,
-      qty: recs.reduce((a, r) => a + r.quantity, 0),
-      barcodes: recs.length,
-      lastItemName: recs[0]
-        ? items.find((i) => i.id === recs[0].itemId)?.name ?? "—"
-        : "—",
-      lastItemUnit: recs[0]
-        ? items.find((i) => i.id === recs[0].itemId)?.unit ?? "—"
-        : "—",
-    };
-  });
-
-  const distinctItems = new Set(
-    records.map((r) => r.itemId).filter(Boolean)
-  ).size;
-
-  const rows: SessionRow[] = stats.map(({ session: s, qty, barcodes, lastItemName, lastItemUnit }) => ({
+  const rows: SessionRow[] = sessions.map((s) => ({
     id: s.id,
-    lastItemName,
-    lastItemUnit,
-    barcodes,
-    qty,
+    lastItemName: s.lastItemName,
+    lastItemUnit: s.lastItemUnit,
+    barcodes: s.barcodes,
+    qty: s.qty,
     startedAt: s.startedAt,
     endedAt: s.endedAt ?? null,
   }));
@@ -133,7 +109,7 @@ export default function ScanSessionsPage() {
       cell: (r) =>
         canDetail ? (
           <Link
-            href={`/app/project/so/${project.id}/sessions/${r.id}`}
+            href={`/app/so/${project.id}/sessions/${r.id}`}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             aria-label="View session"
           >
@@ -155,7 +131,7 @@ export default function ScanSessionsPage() {
           scan sessions · <span className="font-semibold text-foreground">{project.name}</span>
         </p>
         {canScan && (
-          <Link href={`/app/project/so/${project.id}/scan`}>
+          <Link href={`/app/so/${project.id}/scan`}>
             <Button variant="secondary" size="sm">
               <ScanLine size={14} strokeWidth={2} />
               Open Scan Page
@@ -168,29 +144,29 @@ export default function ScanSessionsPage() {
         <Stat
           compact
           label="Total Sessions"
-          value={stats.length}
-          sub={`${stats.filter((s) => s.session.status === "ACTIVE").length} active sessions`}
+          value={sessions.length}
+          sub={`${sessions.filter((s) => s.status === "ACTIVE").length} active sessions`}
           icon={<ScanLine size={16} strokeWidth={2} />}
           accent
         />
         <Stat
           compact
           label="Total Barcodes"
-          value={formatNumber(stats.reduce((a, s) => a + s.barcodes, 0))}
+          value={formatNumber(sessionsData?.totalBarcodes ?? 0)}
           sub="Barcodes scanned"
           icon={<ScanLine size={16} strokeWidth={2} />}
         />
         <Stat
           compact
           label="Total Qty"
-          value={formatNumber(stats.reduce((a, s) => a + s.qty, 0))}
+          value={formatNumber(sessionsData?.totalQty ?? 0)}
           sub="Units counted"
           icon={<ScanLine size={16} strokeWidth={2} />}
         />
         <Stat
           compact
           label="Unique Items"
-          value={formatNumber(distinctItems)}
+          value={formatNumber(sessionsData?.itemCount ?? 0)}
           sub="Different items scanned"
           icon={<ScanLine size={16} strokeWidth={2} />}
         />

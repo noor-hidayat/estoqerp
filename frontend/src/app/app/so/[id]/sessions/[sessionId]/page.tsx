@@ -48,7 +48,7 @@ export default function ScanSessionDetailPage() {
           Scan session not found
         </p>
         <Link
-          href={`/app/project/so/${params.id}`}
+          href={`/app/so/${params.id}`}
           className="mt-2 inline-block text-sm text-primary hover:text-primary/80"
         >
           Back to Project
@@ -142,8 +142,8 @@ export default function ScanSessionDetailPage() {
     <div>
       <Breadcrumb
         crumbs={[
-          { label: "Project", href: "/app/project/so" },
-          { label: "Project Details", href: `/app/project/so/${project.id}` },
+          { label: "Project", href: "/app/so" },
+          { label: "Project Details", href: `/app/so/${project.id}` },
           { label: "Session Details" },
         ]}
       />

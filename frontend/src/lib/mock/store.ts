@@ -1,7 +1,7 @@
 import type {
   BarcodeFormat,
   Branch,
-  Category,
+  ItemGroup,
   Item,
   Location,
   OpnameEntry,
@@ -26,7 +26,7 @@ export interface DB {
   branches: Branch[];
   warehouses: Warehouse[];
   locations: Location[];
-  categories: Category[];
+  itemGroups: ItemGroup[];
   items: Item[];
   stockBalances: StockBalance[];
   barcodeFormats: BarcodeFormat[];

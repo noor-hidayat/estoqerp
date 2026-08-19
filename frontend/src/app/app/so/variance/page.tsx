@@ -117,7 +117,7 @@ export default function VarianceReviewPage() {
       sortValue: (r) => r.projectName,
       cell: (r) => (
         <Link
-          href={`/app/project/so/${r.projectId}`}
+          href={`/app/so/${r.projectId}`}
           className="text-[13px] text-muted-foreground transition-colors hover:text-primary"
         >
           {r.projectName}

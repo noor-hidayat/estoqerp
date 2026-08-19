@@ -34,7 +34,7 @@ export function TeamSwitcher() {
                 <BrandMark className="size-5" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">StockOps</span>
+                <span className="truncate font-semibold">Estoq</span>
                 <span className="truncate text-xs text-muted-foreground">
                   Stock Opname
                 </span>
@@ -54,7 +54,7 @@ export function TeamSwitcher() {
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled className="gap-2 p-2">
               <BrandMark className="size-5" />
-              <span className="font-medium">StockOps</span>
+              <span className="font-medium">Estoq</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

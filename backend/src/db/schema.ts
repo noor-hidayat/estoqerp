@@ -157,17 +157,11 @@ export const locations = pgTable("locations", {
   isActive: boolean("is_active").notNull().default(true),
 });
 
-export const categories = pgTable("categories", {
+export const itemGroups = pgTable("item_groups", {
   id: text("id").primaryKey(),
   code: text("code").notNull(),
   name: text("name").notNull(),
-});
-
-export const uom = pgTable("uom", {
-  id: text("id").primaryKey(),
-  code: text("code").notNull().unique(),
-  name: text("name").notNull(),
-  createdBy: text("created_by").references(() => users.id),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -176,11 +170,11 @@ export const uom = pgTable("uom", {
     .defaultNow(),
 });
 
-export const groups = pgTable("groups", {
+export const uom = pgTable("uom", {
   id: text("id").primaryKey(),
   code: text("code").notNull().unique(),
   name: text("name").notNull(),
-  isActive: boolean("is_active").notNull().default(true),
+  createdBy: text("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -222,15 +216,14 @@ export const items = pgTable("items", {
   code: text("code").notNull(),
   name: text("name").notNull(),
   unit: text("unit").notNull(),
-  categoryId: text("category_id")
+  itemGroupId: text("item_group_id")
     .notNull()
-    .references(() => categories.id),
+    .references(() => itemGroups.id),
   price: integer("price").notNull().default(0),
   hue: integer("hue").notNull().default(200),
   barcodeId: text("barcode_id"),
   qty: integer("qty"),
   uomId: text("uom_id").references(() => uom.id),
-  groupId: text("group_id").references(() => groups.id),
   alternativeCode: text("alternative_code"),
   uomQty: numeric("uom_qty", { precision: 15, scale: 3 }),
   description: text("description"),

@@ -4,7 +4,7 @@
 export const MENU_CHILDREN: Record<string, string[]> = {
   master: [
     "master.items",
-    "master.categories",
+    "master.itemGroups",
     "master.barcodeFormats",
     "master.barcodeFormats.new",
     "master.barcodeFormats.edit",

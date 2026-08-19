@@ -49,7 +49,7 @@ export const EMPTY_DB: DB = {
   branches: [],
   warehouses: [],
   locations: [],
-  categories: [],
+  itemGroups: [],
   items: [],
   stockBalances: [],
   barcodeFormats: [],

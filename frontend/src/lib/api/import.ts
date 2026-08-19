@@ -3,7 +3,7 @@
 import * as XLSX from "xlsx";
 import { api } from "@/lib/api/client";
 
-export type DatasetId = "branches" | "warehouses" | "locations" | "categories" | "items" | "stockBalances";
+export type DatasetId = "branches" | "warehouses" | "locations" | "itemGroups" | "items" | "stockBalances";
 
 export interface DatasetColumn {
   /** Key kolom di spreadsheet (header persis). */
@@ -62,30 +62,30 @@ export const DATASETS: DatasetDescriptor[] = [
     sample: { warehouseCode: "WH-A", branchCode: "JKT", code: "R-01", name: "Rak 01" },
   },
   {
-    id: "categories",
-    label: "Kategori (Categories)",
-    description: "Kategori produk. Impor ini sebelum item.",
+    id: "itemGroups",
+    label: "Grup Item (Item Groups)",
+    description: "Grup item. Impor ini sebelum item.",
     columns: [
-      { key: "code", label: "Kode Kategori", required: true, hint: "Unik. Contoh: FOOD" },
-      { key: "name", label: "Nama Kategori", required: true },
+      { key: "code", label: "Kode Grup Item", required: true, hint: "Unik. Contoh: FOOD" },
+      { key: "name", label: "Nama Grup Item", required: true },
     ],
     sample: { code: "FOOD", name: "Makanan" },
   },
   {
     id: "items",
     label: "Item (Produk)",
-    description: "Master item/produk. Impor kategori dulu.",
+    description: "Master item/produk. Impor grup item dulu.",
     columns: [
       { key: "code", label: "Kode Item", required: true, hint: "Unik. Contoh: ITM-0001" },
       { key: "name", label: "Nama Item", required: true },
       { key: "unit", label: "Satuan", required: false, hint: "pcs/box/kg. Default: pcs" },
-      { key: "categoryCode", label: "Kode Kategori", required: true, hint: "Harus ada di tabel Kategori" },
+      { key: "itemGroupCode", label: "Kode Grup Item", required: true, hint: "Harus ada di tabel Grup Item" },
       { key: "price", label: "Harga", required: false, hint: "Angka, default 0" },
       { key: "qty", label: "Qty", required: false, hint: "Angka stok awal, opsional" },
       { key: "hue", label: "Hue Avatar", required: false, hint: "0-360, default 200" },
       { key: "barcodeId", label: "Barcode ID", required: false, hint: "String unik opsional" },
     ],
-    sample: { code: "ITM-0001", name: "Indomie Goreng", unit: "pcs", categoryCode: "FOOD", price: 3500, qty: 10, hue: 30, barcodeId: "8991001234" },
+    sample: { code: "ITM-0001", name: "Indomie Goreng", unit: "pcs", itemGroupCode: "FOOD", price: 3500, qty: 10, hue: 30, barcodeId: "8991001234" },
   },
   {
     id: "stockBalances",

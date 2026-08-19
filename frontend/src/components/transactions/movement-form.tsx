@@ -17,7 +17,7 @@ import {
   useAllWarehouses,
   useUoms,
   useBarcodeFormats,
-  useCategories,
+  useItemGroups,
 } from "@/lib/api/query";
 import { api } from "@/lib/api/client";
 import { parseBarcode } from "@/lib/barcode/parser";
@@ -25,14 +25,17 @@ import { getAll, syncMasterCache } from "@/lib/local-cache";
 import { CameraScanner } from "@/components/barcode/camera-scanner";
 import type {
   BarcodeFormat,
-  Category,
+  ItemGroup,
   Item,
   MovementInput,
   StockMovementDetailFull,
 } from "@/types";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   FormPage,
   FormSection,
@@ -63,6 +66,20 @@ function todayISO(): string {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+function nowTime(): string {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function toTimeInput(iso: string): string {
+  const d = new Date(iso);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 interface LookupResponse {
   found: boolean;
   item?: Item;
@@ -86,10 +103,12 @@ export function MovementForm({
   const [form, setForm] = useState({
     typeId: initial?.typeId ?? "",
     movementDate: initial?.movementDate ? initial.movementDate.slice(0, 10) : todayISO(),
-    status: initial?.status ?? "DRAFT",
-    referenceId: initial?.referenceId ?? "",
+    movementTime: initial?.movementDate ? toTimeInput(initial.movementDate) : nowTime(),
     description: initial?.description ?? "",
   });
+  const [editPostingDate, setEditPostingDate] = useState(
+    Boolean(initial?.movementDate)
+  );
   const [fromDefault, setFromDefault] = useState(
     initial?.details?.[0]?.fromWarehouseId ?? ""
   );
@@ -129,14 +148,14 @@ export function MovementForm({
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: uoms = [] } = useUoms();
   const { data: formats = [] } = useBarcodeFormats();
-  const { data: categories = [] } = useCategories();
+  const { data: itemGroups = [] } = useItemGroups();
 
   // Isi cache lokal supaya scan bisa resolve item offline.
   useEffect(() => {
-    if (formats.length && items.length && categories.length) {
-      void syncMasterCache({ items, categories, barcodeFormats: formats });
+    if (formats.length && items.length && itemGroups.length) {
+      void syncMasterCache({ items, itemGroups, barcodeFormats: formats });
     }
-  }, [formats, items, categories]);
+  }, [formats, items, itemGroups]);
 
   const setRow = (key: string, patch: Partial<DetailDraft>) => {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -152,12 +171,12 @@ export function MovementForm({
   ): Promise<{ item: Item; batchNumber: string } | null> => {
     try {
       const cachedItems = await getAll<Item>("items");
-      const cachedCategories = await getAll<Category>("categories");
+      const cachedItemGroups = await getAll<ItemGroup>("itemGroups");
       const cachedFormats = await getAll<BarcodeFormat>("barcodeFormats");
       if (cachedItems.length > 0 && cachedFormats.length > 0) {
         const parsed = parseBarcode(barcode, cachedFormats, {
           items: cachedItems,
-          categories: cachedCategories,
+          itemGroups: cachedItemGroups,
         });
         if (parsed?.item) {
           return {
@@ -241,6 +260,10 @@ export function MovementForm({
       setError("Transaction type is required.");
       return;
     }
+    if (editPostingDate && !form.movementDate) {
+      setError("Date is required.");
+      return;
+    }
     const details = rows
       .map((r) => ({
         itemId: r.itemId,
@@ -269,13 +292,17 @@ export function MovementForm({
         return;
       }
     }
+    const movementDate = editPostingDate
+      ? `${form.movementDate}T${form.movementTime}`
+      : `${todayISO()}T${nowTime()}`;
     setSaving(true);
     try {
       await onSubmit({
         typeId: form.typeId,
-        movementDate: form.movementDate || null,
-        status: form.status as "DRAFT" | "POSTED",
-        referenceId: form.referenceId || null,
+        movementDate,
+        status: "DRAFT",
+        referenceType: null,
+        referenceId: null,
         description: form.description || null,
         details,
       });
@@ -314,65 +341,72 @@ export function MovementForm({
             <option value="">Select type...</option>
             {types.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.code} — {t.name}
+                {t.name}
               </option>
             ))}
           </Select>
+          <div className="flex items-end pb-0.5">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
+              <Checkbox
+                checked={editPostingDate}
+                onCheckedChange={(v) => setEditPostingDate(v === true)}
+              />
+              Edit posting date
+            </label>
+          </div>
           <Input
             label="Date"
             type="date"
             value={form.movementDate}
+            disabled={!editPostingDate}
             onChange={(e) => setForm({ ...form, movementDate: e.target.value })}
           />
-          <Select
-            label="Status"
-            value={form.status}
-            onChange={(e) =>
-              setForm({ ...form, status: e.target.value as "DRAFT" | "POSTED" })
-            }
-          >
-            <option value="DRAFT">Draft</option>
-            <option value="POSTED">Posted</option>
-          </Select>
           <Input
-            label="Reference"
-            placeholder="PO-2024-001 / internal ref"
-            value={form.referenceId}
-            onChange={(e) => setForm({ ...form, referenceId: e.target.value })}
+            label="Time"
+            type="time"
+            value={form.movementTime}
+            disabled={!editPostingDate}
+            onChange={(e) => setForm({ ...form, movementTime: e.target.value })}
           />
-          <Select
-            label="From warehouse (scan default)"
-            value={kind === "RECEIPT" ? "" : fromDefault}
-            onChange={(e) => setFromDefault(e.target.value)}
-            disabled={kind === "RECEIPT"}
-          >
-            <option value="">— none —</option>
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.code} — {w.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="To warehouse (scan default)"
-            value={kind === "ISSUE" ? "" : toDefault}
-            onChange={(e) => setToDefault(e.target.value)}
-            disabled={kind === "ISSUE"}
-          >
-            <option value="">— none —</option>
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.code} — {w.name}
-              </option>
-            ))}
-          </Select>
+          {kind !== "RECEIPT" && (
+            <Select
+              label="From warehouse (scan default)"
+              value={kind === "RECEIPT" ? "" : fromDefault}
+              onChange={(e) => setFromDefault(e.target.value)}
+            >
+              <option value="">— none —</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </Select>
+          )}
+          {kind !== "ISSUE" && (
+            <Select
+              label="To warehouse (scan default)"
+              value={kind === "ISSUE" ? "" : toDefault}
+              onChange={(e) => setToDefault(e.target.value)}
+            >
+              <option value="">— none —</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </Select>
+          )}
           <div className="sm:col-span-2">
-            <Input
-              label="Description"
-              placeholder="Optional note"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="movement-description">Description</Label>
+              <Textarea
+                id="movement-description"
+                rows={4}
+                placeholder="Optional note"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </div>
           </div>
         </FormGrid>
       </FormSection>
@@ -481,7 +515,7 @@ export function MovementForm({
                     <option value="">Select item...</option>
                     {items.map((i) => (
                       <option key={i.id} value={i.id}>
-                        {i.code} — {i.name}
+                        {i.name}
                       </option>
                     ))}
                   </Select>
@@ -500,32 +534,34 @@ export function MovementForm({
                   value={r.qty}
                   onChange={(e) => setRow(r.key, { qty: e.target.value })}
                 />
-                <Select
-                  label="From warehouse"
-                  value={kind === "RECEIPT" ? "" : r.fromWarehouseId}
-                  onChange={(e) => setRow(r.key, { fromWarehouseId: e.target.value })}
-                  disabled={kind === "RECEIPT"}
-                >
-                  <option value="">— none —</option>
-                  {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.code} — {w.name}
-                    </option>
-                  ))}
-                </Select>
-                <Select
-                  label="To warehouse"
-                  value={kind === "ISSUE" ? "" : r.toWarehouseId}
-                  onChange={(e) => setRow(r.key, { toWarehouseId: e.target.value })}
-                  disabled={kind === "ISSUE"}
-                >
-                  <option value="">— none —</option>
-                  {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.code} — {w.name}
-                    </option>
-                  ))}
-                </Select>
+                {kind !== "RECEIPT" && (
+                  <Select
+                    label="From warehouse"
+                    value={kind === "RECEIPT" ? "" : r.fromWarehouseId}
+                    onChange={(e) => setRow(r.key, { fromWarehouseId: e.target.value })}
+                  >
+                    <option value="">— none —</option>
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+                {kind !== "ISSUE" && (
+                  <Select
+                    label="To warehouse"
+                    value={kind === "ISSUE" ? "" : r.toWarehouseId}
+                    onChange={(e) => setRow(r.key, { toWarehouseId: e.target.value })}
+                  >
+                    <option value="">— none —</option>
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
                 <Select
                   label="UoM"
                   value={r.uomId}
@@ -534,7 +570,7 @@ export function MovementForm({
                   <option value="">— auto —</option>
                   {uoms.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.code} — {u.name}
+                      {u.name}
                     </option>
                   ))}
                 </Select>

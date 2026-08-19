@@ -4,7 +4,7 @@ import { cx } from "@/lib/utils";
 
 export const FIELD_COLORS: Record<SegmentField, { bg: string; text: string; dot: string; border: string }> = {
   ITEM_CODE: { bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500", border: "border-emerald-200" },
-  CATEGORY: { bg: "bg-violet-100", text: "text-violet-700", dot: "bg-violet-500", border: "border-violet-200" },
+  ITEM_GROUP: { bg: "bg-violet-100", text: "text-violet-700", dot: "bg-violet-500", border: "border-violet-200" },
   DATE: { bg: "bg-sky-100", text: "text-sky-700", dot: "bg-sky-500", border: "border-sky-200" },
   SEQUENCE: { bg: "bg-amber-100", text: "text-amber-700", dot: "bg-amber-500", border: "border-amber-200" },
   BARCODE_ID: { bg: "bg-rose-100", text: "text-rose-700", dot: "bg-rose-500", border: "border-rose-200" },
@@ -14,7 +14,7 @@ export const FIELD_COLORS: Record<SegmentField, { bg: string; text: string; dot:
 
 export const FIELD_LABEL_SHORT: Record<SegmentField, string> = {
   ITEM_CODE: "Item",
-  CATEGORY: "Cat.",
+  ITEM_GROUP: "IGrp",
   DATE: "Date",
   SEQUENCE: "Seq",
   BARCODE_ID: "Barcode",

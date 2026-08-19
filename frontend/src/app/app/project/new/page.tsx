@@ -73,7 +73,7 @@ function Page() {
       },
       {
         onSuccess: (res) => {
-          navigate(`/app/project/${(res as { id: string }).id}`);
+          navigate(`/app/so?projectId=${(res as { id: string }).id}`);
         },
       }
     );

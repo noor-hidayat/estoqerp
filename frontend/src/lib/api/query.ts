@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import type {
-  Branch, Warehouse, Location, Category, Item, StockBalance,
+  Branch, Warehouse, Location, ItemGroup, Item, StockBalance,
   BarcodeFormat, Project, ProjectStatus, ScanSession, ScanRecord, OpnameEntry,
   User, Role, RolePermission, BranchAccess,
   OpnameProject, OpnameProjectDetail,
@@ -115,23 +115,34 @@ export function useLocations(warehouseId?: string) {
   return useResourceList<Location>("locations", warehouseId ? { warehouseId } : undefined);
 }
 
-export function useCategory(id?: string) {
-  return useResourceOne<Category>("categories", id);
+export function useItemGroup(id?: string) {
+  return useResourceOne<ItemGroup>("itemGroups", id);
 }
 
-export function useCategories() {
-  return useResourceList<Category>("categories");
+export function useItemGroups() {
+  return useResourceList<ItemGroup>("itemGroups");
+}
+
+export interface ItemGroupCounts {
+  counts: Record<string, number>;
+}
+
+export function useItemGroupCounts() {
+  return useQuery({
+    queryKey: ["item-group-counts"],
+    queryFn: () => api.get<ItemGroupCounts>("/item-groups/counts"),
+  });
 }
 
 export function useItem(id?: string) {
   return useResourceOne<Item>("items", id);
 }
 
-export function useItems(params?: { query?: string; categoryId?: string; page?: number; pageSize?: number }) {
+export function useItems(params?: { query?: string; itemGroupId?: string; page?: number; pageSize?: number }) {
   return usePaginatedList<Item>("items", params as Record<string, unknown>);
 }
 
-export function useItemsList(params?: { query?: string; categoryId?: string }) {
+export function useItemsList(params?: { query?: string; itemGroupId?: string }) {
   return useResourceList<Item>("items", params as Record<string, unknown>);
 }
 
@@ -145,7 +156,7 @@ export type StockBalanceLedgerRow = {
   itemId: string;
   code: string;
   name: string;
-  category: string | null;
+  itemGroup: string | null;
   warehouse: string;
   openingQty: number;
   inQty: number;
@@ -307,6 +318,39 @@ export function useScanRecords(params?: { projectId?: string; sessionId?: string
   return usePaginatedList<ScanRecord>("scanRecords", params as Record<string, unknown>);
 }
 
+export interface ProjectSession {
+  id: string;
+  projectId: string;
+  locationId: string | null;
+  scannedBy: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  status: string;
+  userName: string;
+  locationCode: string;
+  barcodes: number;
+  qty: number;
+  itemCount: number;
+  lastItemId: string | null;
+  lastItemName: string;
+  lastItemUnit: string;
+}
+
+export interface ProjectSessionsResponse {
+  sessions: ProjectSession[];
+  totalBarcodes: number;
+  totalQty: number;
+  itemCount: number;
+}
+
+export function useProjectSessions(projectId?: string) {
+  return useQuery({
+    queryKey: ["project-sessions", projectId],
+    queryFn: () => api.get<ProjectSessionsResponse>(`/projects/${projectId}/sessions`),
+    enabled: !!projectId,
+  });
+}
+
 export function useOpnameEntries(projectId?: string) {
   return useResourceList<OpnameEntry>("opnameEntries", projectId ? { projectId } : undefined);
 }
@@ -424,7 +468,7 @@ export function useItemLookup(barcode: string | null, formatId?: string) {
       matched?: boolean;
       detail?: string;
       item?: Item;
-      category?: { id: string; code: string; name: string } | null;
+      itemGroup?: { id: string; code: string; name: string } | null;
       formatId?: string;
       formatName?: string;
       values?: Record<string, string>;

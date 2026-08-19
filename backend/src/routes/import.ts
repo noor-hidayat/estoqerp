@@ -22,13 +22,13 @@ const importRouter = Router();
 
 // Whitelist dataset yang boleh di-import. Pemetaan ini menjelaskan struktur
 // kolom spreadsheet → kolom DB + aturan validasi + resolusi foreign key.
-type DatasetId = "branches" | "warehouses" | "locations" | "categories" | "items" | "stockBalances";
+type DatasetId = "branches" | "warehouses" | "locations" | "itemGroups" | "items" | "stockBalances";
 
 const DATASET_MENU: Record<DatasetId, string> = {
   branches: "inventory",
   warehouses: "inventory",
   locations: "inventory",
-  categories: "master",
+  itemGroups: "master",
   items: "master",
   stockBalances: "inventory",
 };
@@ -250,7 +250,7 @@ async function importLocations(
   return { result: { inserted, updated, skipped, errors }, affected };
 }
 
-async function importCategories(
+async function importItemGroups(
   rows: Record<string, unknown>[],
   mode: "skip" | "update"
 ): Promise<{ result: ImportResult; affected: Array<{ id: string; row: Record<string, unknown> }> }> {
@@ -260,10 +260,10 @@ async function importCategories(
   let skipped = 0;
   const affected: Array<{ id: string; row: Record<string, unknown> }> = [];
 
-  const all = await db.select({ id: schema.categories.id }).from(schema.categories);
+  const all = await db.select({ id: schema.itemGroups.id }).from(schema.itemGroups);
   let max = 0;
   for (const row of all) {
-    const n = Number(String(row.id).replace(/^cat_/, ""));
+    const n = Number(String(row.id).replace(/^igr_/, ""));
     if (Number.isFinite(n) && n > max) max = n;
   }
 
@@ -275,14 +275,14 @@ async function importCategories(
     if (!name) { errors.push({ row: i + 1, message: "Kolom 'name' wajib diisi." }); continue; }
 
     const [existing] = await db
-      .select({ id: schema.categories.id })
-      .from(schema.categories)
-      .where(sql`lower(${schema.categories.code}) = lower(${code})`)
+      .select({ id: schema.itemGroups.id })
+      .from(schema.itemGroups)
+      .where(sql`lower(${schema.itemGroups.code}) = lower(${code})`)
       .limit(1);
 
     if (existing) {
       if (mode === "update") {
-        await db.update(schema.categories).set({ code, name }).where(eq(schema.categories.id, existing.id));
+        await db.update(schema.itemGroups).set({ code, name }).where(eq(schema.itemGroups.id, existing.id));
         updated += 1;
         affected.push({ id: existing.id, row: { code, name } });
       } else {
@@ -292,8 +292,8 @@ async function importCategories(
     }
 
     max += 1;
-    const newId = `cat_${String(max).padStart(3, "0")}`;
-    await db.insert(schema.categories).values({ id: newId, code, name });
+    const newId = `igr_${String(max).padStart(3, "0")}`;
+    await db.insert(schema.itemGroups).values({ id: newId, code, name });
     inserted += 1;
     affected.push({ id: newId, row: { code, name } });
   }
@@ -311,9 +311,9 @@ async function importItems(
   let skipped = 0;
   const affected: Array<{ id: string; row: Record<string, unknown> }> = [];
 
-  const catRows = await db.select().from(schema.categories);
-  const catByCode = new Map<string, string>();
-  for (const c of catRows) catByCode.set(c.code.toLowerCase(), c.id);
+  const igRows = await db.select().from(schema.itemGroups);
+  const igByCode = new Map<string, string>();
+  for (const c of igRows) igByCode.set(c.code.toLowerCase(), c.id);
 
   const all = await db.select({ id: schema.items.id }).from(schema.items);
   let max = 0;
@@ -327,7 +327,7 @@ async function importItems(
     const code = asString(r.code);
     const name = asString(r.name);
     const unit = asString(r.unit) ?? "pcs";
-    const categoryCode = asString(r.categoryCode) ?? asString(r.category_code);
+    const itemGroupCode = asString(r.itemGroupCode) ?? asString(r.item_group_code);
     const price = asInt(r.price, 0);
     const hue = asInt(r.hue, 200);
     const barcodeId = asString(r.barcodeId) ?? asString(r.barcode_id) ?? null;
@@ -336,11 +336,11 @@ async function importItems(
 
     if (!code) { errors.push({ row: i + 1, message: "Kolom 'code' wajib diisi." }); continue; }
     if (!name) { errors.push({ row: i + 1, message: "Kolom 'name' wajib diisi." }); continue; }
-    if (!categoryCode) { errors.push({ row: i + 1, message: "Kolom 'categoryCode' wajib diisi." }); continue; }
+    if (!itemGroupCode) { errors.push({ row: i + 1, message: "Kolom 'itemGroupCode' wajib diisi." }); continue; }
 
-    const categoryId = catByCode.get(categoryCode.toLowerCase());
-    if (!categoryId) {
-      errors.push({ row: i + 1, message: `Kategori '${categoryCode}' tidak ditemukan. Impor kategori terlebih dahulu.` });
+    const itemGroupId = igByCode.get(itemGroupCode.toLowerCase());
+    if (!itemGroupId) {
+      errors.push({ row: i + 1, message: `Grup item '${itemGroupCode}' tidak ditemukan. Impor grup item terlebih dahulu.` });
       continue;
     }
 
@@ -354,10 +354,10 @@ async function importItems(
       if (mode === "update") {
         await db
           .update(schema.items)
-          .set({ code, name, unit, categoryId, price, hue, barcodeId, qty })
+          .set({ code, name, unit, itemGroupId, price, hue, barcodeId, qty })
           .where(eq(schema.items.id, existing.id));
         updated += 1;
-        affected.push({ id: existing.id, row: { code, name, unit, categoryId, price, hue, barcodeId, qty } });
+        affected.push({ id: existing.id, row: { code, name, unit, itemGroupId, price, hue, barcodeId, qty } });
       } else {
         skipped += 1;
       }
@@ -366,9 +366,9 @@ async function importItems(
 
     max += 1;
     const newId = `itm_${String(max).padStart(3, "0")}`;
-    await db.insert(schema.items).values({ id: newId, code, name, unit, categoryId, price, hue, barcodeId, qty });
+    await db.insert(schema.items).values({ id: newId, code, name, unit, itemGroupId, price, hue, barcodeId, qty });
     inserted += 1;
-    affected.push({ id: newId, row: { code, name, unit, categoryId, price, hue, barcodeId, qty } });
+    affected.push({ id: newId, row: { code, name, unit, itemGroupId, price, hue, barcodeId, qty } });
   }
 
   return { result: { inserted, updated, skipped, errors }, affected };
@@ -485,7 +485,7 @@ async function importStockBalances(
 importRouter.post("/:dataset", async (req: Request, res: Response) => {
   const dataset = String(req.params.dataset ?? "");
   if (!isDataset(dataset)) {
-    res.status(404).json({ error: `Dataset '${dataset}' tidak didukung. Pilihan: branches, warehouses, locations, categories, items, stockBalances.` });
+    res.status(404).json({ error: `Dataset '${dataset}' tidak didukung. Pilihan: branches, warehouses, locations, itemGroups, items, stockBalances.` });
     return;
   }
   if (!(await checkPermission(req, res, DATASET_MENU[dataset], "create"))) {
@@ -506,7 +506,7 @@ importRouter.post("/:dataset", async (req: Request, res: Response) => {
       case "branches":   ({ result } = await importBranches(rows, mode)); break;
       case "warehouses": ({ result } = await importWarehouses(rows, mode)); break;
       case "locations":  ({ result } = await importLocations(rows, mode)); break;
-      case "categories": ({ result } = await importCategories(rows, mode)); break;
+      case "itemGroups": ({ result } = await importItemGroups(rows, mode)); break;
       case "items":      ({ result } = await importItems(rows, mode)); break;
       case "stockBalances": ({ result } = await importStockBalances(rows, mode)); break;
     }

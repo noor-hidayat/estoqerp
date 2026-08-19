@@ -54,7 +54,7 @@ Drizzle ORM (`backend/drizzle/`).
 
 - **Dashboard** — ringkasan aktivitas, project aktif, progress & log scan terakhir
 - **Stock Opname** — Projects, Scan Session (keyboard-scanner + kamera HP), Variance Review, Approval
-- **Product** — Kategori & Item List
+- **Product** — Item Group & Item List
 - **Stock** — Stock Balance, Lokasi Gudang, Cabang & Gudang
 - **Settings** — Barcode Format, User & Role
 - **Laporan** — per project, variance, summary, riwayat scan; export **Excel (.xlsx)** & **PDF**
@@ -109,7 +109,7 @@ database/
 | `PATCH` | `/api/:table/:id` | JWT | Update baris |
 | `DELETE` | `/api/:table/:id` | JWT | Hapus baris |
 
-Tabel yang tersedia: `users`, `branches`, `warehouses`, `locations`, `categories`,
+Tabel yang tersedia: `users`, `branches`, `warehouses`, `locations`, `itemGroups`,
 `items`, `barcodeFormats`, `projects`, `scanSessions`, `scanRecords`, `opnameEntries`.
 
 ## Perintah

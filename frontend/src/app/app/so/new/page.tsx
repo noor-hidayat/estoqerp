@@ -106,7 +106,7 @@ export default function NewProjectPage() {
         deadline: deadline || undefined,
         createdBy: user?.id ?? "",
       })) as { id: string };
-      router.push(`/app/project/so/${created.id}`);
+      router.push(`/app/so/${created.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create stock opname");
       setSaving(false);
@@ -146,7 +146,7 @@ export default function NewProjectPage() {
             >
               {allowedBranches.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.code} — {b.name}
+                  {b.name}
                 </option>
               ))}
             </Select>
@@ -157,7 +157,7 @@ export default function NewProjectPage() {
             >
               {warehouseData.map((w) => (
                 <option key={w.id} value={w.id}>
-                  {w.code} — {w.name}
+                  {w.name}
                 </option>
               ))}
             </Select>
@@ -233,7 +233,7 @@ export default function NewProjectPage() {
         <FormActions>
           <Button
             variant="ghost"
-            onClick={() => router.push("/app/project/so")}
+            onClick={() => router.push("/app/so")}
             disabled={saving}
           >
             <ArrowLeft size={15} strokeWidth={2} />

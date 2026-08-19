@@ -91,7 +91,7 @@ export default function StockBalancePage() {
   const exportColumns = [
     { key: "code" as const, header: "Item Code" },
     { key: "name" as const, header: "Item Name" },
-    { key: "category" as const, header: "Category" },
+    { key: "itemGroup" as const, header: "Item Group" },
     { key: "warehouse" as const, header: "Warehouse" },
     { key: "openingQty" as const, header: "Opening Stock", format: (v: unknown) => formatNumber(Number(v)) },
     { key: "inQty" as const, header: "In Qty", format: (v: unknown) => formatNumber(Number(v)) },
@@ -138,10 +138,10 @@ export default function StockBalancePage() {
       className: "min-w-[200px]",
     },
     {
-      id: "category",
-      header: "Category",
-      sortValue: (r) => r.category ?? "—",
-      cell: (r) => <span className="text-xs text-muted-foreground">{r.category ?? "—"}</span>,
+      id: "itemGroup",
+      header: "Item Group",
+      sortValue: (r) => r.itemGroup ?? "—",
+      cell: (r) => <span className="text-xs text-muted-foreground">{r.itemGroup ?? "—"}</span>,
     },
     {
       id: "warehouse",
@@ -291,7 +291,7 @@ export default function StockBalancePage() {
               <option value="all">All warehouses</option>
               {allowedWhs.map((w) => (
                 <option key={w.id} value={w.id}>
-                  {w.code} — {w.name}
+                  {w.name}
                 </option>
               ))}
             </Select>

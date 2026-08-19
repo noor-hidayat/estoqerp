@@ -1,14 +1,14 @@
 import type {
   BarcodeFormat,
   BarcodeSegment,
-  Category,
+  ItemGroup,
   Item,
   SegmentField,
 } from "@/types";
 
 export const SEGMENT_FIELD_LABELS: Record<SegmentField, string> = {
   ITEM_CODE: "Kode Item",
-  CATEGORY: "Kategori",
+  ITEM_GROUP: "Item Group",
   DATE: "Tanggal",
   SEQUENCE: "No. Urut",
   BARCODE_ID: "Barcode",
@@ -70,13 +70,13 @@ export interface ParsedResult {
   raw: string;
   itemId?: string;
   item?: Item;
-  categoryCode?: string;
+  itemGroupCode?: string;
   matched: boolean;
 }
 
 export interface ParseContext {
   items: Item[];
-  categories: Category[];
+  itemGroups: ItemGroup[];
 }
 
 function extractSegment(raw: string, seg: BarcodeSegment): string {
@@ -94,7 +94,7 @@ export function parseWithFormat(
 
   const values: Record<SegmentField, string> = {
     ITEM_CODE: "",
-    CATEGORY: "",
+    ITEM_GROUP: "",
     DATE: "",
     SEQUENCE: "",
     BARCODE_ID: "",
@@ -127,14 +127,14 @@ export function parseWithFormat(
     }
   }
 
-  const categoryCode = values.CATEGORY || undefined;
-  if (!item && categoryCode) {
-    const category = ctx.categories.find(
-      (c) => c.code.toLowerCase() === categoryCode.toLowerCase()
+  const itemGroupCode = values.ITEM_GROUP || undefined;
+  if (!item && itemGroupCode) {
+    const itemGroup = ctx.itemGroups.find(
+      (c) => c.code.toLowerCase() === itemGroupCode.toLowerCase()
     );
-    if (category) {
+    if (itemGroup) {
       const candidates = ctx.items.filter(
-        (i) => i.categoryId === category.id
+        (i) => i.itemGroupId === itemGroup.id
       );
       if (candidates.length === 1) {
         item = candidates[0];
@@ -150,7 +150,7 @@ export function parseWithFormat(
     raw,
     itemId,
     item,
-    categoryCode,
+    itemGroupCode,
     matched: true,
   };
 }
@@ -174,7 +174,7 @@ export function parseBarcode(
   return {
     formatId: "",
     formatName: "",
-    values: { ITEM_CODE: "", CATEGORY: "", DATE: "", SEQUENCE: "", BARCODE_ID: "", BATCH: "", CUSTOM: "" },
+    values: { ITEM_CODE: "", ITEM_GROUP: "", DATE: "", SEQUENCE: "", BARCODE_ID: "", BATCH: "", CUSTOM: "" },
     raw: trimmed,
     matched: false,
   };

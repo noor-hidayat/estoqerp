@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "@/lib/session";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Topbar } from "./topbar";
-import { BottomNav } from "./bottom-nav";
 import { ShellLoader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
 import {
@@ -33,15 +32,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main
           className={cn(
             "min-w-0 flex-1 min-h-0 overflow-y-auto px-4 pt-8 sm:px-8 sm:pt-10",
-            isAiChat
-              ? "pb-0"
-              : "pb-[calc(80px+env(safe-area-inset-bottom))] lg:pb-10"
+            isAiChat ? "pb-0" : "pb-10"
           )}
         >
           {children}
         </main>
       </SidebarInset>
-      <BottomNav />
     </SidebarProvider>
   );
 }

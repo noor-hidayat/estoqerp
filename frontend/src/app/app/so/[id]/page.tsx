@@ -7,7 +7,7 @@ import {
   CircleAlert,
   ScanLine,
 } from "lucide-react";
-import { useProject, useProjectStats, useScanSessions, useScanRecords, useUsers, useItemsList, useLocations } from "@/lib/api/query";
+import { useProject, useProjectStats, useProjectSessions } from "@/lib/api/query";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { formatId, formatNumber, relativeTime } from "@/lib/utils";
@@ -20,11 +20,7 @@ export default function ProjectOverviewPage() {
   const { isSystem, permissions } = useSession();
   const { data: project, isLoading: projectLoading } = useProject(params.id);
   const { data: stats, isLoading: statsLoading } = useProjectStats(params.id);
-  const { data: sessions = [] } = useScanSessions({ projectId: params.id });
-  const { data: recordsData } = useScanRecords({ projectId: params.id, pageSize: 10000 });
-  const { data: users = [] } = useUsers();
-  const { data: items = [] } = useItemsList();
-  const { data: locations = [] } = useLocations();
+  const { data: sessionsData, isLoading: sessionsLoading } = useProjectSessions(params.id);
 
   const canView = (menu: string) => can(isSystem, permissions, menu, "view");
   const canSessions = canView("opname.detail.sessions");
@@ -35,16 +31,14 @@ export default function ProjectOverviewPage() {
     return <AccessDenied />;
   }
 
-  if (projectLoading || statsLoading) return <ShellLoader />;
+  if (projectLoading || statsLoading || sessionsLoading) return <ShellLoader />;
   if (!project) return null;
 
-  const records = recordsData?.rows ?? [];
+  const sessions = sessionsData?.sessions ?? [];
   const variance = stats?.variance ?? [];
   const progress = stats?.progress ?? { total: 0, counted: 0, pct: 0 };
-  const totalScanned = records.reduce((acc, r) => acc + r.quantity, 0);
+  const totalScanned = variance.reduce((acc, r) => acc + r.countedQty, 0);
   const diffItems = variance.filter((r) => r.diff !== 0);
-
-  const userName = (id: string) => users.find((u) => u.id === id)?.name ?? "—";
 
   return (
     <div>
@@ -61,7 +55,7 @@ export default function ProjectOverviewPage() {
           compact
           label="Qty counted"
           value={formatNumber(totalScanned)}
-          sub={`${records.length} scan transactions`}
+          sub={`${sessionsData?.totalBarcodes ?? 0} scan transactions`}
           icon={<ScanLine size={16} strokeWidth={2} />}
         />
         <Stat
@@ -89,7 +83,7 @@ export default function ProjectOverviewPage() {
               </h2>
               {canSessions && (
                 <Link
-                  href={`/app/project/so/${project.id}/sessions`}
+                  href={`/app/so/${project.id}/sessions`}
                   className="text-[12px] font-medium text-primary hover:text-primary/80"
                 >
                   View all
@@ -103,45 +97,38 @@ export default function ProjectOverviewPage() {
               </p>
             ) : (
               <div className="divide-y divide-border">
-                {sessions.slice(0, 10).map((s, i) => {
-                  const recs = records
-                    .filter((r) => r.sessionId === s.id)
-                    .sort((a, b) => b.scannedAt.localeCompare(a.scannedAt));
-                  const last = recs[0];
-                  const rQty = recs.reduce((acc, r) => acc + r.quantity, 0);
-                  return (
-                    <Link
-                      key={s.id}
-                      href={
-                        canScan
-                          ? `/app/project/so/${project.id}/scan`
-                          : `/app/project/so/${project.id}/sessions/${s.id}`
-                      }
-                      className={`grid grid-cols-[110px_1fr_72px_90px_110px_96px] items-center gap-3 px-5 py-2.5 transition-colors hover:bg-muted/60 ${
-                        i % 2 === 1 ? "bg-muted/40" : ""
-                      }`}
-                    >
-                      <span className="truncate font-mono text-[11px] font-semibold tracking-tight text-muted-foreground">
-                        {formatId(s.id)}
-                      </span>
-                      <span className="truncate text-[13px] font-medium text-foreground">
-                        {items.find((it) => it.id === last?.itemId)?.name ?? "—"}
-                      </span>
-                      <span className="truncate font-mono text-[11px] text-muted-foreground">
-                        {locations.find((l) => l.id === s.locationId)?.code ?? "—"}
-                      </span>
-                      <span className="text-right font-mono text-[13px] font-semibold text-foreground">
-                        {formatNumber(rQty)}
-                      </span>
-                      <span className="truncate text-[11.5px] text-muted-foreground">
-                        {userName(s.scannedBy)}
-                      </span>
-                      <span className="truncate text-right text-[11px] text-muted-foreground">
-                        {relativeTime(s.startedAt)}
-                      </span>
-                    </Link>
-                  );
-                })}
+                {sessions.slice(0, 10).map((s, i) => (
+                  <Link
+                    key={s.id}
+                    href={
+                      canScan
+                        ? `/app/so/${project.id}/scan`
+                        : `/app/so/${project.id}/sessions/${s.id}`
+                    }
+                    className={`grid grid-cols-[110px_1fr_72px_90px_110px_96px] items-center gap-3 px-5 py-2.5 transition-colors hover:bg-muted/60 ${
+                      i % 2 === 1 ? "bg-muted/40" : ""
+                    }`}
+                  >
+                    <span className="truncate font-mono text-[11px] font-semibold tracking-tight text-muted-foreground">
+                      {formatId(s.id)}
+                    </span>
+                    <span className="truncate text-[13px] font-medium text-foreground">
+                      {s.lastItemName}
+                    </span>
+                    <span className="truncate font-mono text-[11px] text-muted-foreground">
+                      {s.locationCode}
+                    </span>
+                    <span className="text-right font-mono text-[13px] font-semibold text-foreground">
+                      {formatNumber(s.qty)}
+                    </span>
+                    <span className="truncate text-[11.5px] text-muted-foreground">
+                      {s.userName}
+                    </span>
+                    <span className="truncate text-right text-[11px] text-muted-foreground">
+                      {relativeTime(s.startedAt)}
+                    </span>
+                  </Link>
+                ))}
               </div>
             )}
           </div>
@@ -154,7 +141,7 @@ export default function ProjectOverviewPage() {
             </h3>
             {canVariance && (
               <Link
-                href={`/app/project/so/${project.id}/variance`}
+                href={`/app/so/${project.id}/variance`}
                 className="text-[12px] font-medium text-primary hover:text-primary/80"
               >
                 View all

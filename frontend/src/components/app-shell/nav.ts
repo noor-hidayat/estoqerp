@@ -31,12 +31,6 @@ export const NAV: NavGroup[] = [
     title: "Menu",
     items: [
       {
-        label: "Project",
-        href: "/app/project",
-        icon: "FolderKanban",
-        menu: "opname",
-      },
-      {
         label: "Transaction",
         href: "/app/transaction",
         icon: "ArrowLeftRight",
@@ -47,6 +41,18 @@ export const NAV: NavGroup[] = [
         href: "/app/ai",
         icon: "Bot",
         menu: "ai",
+      },
+      {
+        label: "Project",
+        href: "/app/project",
+        icon: "FolderKanban",
+        menu: "opname",
+      },
+      {
+        label: "Stock Opname",
+        href: "/app/so",
+        icon: "ClipboardList",
+        menu: "opname",
       },
     ],
   },
@@ -160,10 +166,10 @@ export const NAV: NavGroup[] = [
             menu: "master.items",
           },
           {
-            label: "Category",
-            href: "/app/data-library/categories",
+            label: "Item Group",
+            href: "/app/data-library/item-groups",
             icon: "Tag",
-            menu: "master.categories",
+            menu: "master.itemGroups",
           },
           {
             label: "Barcode Format",

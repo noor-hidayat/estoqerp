@@ -29,10 +29,10 @@ export default function DataLibraryPage() {
       show: canView("master.items"),
     },
     {
-      label: "Categories",
-      href: "/app/data-library/categories",
+      label: "Item Groups",
+      href: "/app/data-library/item-groups",
       icon: <Tag size={24} strokeWidth={2} />,
-      show: canView("master.categories"),
+      show: canView("master.itemGroups"),
     },
     {
       label: "Barcode Formats",

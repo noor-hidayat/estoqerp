@@ -1,30 +1,57 @@
 import * as React from "react"
-import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select"
+
+interface ParsedOptions {
+  options: SearchableOption[];
+  placeholder: string | null;
+}
+
+function optionsFromChildren(children: React.ReactNode): ParsedOptions {
+  let placeholder: string | null = null;
+  const options: SearchableOption[] = [];
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) return;
+    const props = child.props as React.OptionHTMLAttributes<HTMLOptionElement>;
+    if (typeof (props as { value?: unknown }).value !== "string") return;
+    const value = props.value as string;
+    const text = props.children;
+    const label = typeof text === "string" || typeof text === "number" ? String(text) : "";
+    if (value === "" && label.trim() !== "") {
+      placeholder = label.trim();
+    } else {
+      options.push({ value, label });
+    }
+  });
+  return { options, placeholder };
+}
 
 const NativeSelect = React.forwardRef<
   HTMLSelectElement,
   React.SelectHTMLAttributes<HTMLSelectElement>
->(({ className, children, ...props }, ref) => (
-  <div className={cn("relative w-full", className)}>
-    <select
-      ref={ref}
-      data-slot="native-select"
-      className={cn(
-        "flex h-9 w-full appearance-none rounded-md border border-input bg-transparent px-3 py-1 pr-8 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </select>
-    <ChevronDown
-      size={16}
-      strokeWidth={2}
-      className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-    />
-  </div>
-))
+>(({ className, children, value, onChange, onBlur, disabled, id, name }, ref) => {
+  const selectId = id || name;
+  const { options, placeholder: detectedPlaceholder } = optionsFromChildren(children);
+  return (
+    <div className={cn("relative w-full", className)}>
+      <SearchableSelect
+        inputId={selectId}
+        inputRef={ref as React.Ref<HTMLInputElement>}
+        options={options}
+        value={String(value ?? "")}
+        placeholder={detectedPlaceholder || "Type to search..."}
+        excludeSelected={false}
+        disabled={disabled}
+        onBlur={() => onBlur?.({} as unknown as React.FocusEvent<HTMLSelectElement>)}
+        onChange={(v) => {
+          onChange?.({
+            target: { value: v },
+          } as unknown as React.ChangeEvent<HTMLSelectElement>);
+        }}
+      />
+    </div>
+  )
+})
 NativeSelect.displayName = "NativeSelect"
 
 const NativeSelectOption = React.forwardRef<

@@ -2,14 +2,14 @@
 // offline tanpa hit server. Database ini diisi otomatis saat halaman scan
 // memuat data dari React Query, dan dibaca saat tiap scan.
 
-import type { BarcodeFormat, Category, Item } from "@/types";
+import type { BarcodeFormat, ItemGroup, Item } from "@/types";
 
-const DB_NAME = "stockops-master";
-const DB_VERSION = 1;
+const DB_NAME = "estoq-master";
+const DB_VERSION = 2;
 
 const STORES = {
   items: "items",
-  categories: "categories",
+  itemGroups: "itemGroups",
   barcodeFormats: "barcodeFormats",
   meta: "meta",
 } as const;
@@ -27,11 +27,14 @@ function openDb(): Promise<IDBDatabase> {
         const s = db.createObjectStore(STORES.items, { keyPath: "id" });
         s.createIndex("code", "code", { unique: false });
         s.createIndex("barcodeId", "barcodeId", { unique: false });
-        s.createIndex("categoryId", "categoryId", { unique: false });
+        s.createIndex("itemGroupId", "itemGroupId", { unique: false });
       }
-      if (!db.objectStoreNames.contains(STORES.categories)) {
-        const s = db.createObjectStore(STORES.categories, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(STORES.itemGroups)) {
+        const s = db.createObjectStore(STORES.itemGroups, { keyPath: "id" });
         s.createIndex("code", "code", { unique: false });
+      }
+      if (db.objectStoreNames.contains("categories")) {
+        db.deleteObjectStore("categories");
       }
       if (!db.objectStoreNames.contains(STORES.barcodeFormats)) {
         db.createObjectStore(STORES.barcodeFormats, { keyPath: "id" });
@@ -75,14 +78,14 @@ export async function getAll<T>(store: StoreName): Promise<T[]> {
 
 export async function syncMasterCache(opts: {
   items: Item[];
-  categories: Category[];
+  itemGroups: ItemGroup[];
   barcodeFormats: BarcodeFormat[];
 }) {
   const db = await openDb();
   try {
     await Promise.all([
       clearStore(db, STORES.items).then(() => putAll(db, STORES.items, opts.items)),
-      clearStore(db, STORES.categories).then(() => putAll(db, STORES.categories, opts.categories)),
+      clearStore(db, STORES.itemGroups).then(() => putAll(db, STORES.itemGroups, opts.itemGroups)),
       clearStore(db, STORES.barcodeFormats).then(() => putAll(db, STORES.barcodeFormats, opts.barcodeFormats)),
     ]);
     await setMeta("lastSync", Date.now());

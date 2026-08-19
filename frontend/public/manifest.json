@@ -1,6 +1,6 @@
 {
-  "name": "StockOps",
-  "short_name": "StockOps",
+  "name": "Estoq",
+  "short_name": "Estoq",
   "description": "Sistem Manajemen Stock Opname",
   "start_url": "/",
   "display": "standalone",

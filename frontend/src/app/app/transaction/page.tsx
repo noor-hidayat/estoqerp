@@ -272,7 +272,7 @@ export default function TransactionsPage() {
               <option value="all">All types</option>
               {types.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.code} — {t.name}
+                  {t.name}
                 </option>
               ))}
             </Select>

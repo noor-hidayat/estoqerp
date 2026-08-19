@@ -1,5 +1,5 @@
 -- ===========================================================================
--- LokaWMS — Skema lengkap PostgreSQL (referensi untuk setup manual)
+-- Estoq — Skema lengkap PostgreSQL (referensi untuk setup manual)
 --
 -- Migrasi resmi dikelola dengan Drizzle ORM:
 --   cd backend && npm run db:generate && npm run db:migrate
@@ -128,11 +128,14 @@ create table if not exists locations (
   is_active boolean not null default true      -- [BARU]
 );
 
--- [AKTIF]
-create table if not exists categories (
+-- [AKTIF] Grup item (dulu: categories; tabel groups digabung ke sini).
+create table if not exists item_groups (
   id text primary key,
   code text not null,
-  name text not null
+  name text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 -- [BARU] Satuan (unit of measure).
@@ -141,16 +144,6 @@ create table if not exists uom (
   code text not null unique,
   name text not null,
   created_by text references users (id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
--- [BARU] Grup item (melengkapi categories).
-create table if not exists groups (
-  id text primary key,
-  code text not null unique,
-  name text not null,
-  is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -176,13 +169,12 @@ create table if not exists items (
   code text not null,
   name text not null,
   unit text not null,
-  category_id text not null references categories (id),
+  item_group_id text not null references item_groups (id),
   price integer not null default 0,
   hue integer not null default 200,
   barcode_id text,
   qty integer,
   uom_id text references uom (id),             -- [BARU]
-  group_id text references groups (id),        -- [BARU]
   alternative_code text,                       -- [BARU]
   uom_qty numeric(15,3),                       -- [BARU]
   description text,                            -- [BARU]

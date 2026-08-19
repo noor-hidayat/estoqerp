@@ -178,7 +178,7 @@ export default function BatchesPage() {
               <option value="all">All items</option>
               {items.map((i) => (
                 <option key={i.id} value={i.id}>
-                  {i.code} — {i.name}
+                  {i.name}
                 </option>
               ))}
             </Select>
@@ -190,7 +190,7 @@ export default function BatchesPage() {
               <option value="all">All warehouses</option>
               {warehouses.map((w) => (
                 <option key={w.id} value={w.id}>
-                  {w.code} — {w.name}
+                  {w.name}
                 </option>
               ))}
             </Select>

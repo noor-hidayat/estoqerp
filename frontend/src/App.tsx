@@ -7,18 +7,17 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import LoginPage from "@/app/login/page";
 import AppLayout from "@/app/app/layout";
 import DashboardPage from "@/app/app/page";
-import OpnamePage from "@/app/app/project/so/page";
-import NewOpnamePage from "@/app/app/project/so/new/page";
-import VarianceListPage from "@/app/app/project/so/variance/page";
-import ProjectLayout from "@/app/app/project/so/[id]/layout";
-import ProjectDetailPage from "@/app/app/project/so/[id]/page";
-import ScanPage from "@/app/app/project/so/[id]/scan/page";
-import ProjectVariancePage from "@/app/app/project/so/[id]/variance/page";
-import ScanSessionsPage from "@/app/app/project/so/[id]/sessions/page";
-import ScanSessionDetailPage from "@/app/app/project/so/[id]/sessions/[sessionId]/page";
+import OpnamePage from "@/app/app/so/page";
+import NewOpnamePage from "@/app/app/so/new/page";
+import VarianceListPage from "@/app/app/so/variance/page";
+import ProjectLayout from "@/app/app/so/[id]/layout";
+import ProjectDetailPage from "@/app/app/so/[id]/page";
+import ScanPage from "@/app/app/so/[id]/scan/page";
+import ProjectVariancePage from "@/app/app/so/[id]/variance/page";
+import ScanSessionsPage from "@/app/app/so/[id]/sessions/page";
+import ScanSessionDetailPage from "@/app/app/so/[id]/sessions/[sessionId]/page";
 import ProjectsPage from "@/app/app/project/page";
 import NewProjectPage from "@/app/app/project/new/page";
-import ProjectParentDetailPage from "@/app/app/project/[id]/page";
 import ReportsPage from "@/app/app/report/page";
 import ReportsProjectPage from "@/app/app/report/project/page";
 import ReportsHistoryPage from "@/app/app/report/history/page";
@@ -41,9 +40,9 @@ import EditBranchPage from "@/app/app/data-library/branches/[id]/page";
 import StockWarehousesPage from "@/app/app/data-library/warehouses/page";
 import NewWarehousePage from "@/app/app/data-library/warehouses/new/page";
 import EditWarehousePage from "@/app/app/data-library/warehouses/[id]/page";
-import CategoriesPage from "@/app/app/data-library/categories/page";
-import NewCategoryPage from "@/app/app/data-library/categories/new/page";
-import EditCategoryPage from "@/app/app/data-library/categories/[id]/page";
+import ItemGroupsPage from "@/app/app/data-library/item-groups/page";
+import NewItemGroupPage from "@/app/app/data-library/item-groups/new/page";
+import EditItemGroupPage from "@/app/app/data-library/item-groups/[id]/page";
 import TransactionTypesPage from "@/app/app/data-library/transaction-types/page";
 import NewTransactionTypePage from "@/app/app/data-library/transaction-types/new/page";
 import EditTransactionTypePage from "@/app/app/data-library/transaction-types/[id]/page";
@@ -76,7 +75,7 @@ function HomeRoute() {
   const firstHref =
     navForPermissions((menu) => can(isSystem, permissions, menu, "view"))
       .flatMap((g) => g.items.flatMap((i) => [i.href, ...(i.children ?? []).map((c) => c.href)]))
-      .find((href) => href !== "/app") ?? "/app/project/so";
+      .find((href) => href !== "/app") ?? "/app/so";
   return <Navigate to={firstHref} replace />;
 }
 
@@ -92,11 +91,10 @@ export default function App() {
           <Route index element={<HomeRoute />} />
           <Route path="project" element={<ProjectsPage />} />
           <Route path="project/new" element={<NewProjectPage />} />
-          <Route path="project/:id" element={<ProjectParentDetailPage />} />
-          <Route path="project/so" element={<OpnamePage />} />
-          <Route path="project/so/new" element={<NewOpnamePage />} />
-          <Route path="project/so/variance" element={<VarianceListPage />} />
-          <Route path="project/so/:id" element={<ProjectLayout />}>
+          <Route path="so" element={<OpnamePage />} />
+          <Route path="so/new" element={<NewOpnamePage />} />
+          <Route path="so/variance" element={<VarianceListPage />} />
+          <Route path="so/:id" element={<ProjectLayout />}>
             <Route index element={<ProjectDetailPage />} />
             <Route path="variance" element={<ProjectVariancePage />} />
             <Route
@@ -105,10 +103,10 @@ export default function App() {
             />
           </Route>
           <Route
-            path="project/so/:id/sessions/:sessionId"
+            path="so/:id/sessions/:sessionId"
             element={<ScanSessionDetailPage />}
           />
-          <Route path="project/so/:id/scan" element={<ScanPage />} />
+          <Route path="so/:id/scan" element={<ScanPage />} />
           <Route path="report" element={<ReportsPage />} />
           <Route path="report/project" element={<ReportsProjectPage />} />
           <Route path="report/history" element={<ReportsHistoryPage />} />
@@ -132,9 +130,9 @@ export default function App() {
           <Route path="data-library/warehouses/new" element={<NewWarehousePage />} />
           <Route path="data-library/warehouses/:id" element={<EditWarehousePage />} />
           <Route path="data-library" element={<SetupPage />} />
-          <Route path="data-library/categories" element={<CategoriesPage />} />
-          <Route path="data-library/categories/new" element={<NewCategoryPage />} />
-          <Route path="data-library/categories/:id" element={<EditCategoryPage />} />
+          <Route path="data-library/item-groups" element={<ItemGroupsPage />} />
+          <Route path="data-library/item-groups/new" element={<NewItemGroupPage />} />
+          <Route path="data-library/item-groups/:id" element={<EditItemGroupPage />} />
           <Route path="data-library/transaction-types" element={<TransactionTypesPage />} />
           <Route path="data-library/transaction-types/new" element={<NewTransactionTypePage />} />
           <Route path="data-library/transaction-types/:id" element={<EditTransactionTypePage />} />

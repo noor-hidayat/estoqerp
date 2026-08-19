@@ -30,14 +30,14 @@ function nextSerial(prefix: string, date: Date | string): string {
 }
 
 const fmt =
-  /^(usr|br|wh|loc|cat|itm|stb|fmt|prj)_\d{3,}$|^(ses|rec|ope)_\d{4}_\d{4,}$/;
+  /^(usr|br|wh|loc|cat|igr|itm|stb|fmt|prj)_\d{3,}$|^(ses|rec|ope)_\d{4}_\d{4,}$/;
 
 const ALL_TABLES: AnyPgTable[] = [
   schema.users,
   schema.branches,
   schema.warehouses,
   schema.locations,
-  schema.categories,
+  schema.itemGroups,
   schema.items,
   schema.stockBalances,
   schema.barcodeFormats,
@@ -63,7 +63,7 @@ const FK_ADD: string[] = [
   "ALTER TABLE refresh_tokens ADD CONSTRAINT refresh_tokens_user_id_users_id_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;",
   "ALTER TABLE warehouses ADD CONSTRAINT warehouses_branch_id_branches_id_fk FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE;",
   "ALTER TABLE locations ADD CONSTRAINT locations_warehouse_id_warehouses_id_fk FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE CASCADE;",
-  "ALTER TABLE items ADD CONSTRAINT items_category_id_categories_id_fk FOREIGN KEY (category_id) REFERENCES categories(id);",
+  "ALTER TABLE items ADD CONSTRAINT items_item_group_id_item_groups_id_fk FOREIGN KEY (item_group_id) REFERENCES item_groups(id);",
   "ALTER TABLE projects ADD CONSTRAINT projects_branch_id_branches_id_fk FOREIGN KEY (branch_id) REFERENCES branches(id);",
   "ALTER TABLE projects ADD CONSTRAINT projects_warehouse_id_warehouses_id_fk FOREIGN KEY (warehouse_id) REFERENCES warehouses(id);",
   "ALTER TABLE projects ADD CONSTRAINT projects_created_by_users_id_fk FOREIGN KEY (created_by) REFERENCES users(id);",
@@ -105,7 +105,7 @@ async function main() {
     const branchesAll = await tx.select().from(schema.branches);
     const warehousesAll = await tx.select().from(schema.warehouses);
     const locationsAll = await tx.select().from(schema.locations);
-    const categoriesAll = await tx.select().from(schema.categories);
+    const itemGroupsAll = await tx.select().from(schema.itemGroups);
     const itemsAll = await tx.select().from(schema.items);
     const stockAll = await tx.select().from(schema.stockBalances);
     const formatsAll = await tx.select().from(schema.barcodeFormats);
@@ -138,9 +138,9 @@ async function main() {
       [...locationsAll].sort((a, b) => cmp(a.code, b.code) || cmp(a.id, b.id)),
       () => nextSeq("loc")
     );
-    const categoriesMap = mapOf(
-      [...categoriesAll].sort((a, b) => cmp(a.code, b.code) || cmp(a.id, b.id)),
-      () => nextSeq("cat")
+    const itemGroupsMap = mapOf(
+      [...itemGroupsAll].sort((a, b) => cmp(a.code, b.code) || cmp(a.id, b.id)),
+      () => nextSeq("igr")
     );
     const itemsMap = mapOf(
       [...itemsAll].sort((a, b) => cmp(a.code, b.code) || cmp(a.id, b.id)),
@@ -235,11 +235,11 @@ async function main() {
     }
 
     for (const it of itemsAll) {
-      const cat = get(categoriesMap, it.categoryId);
-      if (cat !== it.categoryId)
+      const ig = get(itemGroupsMap, it.itemGroupId);
+      if (ig !== it.itemGroupId)
         await tx
           .update(schema.items)
-          .set({ categoryId: cat as string })
+          .set({ itemGroupId: ig as string })
           .where(eq(schema.items.id, it.id));
     }
 
@@ -357,7 +357,7 @@ async function main() {
     await setPk(schema.barcodeFormats, formatsMap);
     await setPk(schema.items, itemsMap);
     await setPk(schema.stockBalances, stockMap);
-    await setPk(schema.categories, categoriesMap);
+    await setPk(schema.itemGroups, itemGroupsMap);
     await setPk(schema.locations, locationsMap);
     await setPk(schema.warehouses, warehousesMap);
     await setPk(schema.branches, branchesMap);

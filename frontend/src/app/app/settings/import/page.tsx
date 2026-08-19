@@ -294,7 +294,7 @@ function PreviewStep({
                         const v = row[c.key];
                         const s = v === undefined || v === "" ? "—" : String(v);
                         const missing = c.required && (v === undefined || v === "");
-                        const isCode = c.key === "code" || c.key === "categoryCode" || c.key === "warehouseCode" || c.key === "branchCode" || c.key === "itemCode";
+                        const isCode = c.key === "code" || c.key === "itemGroupCode" || c.key === "warehouseCode" || c.key === "branchCode" || c.key === "itemCode";
                         return (
                           <TableCell
                             key={c.key}

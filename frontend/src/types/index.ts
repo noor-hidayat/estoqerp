@@ -56,7 +56,7 @@ export interface Location {
   name: string;
 }
 
-export interface Category {
+export interface ItemGroup {
   id: string;
   code: string;
   name: string;
@@ -67,13 +67,12 @@ export interface Item {
   code: string;
   name: string;
   unit: string;
-  categoryId: string;
+  itemGroupId: string;
   price: number;
   hue: number;
   barcodeId?: string;
   qty?: number;
   uomId?: string;
-  groupId?: string;
   alternativeCode?: string;
   uomQty?: number;
   description?: string;
@@ -93,7 +92,7 @@ export interface StockBalance {
 
 export type SegmentField =
   | "ITEM_CODE"
-  | "CATEGORY"
+  | "ITEM_GROUP"
   | "DATE"
   | "SEQUENCE"
   | "BARCODE_ID"

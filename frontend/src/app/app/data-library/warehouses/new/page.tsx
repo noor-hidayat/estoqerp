@@ -81,7 +81,7 @@ export default function NewWarehousePage() {
               <option value="">Select branch...</option>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.code} — {b.name}
+                  {b.name}
                 </option>
               ))}
             </Select>

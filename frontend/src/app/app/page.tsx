@@ -107,7 +107,7 @@ export default function DashboardPage() {
           Your role may not have access to this page.
         </p>
         <Button asChild variant="outline" className="mt-4">
-          <Link href="/app/project/so">Open Projects</Link>
+          <Link href="/app/so">Open Projects</Link>
         </Button>
       </Card>
     );
@@ -275,7 +275,7 @@ export default function DashboardPage() {
                   return (
                     <Link
                       key={p.id}
-                      href={`/app/project/${p.id}`}
+                      href={`/app/so?projectId=${p.id}`}
                       className="group block px-6 py-4 transition-colors hover:bg-muted/50"
                     >
                       <div className="flex items-center justify-between gap-3">

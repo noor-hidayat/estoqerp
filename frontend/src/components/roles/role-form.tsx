@@ -73,7 +73,7 @@ const MENU_GROUPS: MenuGroup[] = [
     menus: [
       { key: "master", label: "Master", parent: true },
       { key: "master.items", label: "Item List" },
-      { key: "master.categories", label: "Categories" },
+      { key: "master.itemGroups", label: "Item Groups" },
       { key: "master.barcodeFormats", label: "Barcode Formats" },
       { key: "master.barcodeFormats.new", label: "New Barcode Format" },
       { key: "master.barcodeFormats.edit", label: "Edit Barcode Format" },

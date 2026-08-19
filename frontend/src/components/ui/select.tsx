@@ -4,6 +4,7 @@ import * as React from "react"
 import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 
 const SelectGroup = SelectPrimitive.Group
 const SelectValue = SelectPrimitive.Value
@@ -149,9 +150,34 @@ export interface LegacySelectProps extends React.SelectHTMLAttributes<HTMLSelect
   icon?: React.ReactNode;
 }
 
+interface ParsedOptions {
+  options: { value: string; label: string }[];
+  placeholder: string | null;
+}
+
+function optionsFromChildren(children: React.ReactNode): ParsedOptions {
+  let placeholder: string | null = null;
+  const options: { value: string; label: string }[] = [];
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) return;
+    const props = child.props as React.OptionHTMLAttributes<HTMLOptionElement>;
+    if (typeof (props as { value?: unknown }).value !== "string") return;
+    const value = props.value as string;
+    const text = props.children;
+    const label = typeof text === "string" || typeof text === "number" ? String(text) : "";
+    if (value === "" && label.trim() !== "") {
+      placeholder = label.trim();
+    } else {
+      options.push({ value, label });
+    }
+  });
+  return { options, placeholder };
+}
+
 export const LegacySelect = React.forwardRef<HTMLSelectElement, LegacySelectProps>(
-  function LegacySelect({ label, hint, error, icon, className, children, id, ...props }, ref) {
-    const selectId = id || props.name;
+  function LegacySelect({ label, hint, error, icon, className, children, id, name, value, onChange, disabled, onBlur }, ref) {
+    const selectId = id || name;
+    const { options, placeholder: detectedPlaceholder } = optionsFromChildren(children);
     return (
       <div className="flex flex-col gap-2">
         {label && (
@@ -161,27 +187,25 @@ export const LegacySelect = React.forwardRef<HTMLSelectElement, LegacySelectProp
         )}
         <div className="relative">
           {icon && (
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+            <span className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-muted-foreground">
               {icon}
             </span>
           )}
-          <select
-            ref={ref}
-            id={selectId}
-            className={cn(
-              "flex h-9 w-full appearance-none rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-              error ? "border-destructive focus:ring-destructive" : "border-input",
-              icon ? "pl-10 pr-9" : "pl-3 pr-9",
-              className
-            )}
-            {...props}
-          >
-            {children}
-          </select>
-          <ChevronDown
-            size={14}
-            strokeWidth={2}
-            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          <SearchableSelect
+            inputId={selectId}
+            inputRef={ref as React.Ref<HTMLInputElement>}
+            options={options}
+            value={String(value ?? "")}
+            placeholder={detectedPlaceholder || "Type to search..."}
+            excludeSelected={false}
+            disabled={disabled}
+            className={className}
+            onBlur={() => onBlur?.({} as unknown as React.FocusEvent<HTMLSelectElement>)}
+            onChange={(v) => {
+              onChange?.({
+                target: { value: v },
+              } as unknown as React.ChangeEvent<HTMLSelectElement>);
+            }}
           />
         </div>
         {error ? (

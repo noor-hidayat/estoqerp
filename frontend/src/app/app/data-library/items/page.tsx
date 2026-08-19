@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import {
   useItems,
-  useCategories,
+  useItemGroups,
   useRemove,
 } from "@/lib/api/query";
 import { formatNumber } from "@/lib/utils";
@@ -34,7 +34,7 @@ import {
 export default function ItemsPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [itemGroupFilter, setItemGroupFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -43,11 +43,11 @@ export default function ItemsPage() {
     isLoading: itemsLoading,
   } = useItems({
     query: query || undefined,
-    categoryId: categoryFilter === "all" ? undefined : categoryFilter,
+    itemGroupId: itemGroupFilter === "all" ? undefined : itemGroupFilter,
     page,
     pageSize,
   });
-  const { data: categories, isLoading: categoriesLoading } = useCategories();
+  const { data: itemGroups, isLoading: itemGroupsLoading } = useItemGroups();
   const removeItem = useRemove("items");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -99,11 +99,11 @@ export default function ItemsPage() {
       className: "min-w-[220px]",
     },
     {
-      id: "category",
-      header: "Category",
+      id: "itemGroup",
+      header: "Item Group",
       cell: (item) => (
         <Badge tone="neutral">
-          {(categories ?? []).find((c) => c.id === item.categoryId)?.name ?? "—"}
+          {(itemGroups ?? []).find((c) => c.id === item.itemGroupId)?.name ?? "—"}
         </Badge>
       ),
     },
@@ -113,21 +113,21 @@ export default function ItemsPage() {
       cell: (item) => <span className="whitespace-nowrap text-muted-foreground">{item.unit}</span>,
     },
     {
-      id: "barcode",
-      header: "Barcode",
+      id: "alternativeCode",
+      header: "Alternative Code",
       cell: (item) => (
         <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-          {item.barcodeId || item.code}
+          {item.alternativeCode || "—"}
         </span>
       ),
     },
     {
-      id: "qty",
-      header: "Qty/Box",
+      id: "uomQty",
+      header: "UOM Qty",
       align: "right",
       cell: (item) => (
         <span className="whitespace-nowrap font-mono text-xs">
-          {item.qty != null ? formatNumber(item.qty) : "—"}
+          {item.uomQty != null ? formatNumber(item.uomQty) : "—"}
         </span>
       ),
     },
@@ -183,7 +183,7 @@ export default function ItemsPage() {
         columns={columns}
         data={items}
         getRowId={(item) => item.id}
-        loading={itemsLoading || categoriesLoading}
+        loading={itemsLoading || itemGroupsLoading}
         searchPlaceholder="Search any field..."
         searchValue={query}
         onSearchChange={(q) => {
@@ -192,17 +192,17 @@ export default function ItemsPage() {
         }}
         filters={
           <Select
-            value={categoryFilter}
+            value={itemGroupFilter}
             onChange={(e) => {
-              setCategoryFilter(e.target.value);
+              setItemGroupFilter(e.target.value);
               setPage(1);
             }}
             className="h-8 w-52 text-xs"
           >
-            <option value="all">All categories</option>
-            {(categories ?? []).map((c) => (
+            <option value="all">All item groups</option>
+            {(itemGroups ?? []).map((c) => (
               <option key={c.id} value={c.id}>
-                {c.code} — {c.name}
+                {c.name}
               </option>
             ))}
           </Select>
@@ -238,7 +238,7 @@ export default function ItemsPage() {
         emptyDescription="Add a new item or adjust your search filters."
         onResetFilters={() => {
           setQuery("");
-          setCategoryFilter("all");
+          setItemGroupFilter("all");
           setPage(1);
         }}
       />

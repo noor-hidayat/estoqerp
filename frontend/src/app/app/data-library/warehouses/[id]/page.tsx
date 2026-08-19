@@ -103,7 +103,7 @@ export default function EditWarehousePage() {
             >
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.code} — {b.name}
+                  {b.name}
                 </option>
               ))}
             </Select>

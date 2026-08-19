@@ -51,32 +51,26 @@ export default function ProjectsPage() {
 
   const columns: DataTableColumn<ProjectRow>[] = [
     {
+      id: "id",
+      header: "ID",
+      sortValue: (p) => p.id,
+      cell: (p) => (
+        <span className="font-mono text-[10.5px] font-semibold tracking-tight text-muted-foreground">
+          {p.id}
+        </span>
+      ),
+    },
+    {
       id: "name",
       header: "Project Name",
       sortValue: (p) => p.name,
       cell: (p) => (
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="shrink-0 font-mono text-[10.5px] font-semibold tracking-tight text-muted-foreground">
-            {p.id}
-          </span>
-          <Link
-            to={`/app/project/${p.id}`}
-            className="truncate font-medium text-foreground transition-colors hover:text-primary"
-          >
-            {p.name}
-          </Link>
-        </div>
-      ),
-    },
-    {
-      id: "gudang",
-      header: "Warehouses",
-      align: "center",
-      sortValue: (p) => p.jumlahGudang,
-      cell: (p) => (
-        <span className="font-mono text-[12.5px] tabular-nums text-muted-foreground">
-          {p.jumlahGudang}
-        </span>
+        <Link
+          to={`/app/so?projectId=${p.id}`}
+          className="truncate font-medium text-foreground transition-colors hover:text-primary"
+        >
+          {p.name}
+        </Link>
       ),
     },
     {
@@ -86,6 +80,16 @@ export default function ProjectsPage() {
       cell: (p) => (
         <span className="text-muted-foreground">
             {p.deadline ? new Date(p.deadline).toLocaleDateString("id-ID") : "—"}
+        </span>
+      ),
+    },
+    {
+      id: "warehouse",
+      header: "Warehouse",
+      sortValue: (p) => p.jumlahGudang,
+      cell: (p) => (
+        <span className="font-mono text-[12.5px] tabular-nums text-muted-foreground">
+          {p.jumlahGudang} Warehouse
         </span>
       ),
     },
@@ -128,8 +132,8 @@ export default function ProjectsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => navigate(`/app/project/${p.id}`)}>
-              Details
+            <DropdownMenuItem onClick={() => navigate(`/app/so?projectId=${p.id}`)}>
+              Stock Opname
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
@@ -172,7 +176,7 @@ export default function ProjectsPage() {
         data={(projects ?? []) as ProjectRow[]}
         getRowId={(p) => p.id}
         loading={isLoading}
-        getSearchText={(p) => p.name}
+        getSearchText={(p) => `${p.name} ${p.id} ${p.jumlahGudang}`}
         searchPlaceholder="Search project name..."
         selectable
         selectedKeys={selected}

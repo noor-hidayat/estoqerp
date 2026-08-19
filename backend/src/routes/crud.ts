@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { AnyPgColumn, AnyPgTable } from "drizzle-orm/pg-core";
 import { db } from "../db/pool";
 import * as schema from "../db/schema";
@@ -24,14 +24,13 @@ const ID_PREFIXES: Record<string, string> = {
   branches: "br",
   warehouses: "wh",
   locations: "loc",
-  categories: "cat",
+  itemGroups: "igr",
   items: "itm",
   roles: "role",
   barcodeFormats: "fmt",
   stockBalances: "sb",
   opnameEntries: "ent",
   uom: "uom",
-  groups: "grp",
   movementTypes: "mvt",
   batches: "bat",
   opnameWarehouses: "opw",
@@ -68,8 +67,8 @@ function isForeignKeyViolation(e: unknown): boolean {
 
 // Pesan jelas saat hapus diblokir foreign key (data masih dipakai).
 const DELETE_BLOCK_MESSAGES: Record<string, string> = {
-  categories:
-    "Kategori masih dipakai oleh item — pindahkan item ke kategori lain atau hapus item-nya terlebih dahulu.",
+  itemGroups:
+    "Grup item ini masih dipakai oleh item — pindahkan item ke grup lain atau hapus item-nya terlebih dahulu.",
   items:
     "Item ini masih tercatat dalam hasil stock opname (opname entries) — data opname yang sudah masuk perhitungan tidak bisa dihapus.",
   branches:
@@ -86,8 +85,6 @@ const DELETE_BLOCK_MESSAGES: Record<string, string> = {
     "Tipe transaksi masih dipakai oleh transaksi stok — pindahkan atau hapus transaksi terkait terlebih dahulu.",
   uom:
     "Satuan ini masih dipakai oleh item atau transaksi — pindahkan atau hapus data terkait terlebih dahulu.",
-  groups:
-    "Grup item ini masih dipakai oleh item — pindahkan atau hapus item terkait terlebih dahulu.",
   batches:
     "Batch ini masih tercatat dalam transaksi atau ledger — hapus data terkait terlebih dahulu.",
 };
@@ -132,7 +129,7 @@ const CRUD_TABLES: Record<string, AnyPgTable> = {
   branches: schema.branches,
   warehouses: schema.warehouses,
   locations: schema.locations,
-  categories: schema.categories,
+  itemGroups: schema.itemGroups,
   items: schema.items,
   stockBalances: schema.stockBalances,
   barcodeFormats: schema.barcodeFormats,
@@ -142,7 +139,6 @@ const CRUD_TABLES: Record<string, AnyPgTable> = {
   opnameEntries: schema.opnameEntries,
   userSettings: schema.userSettings,
   uom: schema.uom,
-  groups: schema.groups,
   movementTypes: schema.movementTypes,
   stockMovements: schema.stockMovements,
   stockMovementDetails: schema.stockMovementDetails,
@@ -271,7 +267,7 @@ const TABLE_MENU: Record<string, string | string[]> = {
   warehouses: "inventory",
   locations: "inventory",
   stockBalances: "inventory",
-  categories: "master",
+  itemGroups: "master",
   items: "master",
   barcodeFormats: "master",
   projects: "opname",
@@ -282,7 +278,6 @@ const TABLE_MENU: Record<string, string | string[]> = {
   opnameEntries: "opname",
   userSettings: "opname.variance.column",
   uom: "master",
-  groups: "master",
   movementTypes: "master.movementTypes",
   stockMovements: "inventory.transactions",
   stockMovementDetails: "inventory.transactions",
@@ -378,7 +373,7 @@ const SORT_COLS: Record<string, AnyPgColumn> = {
   items: schema.items.code,
   warehouses: schema.warehouses.code,
   locations: schema.locations.code,
-  categories: schema.categories.code,
+  itemGroups: schema.itemGroups.code,
   branches: schema.branches.code,
   projects: schema.projects.createdAt,
   scanSessions: schema.scanSessions.startedAt,
@@ -388,7 +383,6 @@ const SORT_COLS: Record<string, AnyPgColumn> = {
   roles: schema.roles.name,
   barcodeFormats: schema.barcodeFormats.updatedAt,
   uom: schema.uom.code,
-  groups: schema.groups.code,
   movementTypes: schema.movementTypes.code,
   stockMovements: schema.stockMovements.movementDate,
   stockLedger: schema.stockLedger.transactionDate,
@@ -408,8 +402,8 @@ function getOrderBy(req: Request, tableName: string) {
 // Kolom yang dicari via param `query` — filter dilakukan di SQL
 // (SELECT * FROM t WHERE <col> ILIKE ...), bukan ambil semua lalu filter.
 const SEARCHABLE_COLS: Record<string, AnyPgColumn[]> = {
+  itemGroups: [schema.itemGroups.code, schema.itemGroups.name],
   uom: [schema.uom.code, schema.uom.name],
-  groups: [schema.groups.code, schema.groups.name],
   movementTypes: [schema.movementTypes.code, schema.movementTypes.name],
   batches: [schema.batches.batchNumber, schema.batches.status],
   stockBatches: [schema.stockBatches.batchId],
@@ -423,9 +417,8 @@ const SEARCHABLE_COLS: Record<string, AnyPgColumn[]> = {
     schema.items.code,
     schema.items.name,
     schema.items.unit,
-    schema.items.barcodeId,
-    schema.items.categoryId,
-    schema.items.price,
+    schema.items.alternativeCode,
+    schema.items.itemGroupId,
     schema.items.id,
   ],
 };
@@ -592,8 +585,8 @@ async function buildWhere(req: Request, table: AnyPgTable, tableName: string) {
     if (warehouseId) conditions.push(eq(s.locations.warehouseId, warehouseId));
   }
   if (tableName === "items") {
-    const categoryId = queryStr(req, "categoryId");
-    if (categoryId) conditions.push(eq(s.items.categoryId, categoryId));
+    const itemGroupId = queryStr(req, "itemGroupId");
+    if (itemGroupId) conditions.push(eq(s.items.itemGroupId, itemGroupId));
   }
   const q = queryStr(req, "query");
   if (q) {
@@ -724,9 +717,9 @@ async function stockBalanceConds(req: Request): Promise<ReturnType<typeof sql> |
       )
       OR EXISTS (
         SELECT 1 FROM ${s.items} i2
-          JOIN ${s.categories} ON ${s.categories.id} = i2."category_id"
+          JOIN ${s.itemGroups} ON ${s.itemGroups.id} = i2."item_group_id"
           WHERE i2.id = ${s.stockBalances.itemId}
-            AND ${s.categories.name}::text ILIKE ${p}
+            AND ${s.itemGroups.name}::text ILIKE ${p}
       )
     )`);
   }
@@ -734,7 +727,7 @@ async function stockBalanceConds(req: Request): Promise<ReturnType<typeof sql> |
 }
 
 // GET /stock-balances/ledger?page=&pageSize=&query=&warehouseId=&itemId=
-// Join stockBalances × items × warehouses × categories dengan pagination
+// Join stockBalances × items × warehouses × item_groups dengan pagination
 // server-side (dipakai halaman Stock Balance).
 crudRouter.get("/stock-balances/ledger", async (req, res) => {
   if (!(await checkTablePermission(req, res, "stockBalances", "view"))) return;
@@ -758,7 +751,7 @@ crudRouter.get("/stock-balances/ledger", async (req, res) => {
         itemId: schema.stockBalances.itemId,
         code: schema.items.code,
         name: schema.items.name,
-        category: schema.categories.name,
+        itemGroup: schema.itemGroups.name,
         warehouse: schema.warehouses.name,
         openingQty: schema.stockBalances.openingQty,
         inQty: schema.stockBalances.inQty,
@@ -768,7 +761,7 @@ crudRouter.get("/stock-balances/ledger", async (req, res) => {
       .from(schema.stockBalances)
       .leftJoin(schema.items, eq(schema.items.id, schema.stockBalances.itemId))
       .leftJoin(schema.warehouses, eq(schema.warehouses.id, schema.stockBalances.warehouseId))
-      .leftJoin(schema.categories, eq(schema.categories.id, schema.items.categoryId))
+      .leftJoin(schema.itemGroups, eq(schema.itemGroups.id, schema.items.itemGroupId))
       .where(whereCond ?? undefined)
       .orderBy(
         sql`${schema.items.code} ASC NULLS LAST`,
@@ -819,9 +812,30 @@ crudRouter.get("/stock-balances/summary", async (req, res) => {
 // GET /:table/:id — single row
 // ---- Special endpoints (registered before generic /:table routes) ----
 
+// GET /item-groups/counts — jumlah item per item group (untuk kolom
+// "Item Count" di daftar Item Groups, tanpa harus memuat semua items).
+crudRouter.get("/item-groups/counts", async (req, res) => {
+  if (!(await checkTablePermission(req, res, "itemGroups", "view"))) return;
+  try {
+    const rows = await db
+      .select({
+        itemGroupId: schema.items.itemGroupId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(schema.items)
+      .where(sql`${schema.items.itemGroupId} is not null`)
+      .groupBy(schema.items.itemGroupId);
+
+    res.json({
+      counts: Object.fromEntries(rows.map((r) => [r.itemGroupId, Number(r.count)])),
+    });
+  } catch (e) {
+    res.status(500).json({ error: messageOf(e) });
+  }
+});
+
 // GET /items/lookup?barcode=&formatId?
-crudRouter.get("/items/lookup", async (req, res) => {
-  if (!req.user) {
+crudRouter.get("/items/lookup", async (req, res) => {  if (!req.user) {
     res.status(401).json({ error: "Tidak terautentikasi." });
     return;
   }
@@ -840,7 +854,7 @@ crudRouter.get("/items/lookup", async (req, res) => {
       ? await db.select().from(schema.barcodeFormats).where(eq(schema.barcodeFormats.id, formatId)).limit(1)
       : await db.select().from(schema.barcodeFormats).where(eq(schema.barcodeFormats.isActive, true));
 
-    const categoriesAll = await db.select().from(schema.categories);
+    const itemGroupsAll = await db.select().from(schema.itemGroups);
     const itemsAll = await db.select().from(schema.items);
 
     for (const fmt of formats) {
@@ -849,30 +863,30 @@ crudRouter.get("/items/lookup", async (req, res) => {
 
       const values: Record<string, string> = {};
       let itemCode: string | null = null;
-      let categoryCode: string | null = null;
+      let itemGroupCode: string | null = null;
       let barcodeId: string | null = null;
 
       for (const seg of segments) {
         const val = barcode.slice(seg.start - 1, seg.end);
         values[seg.field] = val;
         if (seg.field === "ITEM_CODE") itemCode = val;
-        if (seg.field === "CATEGORY") categoryCode = val;
+        if (seg.field === "ITEM_GROUP") itemGroupCode = val;
         if (seg.field === "BARCODE_ID") barcodeId = val;
       }
 
       if (barcodeId) {
         const item = itemsAll.find((it) => it.barcodeId === barcodeId);
         if (item) {
-          const cat = categoriesAll.find((c) => c.id === item.categoryId) ?? null;
-          res.json({ found: true, item, category: cat ? { id: cat.id, code: cat.code, name: cat.name } : null, matched: true, formatId: fmt.id, formatName: fmt.name, values });
+          const ig = itemGroupsAll.find((c) => c.id === item.itemGroupId) ?? null;
+          res.json({ found: true, item, itemGroup: ig ? { id: ig.id, code: ig.code, name: ig.name } : null, matched: true, formatId: fmt.id, formatName: fmt.name, values });
           return;
         }
       }
       if (itemCode) {
         const item = itemsAll.find((it) => it.code.toLowerCase() === itemCode!.toLowerCase());
         if (item) {
-          const cat = categoriesAll.find((c) => categoryCode ? c.code.toLowerCase() === categoryCode.toLowerCase() : c.id === item.categoryId) ?? null;
-          res.json({ found: true, item, category: cat ? { id: cat.id, code: cat.code, name: cat.name } : null, matched: true, formatId: fmt.id, formatName: fmt.name, values });
+          const ig = itemGroupsAll.find((c) => itemGroupCode ? c.code.toLowerCase() === itemGroupCode.toLowerCase() : c.id === item.itemGroupId) ?? null;
+          res.json({ found: true, item, itemGroup: ig ? { id: ig.id, code: ig.code, name: ig.name } : null, matched: true, formatId: fmt.id, formatName: fmt.name, values });
           return;
         }
       }
@@ -931,6 +945,107 @@ crudRouter.get("/scan-records/check", async (req, res) => {
         scannedAt: record.scannedAt,
       },
     });
+  } catch (e) {
+    res.status(500).json({ error: messageOf(e) });
+  }
+});
+
+// GET /projects/:id/sessions — sessions + nama user/lokasi, qty, barcode,
+// item terakhir, dan agregat proyek. Menghindari fetch semua items/locations/
+// users/scanRecords di client.
+crudRouter.get("/projects/:id/sessions", async (req, res) => {
+  if (!(await checkPermission(req, res, "opname", "view"))) return;
+  try {
+    const projectId = paramString(req, "id");
+    const [project] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId)).limit(1);
+    if (!project) { res.status(404).json({ error: "Project tidak ditemukan." }); return; }
+
+    const sessions = await db
+      .select({
+        id: schema.scanSessions.id,
+        projectId: schema.scanSessions.projectId,
+        locationId: schema.scanSessions.locationId,
+        scannedBy: schema.scanSessions.scannedBy,
+        startedAt: schema.scanSessions.startedAt,
+        endedAt: schema.scanSessions.endedAt,
+        status: schema.scanSessions.status,
+        userName: schema.users.name,
+        locationCode: schema.locations.code,
+      })
+      .from(schema.scanSessions)
+      .leftJoin(schema.users, eq(schema.scanSessions.scannedBy, schema.users.id))
+      .leftJoin(schema.locations, eq(schema.scanSessions.locationId, schema.locations.id))
+      .where(eq(schema.scanSessions.projectId, projectId))
+      .orderBy(desc(schema.scanSessions.startedAt), desc(schema.scanSessions.id));
+
+    const [projAgg] = await db
+      .select({
+        barcodes: sql<number>`count(*)`,
+        qty: sql<number>`coalesce(sum(${schema.scanRecords.quantity}), 0)`,
+        itemCount: sql<number>`count(distinct ${schema.scanRecords.itemId})`,
+      })
+      .from(schema.scanRecords)
+      .where(eq(schema.scanRecords.projectId, projectId));
+
+    const aggMap = new Map<string, { barcodes: number; qty: number; itemCount: number }>();
+    if (sessions.length > 0) {
+      const sessionIds = sessions.map((x) => x.id);
+      const aggRows = await db
+        .select({
+          sessionId: schema.scanRecords.sessionId,
+          barcodes: sql<number>`count(*)`,
+          qty: sql<number>`coalesce(sum(${schema.scanRecords.quantity}), 0)`,
+          itemCount: sql<number>`count(distinct ${schema.scanRecords.itemId})`,
+        })
+        .from(schema.scanRecords)
+        .where(inArray(schema.scanRecords.sessionId, sessionIds))
+        .groupBy(schema.scanRecords.sessionId);
+      for (const r of aggRows) aggMap.set(r.sessionId, r);
+
+      const lastRows = await db
+        .selectDistinctOn([schema.scanRecords.sessionId], {
+          sessionId: schema.scanRecords.sessionId,
+          itemId: schema.scanRecords.itemId,
+          itemName: schema.items.name,
+          itemUnit: schema.items.unit,
+        })
+        .from(schema.scanRecords)
+        .leftJoin(schema.items, eq(schema.scanRecords.itemId, schema.items.id))
+        .where(inArray(schema.scanRecords.sessionId, sessionIds))
+        .orderBy(
+          asc(schema.scanRecords.sessionId),
+          desc(schema.scanRecords.scannedAt),
+          desc(schema.scanRecords.id)
+        );
+      for (const r of lastRows) {
+        if (r.sessionId && !aggMap.has(r.sessionId)) aggMap.set(r.sessionId, { barcodes: 0, qty: 0, itemCount: 0 });
+      }
+      const lastMap = new Map(lastRows.filter((r) => !!r.sessionId).map((r) => [r.sessionId as string, r]));
+      const enriched = sessions.map((sess) => {
+        const agg = aggMap.get(sess.id);
+        const last = lastMap.get(sess.id);
+        return {
+          ...sess,
+          userName: sess.userName ?? "—",
+          locationCode: sess.locationCode ?? "—",
+          barcodes: Number(agg?.barcodes ?? 0),
+          qty: Number(agg?.qty ?? 0),
+          itemCount: Number(agg?.itemCount ?? 0),
+          lastItemId: last?.itemId ?? null,
+          lastItemName: last?.itemName ?? "—",
+          lastItemUnit: last?.itemUnit ?? "—",
+        };
+      });
+      res.json({
+        sessions: enriched,
+        totalBarcodes: Number(projAgg?.barcodes ?? 0),
+        totalQty: Number(projAgg?.qty ?? 0),
+        itemCount: Number(projAgg?.itemCount ?? 0),
+      });
+      return;
+    }
+
+    res.json({ sessions: [], totalBarcodes: 0, totalQty: 0, itemCount: 0 });
   } catch (e) {
     res.status(500).json({ error: messageOf(e) });
   }
