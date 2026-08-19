@@ -13,7 +13,6 @@ export default function NewTransactionPage() {
     <MenuGate menu="inventory.transactions">
       <MovementForm
         title="New Transaction"
-        description="Transfer antar gudang, receiving, atau issuing — posting akan langsung mengubah stock balance dan mencatat ke ledger."
         submitLabel="Save Transaction"
         onSubmit={async (input) => {
           const res = await create.mutateAsync(input);

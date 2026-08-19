@@ -23,7 +23,7 @@ import {
   FormGrid,
   FormActions,
 } from "@/components/ui/form-page";
-import { SegmentBar, FIELD_COLORS, FIELD_LABEL_SHORT } from "./segment-visualizer";
+import { SegmentBar, fieldColor, fieldLabelShort } from "./segment-visualizer";
 import { cx } from "@/lib/utils";
 import { nextSegId } from "@/lib/mock/store";
 
@@ -76,7 +76,7 @@ function SegmentRow({
   onChange: (next: BarcodeSegment) => void;
   onRemove: () => void;
 }) {
-  const c = FIELD_COLORS[segment.field];
+  const c = fieldColor(segment.field);
   const issues = segmentIssues(segment, segments, barcodeLength);
 
   return (
@@ -95,7 +95,7 @@ function SegmentRow({
             c.text
           )}
         >
-          {FIELD_LABEL_SHORT[segment.field]}
+          {fieldLabelShort(segment.field)}
         </span>
         <Select
           value={segment.field}

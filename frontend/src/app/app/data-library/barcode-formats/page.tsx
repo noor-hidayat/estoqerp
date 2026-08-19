@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useBarcodeFormats, useUpdate } from "@/lib/api/query";
 import { formatDate } from "@/lib/utils";
-import { SEGMENT_FIELD_LABELS, sortSegments } from "@/lib/barcode/parser";
+import { sortSegments } from "@/lib/barcode/parser";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -19,7 +19,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { ShellLoader } from "@/components/ui/loader";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
-import { FIELD_COLORS, FIELD_LABEL_SHORT } from "@/components/barcode/segment-visualizer";
+import { fieldColor, fieldLabelShort } from "@/components/barcode/segment-visualizer";
 import { cx } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -33,7 +33,7 @@ function SegmentChips({ segments }: { segments: BarcodeSegment[] }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {sortSegments(segments).map((seg) => {
-        const c = FIELD_COLORS[seg.field];
+        const c = fieldColor(seg.field);
         return (
           <span
             key={seg.id}
@@ -42,11 +42,11 @@ function SegmentChips({ segments }: { segments: BarcodeSegment[] }) {
               c.bg,
               c.text
             )}
-            title={SEGMENT_FIELD_LABELS[seg.field]}
+            title={fieldLabelShort(seg.field)}
           >
             {seg.start}–{seg.end}
             <span className="opacity-60">·</span>
-            {FIELD_LABEL_SHORT[seg.field]}
+            {fieldLabelShort(seg.field)}
           </span>
         );
       })}

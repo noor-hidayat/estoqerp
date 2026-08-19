@@ -22,6 +22,16 @@ export const FIELD_LABEL_SHORT: Record<SegmentField, string> = {
   CUSTOM: "Cust.",
 };
 
+/** Warna aman untuk field apa pun — field tak dikenal jatuh ke CUSTOM. */
+export function fieldColor(field: string): { bg: string; text: string; dot: string; border: string } {
+  return FIELD_COLORS[field as SegmentField] ?? FIELD_COLORS.CUSTOM;
+}
+
+/** Label aman — field tak dikenal memakai nama aslinya. */
+export function fieldLabelShort(field: string): string {
+  return FIELD_LABEL_SHORT[field as SegmentField] ?? field;
+}
+
 function coveringSegments(
   sorted: BarcodeSegment[],
   i: number
@@ -49,7 +59,7 @@ export function SegmentBar({
     }
     const seg = covering[0];
     if (!seg) return "bg-muted text-muted-foreground/40";
-    const color = FIELD_COLORS[seg.field];
+    const color = fieldColor(seg.field);
     return cx(color.bg, color.text);
   };
 
@@ -58,11 +68,11 @@ export function SegmentBar({
     if (covering.length === 0) return "No segment";
     if (covering.length > 1) {
       return `Overlap: ${covering
-        .map((s) => `${s.start}–${s.end} ${FIELD_LABEL_SHORT[s.field]}`)
+        .map((s) => `${s.start}–${s.end} ${fieldLabelShort(s.field)}`)
         .join(", ")}`;
     }
     const seg = covering[0];
-    return `${FIELD_LABEL_SHORT[seg.field]} ${seg.start}–${seg.end}`;
+    return `${fieldLabelShort(seg.field)} ${seg.start}–${seg.end}`;
   };
 
   return (
@@ -97,10 +107,10 @@ export function SegmentBar({
                       "mt-0.5 text-[8px] font-semibold uppercase tracking-wide",
                       covering.length > 1
                         ? "text-red-500"
-                        : FIELD_COLORS[seg.field].text
+                        : fieldColor(seg.field).text
                     )}
                   >
-                    {seg.start === i ? FIELD_LABEL_SHORT[seg.field] : ""}
+                    {seg.start === i ? fieldLabelShort(seg.field) : ""}
                   </span>
                 )}
               </div>
@@ -111,7 +121,7 @@ export function SegmentBar({
       {!sample && (
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {sorted.map((seg) => {
-            const c = FIELD_COLORS[seg.field];
+            const c = fieldColor(seg.field);
             const overlapping = sorted.some(
               (o) =>
                 o.id !== seg.id && !(o.end < seg.start || o.start > seg.end)
@@ -125,7 +135,7 @@ export function SegmentBar({
                 )}
               >
                 <span className={cx("h-1.5 w-1.5 rounded-full", overlapping ? "bg-red-500" : c.dot)} />
-                {seg.start}–{seg.end} · {FIELD_LABEL_SHORT[seg.field]}
+                {seg.start}–{seg.end} · {fieldLabelShort(seg.field)}
               </span>
             );
           })}
