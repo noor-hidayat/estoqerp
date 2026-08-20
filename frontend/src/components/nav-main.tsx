@@ -29,6 +29,7 @@ import {
   Warehouse,
   Bot,
   ClipboardList,
+  Ruler,
   type LucideIcon,
 } from "lucide-react"
 import Link from "next/link"
@@ -78,6 +79,7 @@ const ICONS: Record<string, LucideIcon> = {
   NotebookText,
   Layers,
   ClipboardList,
+  Ruler,
 }
 
 function isActive(href: string, pathname: string): boolean {

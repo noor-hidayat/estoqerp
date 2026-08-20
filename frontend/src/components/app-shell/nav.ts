@@ -172,6 +172,12 @@ export const NAV: NavGroup[] = [
             menu: "master.itemGroups",
           },
           {
+            label: "UOM",
+            href: "/app/data-library/uom",
+            icon: "Ruler",
+            menu: "master.uom",
+          },
+          {
             label: "Barcode Format",
             href: "/app/data-library/barcode-formats",
             icon: "Barcode",

@@ -57,6 +57,11 @@ interface MovementInput {
   details: DetailInput[];
 }
 
+/** Error validasi yang layak dikirim ke klien (stok kurang, dll). */
+class StockError extends Error {
+  status = 400;
+}
+
 const DEFAULT_PAGE_SIZE = 20;
 
 /** Validasi arah gudang berdasarkan tipe transaksi (RECEIPT/ISSUE/TRANSFER). */
@@ -215,16 +220,54 @@ async function resolveBatch(
  */
 async function applyMovementEffect(
   tx: Tx,
-  movement: { id: string; typeId: string; referenceType: string | null; referenceId: string | null },
+  movement: { id: string; typeId: string; movementNumber: string; referenceType: string | null; referenceId: string | null },
   typeCode: string,
   details: EffectDetail[],
   actorId: string
 ) {
   const now = new Date();
 
+  // --- 0. Validasi stok gudang asal mencukupi (agregat per warehouse+item) ---
+  const outNeeds = new Map<string, number>();
+  const keyOf = (wh: string, it: string) => `${wh}|${it}`;
+  for (const d of details) {
+    if (d.fromWarehouseId) {
+      const k = keyOf(d.fromWarehouseId, d.itemId);
+      outNeeds.set(k, (outNeeds.get(k) ?? 0) + d.qty);
+    }
+  }
+  for (const [k, need] of outNeeds.entries()) {
+    const [warehouseId, itemId] = k.split("|");
+    const [existing] = await tx
+      .select({
+        closingQty: schema.stockBalances.closingQty,
+        itemName: schema.items.name,
+        warehouseName: schema.warehouses.name,
+      })
+      .from(schema.stockBalances)
+      .innerJoin(schema.items, eq(schema.items.id, schema.stockBalances.itemId))
+      .innerJoin(schema.warehouses, eq(schema.warehouses.id, schema.stockBalances.warehouseId))
+      .where(
+        and(
+          eq(schema.stockBalances.warehouseId, warehouseId),
+          eq(schema.stockBalances.itemId, itemId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    const available = Number(existing?.closingQty ?? 0);
+    if (available < need) {
+      const itemName = existing?.itemName ?? itemId;
+      const whName = existing?.warehouseName ?? warehouseId;
+      const shortage = need - available;
+      throw new StockError(
+        `Stok "${itemName}" di ${whName} tidak mencukupi: tersedia ${available}, dibutuhkan ${need}, kurang ${shortage}.`
+      );
+    }
+  }
+
   // --- 1. Update stock_balances agregat ---
   const aggSeen = new Map<string, number>();
-  const keyOf = (wh: string, it: string) => `${wh}|${it}`;
   for (const d of details) {
     if (d.fromWarehouseId) {
       const k = keyOf(d.fromWarehouseId, d.itemId);
@@ -314,7 +357,9 @@ async function applyMovementEffect(
     const prev = Number(row?.qty ?? 0);
     const next = prev + delta;
     if (next < 0) {
-      throw new Error(`Stok batch tidak mencukupi di gudang tujuan pengeluaran.`);
+      throw new StockError(
+        `Stok batch tidak mencukupi di gudang asal: tersedia ${prev}, dibutuhkan ${-delta} untuk batch ${batchId}.`
+      );
     }
     if (row) {
       await tx
@@ -359,7 +404,7 @@ async function applyMovementEffect(
         qtyOut: String(outDelta),
         qtyBalance: String(balance),
         referenceType: movement.referenceType ?? "STOCK_MOVEMENT",
-        referenceId: movement.referenceId ?? movement.id,
+        referenceId: movement.referenceId ?? movement.movementNumber,
         batchId: d.batchId,
         createdBy: actorId,
       });
@@ -423,7 +468,7 @@ async function insertMovementWithDetails(
   if (input.status === "POSTED") {
     await applyMovementEffect(
       tx,
-      { id: movementId, typeId: input.typeId, referenceType: input.referenceType, referenceId: input.referenceId },
+      { id: movementId, typeId: input.typeId, movementNumber, referenceType: input.referenceType, referenceId: input.referenceId },
       type.code,
       effectDetails,
       actorId
@@ -471,20 +516,29 @@ transactionsRouter.get("/", async (req: Request, res: Response) => {
   if (q) {
     const p = `%${q}%`;
     const s = schema;
-    conditions.push(sql`(
-      ${s.stockMovements.movementNumber}::text ILIKE ${p}
-      OR ${s.stockMovements.description}::text ILIKE ${p}
-      OR ${s.stockMovements.referenceId}::text ILIKE ${p}
-      OR EXISTS (
-        SELECT 1 FROM ${s.movementTypes} WHERE ${s.movementTypes.id} = ${s.stockMovements.typeId}
-          AND (${s.movementTypes.code}::text ILIKE ${p} OR ${s.movementTypes.name}::text ILIKE ${p})
-      )
-    )`);
+    conditions.push(sql`${s.stockMovements.movementNumber}::text ILIKE ${p}`);
   }
   const status = typeof req.query.status === "string" && req.query.status ? req.query.status : null;
   if (status) conditions.push(sql`${schema.stockMovements.status} = ${status}`);
   const typeId = typeof req.query.typeId === "string" && req.query.typeId ? req.query.typeId : null;
   if (typeId) conditions.push(eq(schema.stockMovements.typeId, typeId));
+
+  const fromWarehouseId = typeof req.query.fromWarehouseId === "string" && req.query.fromWarehouseId ? req.query.fromWarehouseId : null;
+  if (fromWarehouseId) {
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM ${schema.stockMovementDetails}
+      WHERE ${schema.stockMovementDetails.movementId} = ${schema.stockMovements.id}
+        AND ${schema.stockMovementDetails.fromWarehouseId} = ${fromWarehouseId}
+    )`);
+  }
+  const toWarehouseId = typeof req.query.toWarehouseId === "string" && req.query.toWarehouseId ? req.query.toWarehouseId : null;
+  if (toWarehouseId) {
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM ${schema.stockMovementDetails}
+      WHERE ${schema.stockMovementDetails.movementId} = ${schema.stockMovements.id}
+        AND ${schema.stockMovementDetails.toWarehouseId} = ${toWarehouseId}
+    )`);
+  }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -646,6 +700,10 @@ transactionsRouter.post("/", async (req: Request, res: Response) => {
     res.status(201).json({ id });
   } catch (e) {
     console.error("POST /transactions", e);
+    if (e instanceof StockError) {
+      res.status(e.status).json({ error: e.message });
+      return;
+    }
     res.status(500).json({ error: "Gagal membuat transaksi." });
   }
 });
@@ -657,7 +715,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "inventory.transactions", "update"))) return;
 
   const [existing] = await db
-    .select({ status: schema.stockMovements.status })
+    .select({ status: schema.stockMovements.status, movementNumber: schema.stockMovements.movementNumber })
     .from(schema.stockMovements)
     .where(eq(schema.stockMovements.id, param(req, "id")))
     .limit(1);
@@ -732,7 +790,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
       if (input.status === "POSTED") {
         await applyMovementEffect(
           tx,
-          { id: param(req, "id"), typeId: input.typeId, referenceType: input.referenceType, referenceId: input.referenceId },
+          { id: param(req, "id"), typeId: input.typeId, movementNumber: existing.movementNumber, referenceType: input.referenceType, referenceId: input.referenceId },
           type.code,
           effectDetails,
           req.user!.id
@@ -742,6 +800,10 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
     res.json({ ok: true });
   } catch (e) {
     console.error("PATCH /transactions", e);
+    if (e instanceof StockError) {
+      res.status(e.status).json({ error: e.message });
+      return;
+    }
     res.status(500).json({ error: "Gagal menyimpan transaksi." });
   }
 });
@@ -755,6 +817,7 @@ transactionsRouter.post("/:id/post", async (req: Request, res: Response) => {
   const [movement] = await db
     .select({
       id: schema.stockMovements.id,
+      movementNumber: schema.stockMovements.movementNumber,
       typeId: schema.stockMovements.typeId,
       status: schema.stockMovements.status,
       referenceType: schema.stockMovements.referenceType,
@@ -820,6 +883,10 @@ transactionsRouter.post("/:id/post", async (req: Request, res: Response) => {
     res.json({ ok: true });
   } catch (e) {
     console.error("POST /transactions/:id/post", e);
+    if (e instanceof StockError) {
+      res.status(e.status).json({ error: e.message });
+      return;
+    }
     res.status(500).json({ error: "Gagal memposting transaksi." });
   }
 });

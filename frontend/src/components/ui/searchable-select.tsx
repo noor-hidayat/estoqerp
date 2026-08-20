@@ -19,6 +19,7 @@ export function SearchableSelect({
   maxSuggestions = 6,
   disabled = false,
   excludeSelected = true,
+  compact = false,
   inputId,
   inputRef,
   onBlur,
@@ -33,6 +34,7 @@ export function SearchableSelect({
   maxSuggestions?: number;
   disabled?: boolean;
   excludeSelected?: boolean;
+  compact?: boolean;
   inputId?: string;
   inputRef?: React.Ref<HTMLInputElement>;
   onBlur?: () => void;
@@ -141,7 +143,10 @@ export function SearchableSelect({
             placeholder={placeholder}
             disabled={disabled}
             readOnly={disabled}
-            className="flex h-10 w-full items-center rounded-md border border-input bg-background px-3.5 pr-9 text-sm text-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className={cx(
+              "flex w-full items-center rounded-md border border-input bg-background text-sm text-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring disabled:cursor-not-allowed disabled:opacity-50",
+              compact ? "h-8 px-2.5 pr-7 text-xs" : "h-10 px-3.5 pr-9"
+            )}
           />
           <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
             {selected && !disabled && (

@@ -43,6 +43,9 @@ import EditWarehousePage from "@/app/app/data-library/warehouses/[id]/page";
 import ItemGroupsPage from "@/app/app/data-library/item-groups/page";
 import NewItemGroupPage from "@/app/app/data-library/item-groups/new/page";
 import EditItemGroupPage from "@/app/app/data-library/item-groups/[id]/page";
+import UomPage from "@/app/app/data-library/uom/page";
+import NewUomPage from "@/app/app/data-library/uom/new/page";
+import EditUomPage from "@/app/app/data-library/uom/[id]/page";
 import TransactionTypesPage from "@/app/app/data-library/transaction-types/page";
 import NewTransactionTypePage from "@/app/app/data-library/transaction-types/new/page";
 import EditTransactionTypePage from "@/app/app/data-library/transaction-types/[id]/page";
@@ -133,6 +136,9 @@ export default function App() {
           <Route path="data-library/item-groups" element={<ItemGroupsPage />} />
           <Route path="data-library/item-groups/new" element={<NewItemGroupPage />} />
           <Route path="data-library/item-groups/:id" element={<EditItemGroupPage />} />
+          <Route path="data-library/uom" element={<UomPage />} />
+          <Route path="data-library/uom/new" element={<NewUomPage />} />
+          <Route path="data-library/uom/:id" element={<EditUomPage />} />
           <Route path="data-library/transaction-types" element={<TransactionTypesPage />} />
           <Route path="data-library/transaction-types/new" element={<NewTransactionTypePage />} />
           <Route path="data-library/transaction-types/:id" element={<EditTransactionTypePage />} />

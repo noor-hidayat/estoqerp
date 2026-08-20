@@ -29,7 +29,7 @@ export default function EditTransactionPage() {
   return (
     <MenuGate menu="inventory.transactions">
       <MovementForm
-        title={`Edit ${movement.movementNumber}`}
+        title={`Edit ${movement.typeName ?? movement.movementNumber}`}
         submitLabel="Save Changes"
         initial={movement}
         onSubmit={async (input) => {

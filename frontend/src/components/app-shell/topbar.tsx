@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { ChevronsUpDown, LogOut } from "lucide-react";
 import { useSession, ROLE_LABELS } from "@/lib/session";
 import { hueBg } from "@/lib/utils";
+import { useStockMovement, useProject } from "@/lib/api/query";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -25,6 +26,24 @@ export function Topbar() {
   const router = useRouter();
   const { user, signOut } = useSession();
 
+  const ids = useMemo(() => {
+    const m = pathname.match(/^\/app\/transaction\/([^/]+)/);
+    const p = pathname.match(/^\/app\/so\/([^/]+)/);
+    return {
+      movementId: m && m[1] !== "new" ? m[1] : undefined,
+      projectId: p && p[1] !== "new" && p[1] !== "variance" ? p[1] : undefined,
+    };
+  }, [pathname]);
+
+  const { data: movement } = useStockMovement(ids.movementId);
+  const { data: project } = useProject(ids.projectId);
+
+  // Title dinamis: transaksi → nama tipe transaksi, stock opname → nama project.
+  const dynamicSubtitle = useMemo(
+    () => movement?.typeName ?? project?.name ?? null,
+    [movement, project]
+  );
+
   const current = useMemo(() => {
     const match = (href: string) =>
       href === "/app"
@@ -41,7 +60,7 @@ export function Topbar() {
         if (item.children?.length) {
           const child = item.children.find((c) => match(c.href));
           if (child) {
-            const subtitle = getPageTitle(pathname);
+            const subtitle = dynamicSubtitle ?? getPageTitle(pathname);
             found = {
               label: child.label,
               href: child.href,
@@ -58,7 +77,7 @@ export function Topbar() {
             break;
           }
         } else if (match(item.href)) {
-          const subtitle = getPageTitle(pathname);
+          const subtitle = dynamicSubtitle ?? getPageTitle(pathname);
           found = {
             label: item.label,
             href: item.href,
@@ -70,7 +89,7 @@ export function Topbar() {
       if (found.label !== "Estoq") break;
     }
     return found;
-  }, [pathname]);
+  }, [pathname, dynamicSubtitle]);
 
   if (!user) return null;
 

@@ -207,6 +207,10 @@ export function useUoms() {
   return useResourceList<Uom>("uom");
 }
 
+export function useUom(id?: string) {
+  return useResourceOne<Uom>("uom", id);
+}
+
 export function useBatches(params?: { itemId?: string }) {
   return useResourceList<Batch>("batches", params as Record<string, unknown>);
 }
@@ -220,8 +224,9 @@ export function useStockBatches(params?: { warehouseId?: string; batchId?: strin
 
 export function useStockMovements(params?: {
   query?: string;
-  status?: string;
   typeId?: string;
+  fromWarehouseId?: string;
+  toWarehouseId?: string;
   page?: number;
   pageSize?: number;
 }) {

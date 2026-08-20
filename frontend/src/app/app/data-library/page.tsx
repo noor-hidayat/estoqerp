@@ -8,6 +8,7 @@ import {
   Building2,
   MapPin,
   Package,
+  Ruler,
   Tag,
   Warehouse,
 } from "lucide-react";
@@ -39,6 +40,12 @@ export default function DataLibraryPage() {
       href: "/app/data-library/barcode-formats",
       icon: <Barcode size={24} strokeWidth={2} />,
       show: canView("master.barcodeFormats"),
+    },
+    {
+      label: "UOM",
+      href: "/app/data-library/uom",
+      icon: <Ruler size={24} strokeWidth={2} />,
+      show: canView("master.uom"),
     },
     {
       label: "Transaction Types",

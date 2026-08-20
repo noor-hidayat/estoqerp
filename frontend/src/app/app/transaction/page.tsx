@@ -15,6 +15,7 @@ import {
 import {
   useStockMovements,
   useMovementTypes,
+  useAllWarehouses,
   usePostMovement,
   useDeleteMovement,
 } from "@/lib/api/query";
@@ -25,6 +26,7 @@ import { MenuGate } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -44,8 +46,9 @@ export default function TransactionsPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [status, setStatus] = useState("all");
   const [typeId, setTypeId] = useState("all");
+  const [fromWarehouseId, setFromWarehouseId] = useState("");
+  const [toWarehouseId, setToWarehouseId] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -55,10 +58,12 @@ export default function TransactionsPage() {
   }, [query]);
 
   const { data: types = [] } = useMovementTypes();
+  const { data: warehouses = [] } = useAllWarehouses();
   const { data: result, isLoading } = useStockMovements({
     query: debouncedQuery || undefined,
-    status: status === "all" ? undefined : status,
     typeId: typeId === "all" ? undefined : typeId,
+    fromWarehouseId: fromWarehouseId || undefined,
+    toWarehouseId: toWarehouseId || undefined,
     page,
     pageSize,
   });
@@ -245,22 +250,32 @@ export default function TransactionsPage() {
                   setQuery(e.target.value);
                   setPage(1);
                 }}
-                placeholder="Search no, reference, type..."
+                placeholder="Search by no..."
                 className="h-8 w-[240px] pl-8 text-xs shadow-none focus-visible:ring-1"
               />
             </div>
-            <Select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
+            <SearchableSelect
+              compact
+              value={fromWarehouseId}
+              onChange={(v) => {
+                setFromWarehouseId(v);
                 setPage(1);
               }}
-              className="h-8 w-36 text-xs"
-            >
-              <option value="all">All status</option>
-              <option value="DRAFT">Draft</option>
-              <option value="POSTED">Posted</option>
-            </Select>
+              options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+              placeholder="Source warehouse..."
+              className="w-52"
+            />
+            <SearchableSelect
+              compact
+              value={toWarehouseId}
+              onChange={(v) => {
+                setToWarehouseId(v);
+                setPage(1);
+              }}
+              options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+              placeholder="Target warehouse..."
+              className="w-52"
+            />
             <Select
               value={typeId}
               onChange={(e) => {
@@ -293,8 +308,9 @@ export default function TransactionsPage() {
         emptyDescription="Create a transaction to move stock between warehouses, receive, or issue items."
         onResetFilters={() => {
           setQuery("");
-          setStatus("all");
           setTypeId("all");
+          setFromWarehouseId("");
+          setToWarehouseId("");
           setPage(1);
         }}
       />

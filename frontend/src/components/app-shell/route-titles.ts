@@ -14,6 +14,7 @@ const STATIC_TITLES: Record<string, string> = {
   "/app/ai": "AI Assistant",
   "/app/data-library/barcode-formats/new": "New Barcode Format",
   "/app/data-library/transaction-types/new": "New Transaction Type",
+  "/app/data-library/uom/new": "Add UOM",
   "/app/transaction/new": "New Transaction",
   "/app/inventory/ledger": "Stock Ledger",
   "/app/inventory/batches": "Batch",
@@ -30,6 +31,7 @@ const PATTERNS: { regex: RegExp; title: string }[] = [
   { regex: /^\/app\/data-library\/barcode-formats\/[^/]+$/, title: "Edit Format" },
   { regex: /^\/app\/settings\/roles\/[^/]+$/, title: "Edit Role" },
   { regex: /^\/app\/data-library\/transaction-types\/[^/]+$/, title: "Edit Transaction Type" },
+  { regex: /^\/app\/data-library\/uom\/[^/]+$/, title: "Edit UOM" },
   { regex: /^\/app\/transaction\/[^/]+$/, title: "Transaction Details" },
 ];
 
