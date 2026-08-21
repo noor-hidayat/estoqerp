@@ -6,7 +6,6 @@ import {
   ArrowLeftRight,
   BadgeCheck,
   MoreHorizontal,
-  Pencil,
   Plus,
   Search,
   Send,
@@ -195,10 +194,6 @@ export default function TransactionsPage() {
             </DropdownMenuItem>
             {m.status === "DRAFT" && (
               <>
-                <DropdownMenuItem onClick={() => navigate(`/app/transaction/${m.id}/edit`)}>
-                  <Pencil className="mr-2 h-3.5 w-3.5" />
-                  Edit
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handlePost(m)}>
                   <Send className="mr-2 h-3.5 w-3.5" />
                   Post

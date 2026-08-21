@@ -8,6 +8,7 @@ export function FormPage({
   title,
   description,
   actions,
+  titleBadge,
   children,
 }: {
   breadcrumb?: ReactNode;
@@ -15,6 +16,7 @@ export function FormPage({
   title: string;
   description?: string;
   actions?: ReactNode;
+  titleBadge?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -27,9 +29,12 @@ export function FormPage({
               {eyebrow}
             </p>
           )}
-          <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-foreground sm:text-[26px]">
-            {title}
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-foreground sm:text-[26px]">
+              {title}
+            </h1>
+            {titleBadge}
+          </div>
           {description && (
             <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
               {description}

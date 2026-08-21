@@ -112,6 +112,9 @@ export function SearchableSelect({
       e.preventDefault();
       const opt = visible[highlight];
       if (opt) pick(opt);
+    } else if (e.key === "Tab") {
+      const opt = visible[highlight];
+      if (opt) pick(opt);
     } else if (e.key === "Escape") {
       setOpen(false);
     }
@@ -144,8 +147,8 @@ export function SearchableSelect({
             disabled={disabled}
             readOnly={disabled}
             className={cx(
-              "flex w-full items-center rounded-md border border-input bg-background text-sm text-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring disabled:cursor-not-allowed disabled:opacity-50",
-              compact ? "h-8 px-2.5 pr-7 text-xs" : "h-10 px-3.5 pr-9"
+              "flex w-full items-center rounded-md border border-input bg-zinc-200/60 text-sm text-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring disabled:cursor-not-allowed disabled:opacity-50",
+              compact ? "h-8 px-2.5 pr-7 text-xs" : "h-8 px-3.5 pr-9"
             )}
           />
           <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">

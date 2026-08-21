@@ -296,6 +296,30 @@ export function usePostMovement() {
   });
 }
 
+export function useUnpostMovement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/transactions/${id}/unpost`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
+      qc.invalidateQueries({ queryKey: ["stockBalances"] });
+    },
+  });
+}
+
+export function useAmendMovement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/transactions/${id}/amend`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
+      qc.invalidateQueries({ queryKey: ["stockBalances"] });
+    },
+  });
+}
+
 export function useDeleteMovement() {
   const qc = useQueryClient();
   return useMutation({

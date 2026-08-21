@@ -27,7 +27,7 @@ export const stockLedgerRouter = Router();
 
 type Tx = NodePgTransaction<typeof schema, ExtractTablesWithRelations<typeof schema>>;
 
-const MOVEMENT_STATUSES = ["DRAFT", "POSTED"] as const;
+const MOVEMENT_STATUSES = ["DRAFT", "POSTED", "CANCELED"] as const;
 type MovementStatus = (typeof MOVEMENT_STATUSES)[number];
 
 interface DetailInput {
@@ -888,6 +888,166 @@ transactionsRouter.post("/:id/post", async (req: Request, res: Response) => {
       return;
     }
     res.status(500).json({ error: "Gagal memposting transaksi." });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* POST /api/transactions/:id/unpost — batalkan posting, kembalikan ke DRAFT */
+/* ------------------------------------------------------------------ */
+transactionsRouter.post("/:id/unpost", async (req: Request, res: Response) => {
+  if (!(await checkPermission(req, res, "inventory.transactions", "update"))) return;
+
+  const [movement] = await db
+    .select({ id: schema.stockMovements.id, status: schema.stockMovements.status })
+    .from(schema.stockMovements)
+    .where(eq(schema.stockMovements.id, param(req, "id")))
+    .limit(1);
+  if (!movement) {
+    res.status(404).json({ error: "Transaksi tidak ditemukan." });
+    return;
+  }
+  if (movement.status !== "POSTED") {
+    res.status(400).json({ error: "Hanya transaksi berstatus POSTED yang bisa dibatalkan." });
+    return;
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      // --- 1. Balik stock_balances agregat berdasarkan ledger efek ---
+      const ledgerRows = await tx
+        .select({
+          itemId: schema.stockLedger.itemId,
+          warehouseId: schema.stockLedger.warehouseId,
+          qtyIn: schema.stockLedger.qtyIn,
+          qtyOut: schema.stockLedger.qtyOut,
+          batchId: schema.stockLedger.batchId,
+        })
+        .from(schema.stockLedger)
+        .where(eq(schema.stockLedger.transactionId, movement.id));
+
+      const aggSeen = new Map<string, { itemId: string; warehouseId: string; in: number; out: number }>();
+      const keyOf = (wh: string, it: string) => `${wh}|${it}`;
+      for (const l of ledgerRows) {
+        const k = keyOf(l.warehouseId, l.itemId);
+        const cur = aggSeen.get(k);
+        const qIn = Number(l.qtyIn);
+        const qOut = Number(l.qtyOut);
+        if (cur) {
+          cur.in += qIn;
+          cur.out += qOut;
+        } else {
+          aggSeen.set(k, { itemId: l.itemId, warehouseId: l.warehouseId, in: qIn, out: qOut });
+        }
+      }
+      for (const { itemId, warehouseId, in: qIn, out: qOut } of aggSeen.values()) {
+        const [balance] = await tx
+          .select()
+          .from(schema.stockBalances)
+          .where(
+            and(
+              eq(schema.stockBalances.warehouseId, warehouseId),
+              eq(schema.stockBalances.itemId, itemId)
+            )
+          )
+          .for("update")
+          .limit(1);
+        if (!balance) continue;
+        await tx
+          .update(schema.stockBalances)
+          .set({
+            inQty: Number(balance.inQty) - qIn,
+            outQty: Number(balance.outQty) - qOut,
+            closingQty: Number(balance.closingQty) - qIn + qOut,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.stockBalances.id, balance.id));
+      }
+
+      // --- 2. Balik stock_batches per (batch, warehouse) ---
+      const batchSeen = new Map<string, { batchId: string; warehouseId: string; in: number; out: number }>();
+      for (const l of ledgerRows) {
+        if (!l.batchId) continue;
+        const bk = `${l.batchId}|${l.warehouseId}`;
+        const cur = batchSeen.get(bk);
+        const qIn = Number(l.qtyIn);
+        const qOut = Number(l.qtyOut);
+        if (cur) {
+          cur.in += qIn;
+          cur.out += qOut;
+        } else {
+          batchSeen.set(bk, { batchId: l.batchId, warehouseId: l.warehouseId, in: qIn, out: qOut });
+        }
+      }
+      for (const { batchId, warehouseId, in: qIn, out: qOut } of batchSeen.values()) {
+        const [row] = await tx
+          .select()
+          .from(schema.stockBatches)
+          .where(
+            and(
+              eq(schema.stockBatches.batchId, batchId),
+              eq(schema.stockBatches.warehouseId, warehouseId)
+            )
+          )
+          .for("update")
+          .limit(1);
+        if (!row) continue;
+        const next = Number(row.qty) - qIn + qOut;
+        await tx
+          .update(schema.stockBatches)
+          .set({ qty: String(next), updatedAt: new Date() })
+          .where(eq(schema.stockBatches.id, row.id));
+        await tx
+          .update(schema.batches)
+          .set({ status: next === 0 ? "EMPTY" : "ACTIVE", updatedAt: new Date() })
+          .where(eq(schema.batches.id, batchId));
+      }
+
+      // --- 3. Hapus ledger transaksi ini ---
+      await tx
+        .delete(schema.stockLedger)
+        .where(eq(schema.stockLedger.transactionId, movement.id));
+
+      // --- 4. Ubah status menjadi CANCELED ---
+      await tx
+        .update(schema.stockMovements)
+        .set({ status: "CANCELED", updatedAt: new Date() })
+        .where(eq(schema.stockMovements.id, movement.id));
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /transactions/:id/unpost", e);
+    res.status(500).json({ error: "Gagal membatalkan transaksi." });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* POST /api/transactions/:id/amend — buka kembali CANCELED → DRAFT    */
+/* ------------------------------------------------------------------ */
+transactionsRouter.post("/:id/amend", async (req: Request, res: Response) => {
+  if (!(await checkPermission(req, res, "inventory.transactions", "update"))) return;
+
+  const [movement] = await db
+    .select({ id: schema.stockMovements.id, status: schema.stockMovements.status })
+    .from(schema.stockMovements)
+    .where(eq(schema.stockMovements.id, param(req, "id")))
+    .limit(1);
+  if (!movement) {
+    res.status(404).json({ error: "Transaksi tidak ditemukan." });
+    return;
+  }
+  if (movement.status !== "CANCELED") {
+    res.status(400).json({ error: "Hanya transaksi berstatus CANCELED yang bisa dibuka kembali." });
+    return;
+  }
+  try {
+    await db
+      .update(schema.stockMovements)
+      .set({ status: "DRAFT", updatedAt: new Date() })
+      .where(eq(schema.stockMovements.id, movement.id));
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /transactions/:id/amend", e);
+    res.status(500).json({ error: "Gagal membuka kembali transaksi." });
   }
 });
 

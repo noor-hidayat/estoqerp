@@ -230,7 +230,7 @@ export interface Uom {
   updatedAt: string;
 }
 
-export type MovementStatus = "DRAFT" | "POSTED";
+export type MovementStatus = "DRAFT" | "POSTED" | "CANCELED";
 
 export interface StockMovement {
   id: string;

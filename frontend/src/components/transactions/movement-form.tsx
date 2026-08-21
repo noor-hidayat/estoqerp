@@ -1,16 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
-  ArrowLeft,
   Camera,
   Check,
   CheckCircle2,
   Columns3,
   Plus,
   ScanBarcode,
-  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -25,6 +23,7 @@ import { api } from "@/lib/api/client";
 import { parseBarcode } from "@/lib/barcode/parser";
 import { getAll, syncMasterCache } from "@/lib/local-cache";
 import { CameraScanner } from "@/components/barcode/camera-scanner";
+import { QtyCalculator } from "@/components/transactions/qty-calculator";
 import type {
   BarcodeFormat,
   ItemGroup,
@@ -36,14 +35,11 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -60,7 +56,6 @@ import {
   FormPage,
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 
 interface DetailDraft {
@@ -119,73 +114,178 @@ function TableSearchSelect({
   options,
   placeholder,
   onChange,
+  disabled,
+  onTab,
+  registerRef,
 }: {
   value: string;
   options: { value: string; label: string }[];
   placeholder: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
+  onTab?: () => void;
+  registerRef?: (el: HTMLInputElement | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [highlight, setHighlight] = useState(0);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
   const selected = options.find((o) => o.value === value);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
   }, [options, query]);
 
+  useEffect(() => {
+    setHighlight(0);
+  }, [filtered]);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${highlight}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [highlight, open]);
+
+  const openList = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setCoords({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onScroll = () => setOpen(false);
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open]);
+
+  if (disabled) {
+    return (
+      <span
+        className={cn(
+          "block h-8 w-full min-w-[100px] truncate px-2 py-2 text-sm",
+          selected ? "text-foreground" : "text-muted-foreground"
+        )}
+      >
+        {selected ? selected.label : placeholder}
+      </span>
+    );
+  }
+
+  const pick = (o: { value: string; label: string }, refocus = true) => {
+    onChange(o.value);
+    setQuery("");
+    setOpen(false);
+    if (refocus) inputRef.current?.focus();
+  };
+
   return (
-    <DropdownMenu
-      onOpenChange={(open) => {
-        if (!open) setQuery("");
-      }}
-    >
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "h-8 w-full min-w-[130px] truncate rounded px-1 text-left text-xs transition-colors hover:bg-muted/60 focus:outline-none",
-            selected ? "text-foreground" : "text-muted-foreground"
-          )}
-        >
-          {selected ? selected.label : placeholder}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-60 p-0">
-        <div className="border-b border-border p-2">
-          <div className="relative">
-            <Search
-              size={14}
-              strokeWidth={2}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search..."
-              autoFocus
-              className="h-8 pl-8 pr-2 text-xs shadow-none focus-visible:ring-1"
-            />
-          </div>
-        </div>
-        <div className="max-h-56 overflow-y-auto p-1">
-          {filtered.length === 0 ? (
-            <p className="px-3 py-2.5 text-xs text-muted-foreground">No results</p>
-          ) : (
-            filtered.map((o) => (
-              <DropdownMenuItem
-                key={o.value}
-                onSelect={() => onChange(o.value)}
-                className="flex items-center justify-between gap-2 text-xs"
-              >
-                <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                {o.value === value && (
-                  <Check size={13} strokeWidth={2.5} className="shrink-0 text-primary" />
-                )}
-              </DropdownMenuItem>
-            ))
-          )}
-        </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div ref={wrapRef} className="relative min-w-[100px]">
+      <input
+        ref={(el) => {
+          inputRef.current = el;
+          registerRef?.(el);
+        }}
+        type="text"
+        value={open ? query : (selected?.label ?? "")}
+        placeholder={placeholder}
+        onFocus={() => {
+          openList();
+          setQuery("");
+        }}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          if (!open) openList();
+        }}
+        onKeyDown={(e) => {
+          if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+            e.preventDefault();
+            openList();
+            return;
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHighlight((h) => Math.min(h + 1, filtered.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlight((h) => Math.max(h - 1, 0));
+          } else if (e.key === "Enter") {
+            const match = filtered[highlight];
+            if (match && open) pick(match);
+            else if (open) {
+              setOpen(false);
+              onTab?.();
+            }
+          } else if (e.key === "Tab") {
+            e.preventDefault();
+            if (open) {
+              const match = filtered[highlight];
+              if (match) {
+                pick(match, false);
+              }
+              setOpen(false);
+            }
+            onTab?.();
+          } else if (e.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+        className="h-8 w-full truncate border-none bg-transparent px-1 text-left text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0"
+      />
+      {open &&
+        coords &&
+        createPortal(
+          <div
+            className="fixed z-50 overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+            style={{ top: coords.top, left: coords.left, width: coords.width }}
+          >
+            <div ref={listRef} className="max-h-48 overflow-y-auto p-1">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-2.5 text-xs text-muted-foreground">No results</p>
+              ) : (
+                filtered.map((o, i) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    data-idx={i}
+                    onMouseEnter={() => setHighlight(i)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      pick(o);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-xs transition-colors hover:bg-muted",
+                      i === highlight && "bg-muted",
+                      o.value === value && "text-primary"
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                    {o.value === value && (
+                      <Check size={13} strokeWidth={2.5} className="shrink-0 text-primary" />
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
+    </div>
   );
 }
 
@@ -194,18 +294,30 @@ export function MovementForm({
   initial,
   submitLabel,
   onSubmit,
+  readOnly = false,
+  actions,
+  onSaved,
+  onPost,
+  onCancel,
+  onAmend,
+  statusBadge,
 }: {
   title: string;
   initial?: StockMovementDetailFull | null;
   submitLabel: string;
   onSubmit: (input: MovementInput) => Promise<void>;
+  readOnly?: boolean;
+  actions?: ReactNode;
+  onSaved?: (typeName: string) => void;
+  onPost?: () => Promise<void>;
+  onCancel?: () => Promise<void>;
+  onAmend?: () => Promise<void>;
+  statusBadge?: ReactNode;
 }) {
-  const navigate = useNavigate();
   const [form, setForm] = useState({
     typeId: initial?.typeId ?? "",
     movementDate: initial?.movementDate ? initial.movementDate.slice(0, 10) : todayISO(),
     movementTime: initial?.movementDate ? toTimeInput(initial.movementDate) : nowTime(),
-    description: initial?.description ?? "",
   });
   const [editPostingDate, setEditPostingDate] = useState(
     Boolean(initial?.movementDate)
@@ -231,6 +343,21 @@ export function MovementForm({
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleCancel = async () => {
+    if ((!onCancel && !onAmend) || cancelling) return;
+    setCancelling(true);
+    try {
+      if (onAmend) await onAmend();
+      else await onCancel!();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>({
     source: true,
@@ -239,6 +366,67 @@ export function MovementForm({
     qty: true,
     batch: false,
   });
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+
+  const cellRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const registerCell = (key: string) => (el: HTMLInputElement | null) => {
+    cellRefs.current[key] = el;
+  };
+
+  const focusCell = (key: string) => {
+    cellRefs.current[key]?.focus();
+  };
+
+  const tabNext = (rowKey: string, col: string) => {
+    const cols = [
+      ...(visibleCols.source ? ["source"] : []),
+      ...(visibleCols.target ? ["target"] : []),
+      ...(visibleCols.itemCode ? ["itemCode"] : []),
+      ...(visibleCols.qty ? ["qty"] : []),
+      ...(visibleCols.batch ? ["batch"] : []),
+    ];
+    const idx = cols.indexOf(col);
+    if (idx < cols.length - 1) {
+      focusCell(`${rowKey}:${cols[idx + 1]}`);
+      return;
+    }
+    const newKey = nextKey();
+    setRows((prev) => [
+      ...prev,
+      {
+        key: newKey,
+        itemId: "",
+        batchNumber: "",
+        fromWarehouseId: kind === "RECEIPT" ? "" : fromDefault,
+        toWarehouseId: kind === "ISSUE" ? "" : toDefault,
+        qty: "",
+        uomId: "",
+      },
+    ]);
+    focusCell(`${newKey}:${cols[0]}`);
+  };
+
+  const allSelected = rows.length > 0 && selectedKeys.size === rows.length;
+  const someSelected = selectedKeys.size > 0 && !allSelected;
+
+  const toggleAll = () => {
+    setSelectedKeys(allSelected ? new Set() : new Set(rows.map((r) => r.key)));
+  };
+
+  const toggleRow = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const removeSelected = () => {
+    setRows((prev) => prev.filter((r) => !selectedKeys.has(r.key)));
+    setSelectedKeys(new Set());
+  };
 
   // Scan state
   const [scanInput, setScanInput] = useState("");
@@ -363,7 +551,19 @@ export function MovementForm({
   };
 
   const save = async () => {
+    if (readOnly) return;
     setError("");
+    if (saved && onPost) {
+      setSaving(true);
+      try {
+        await onPost();
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Failed to post");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     if (!form.typeId) {
       setError("Transaction type is required.");
       return;
@@ -411,9 +611,11 @@ export function MovementForm({
         status: "DRAFT",
         referenceType: null,
         referenceId: null,
-        description: form.description || null,
         details,
       });
+      onSaved?.(selectedType?.name ?? form.typeId);
+      setSaved(true);
+      setSaving(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
       setSaving(false);
@@ -437,7 +639,29 @@ export function MovementForm({
   };
 
   return (
-    <FormPage title={title}>
+    <FormPage
+      title={title}
+      titleBadge={statusBadge}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {actions}
+          {onCancel && (
+            <Button
+              variant="outline"
+              onClick={handleCancel}
+              disabled={cancelling}
+            >
+              {cancelling ? "..." : onAmend ? "Amend" : "Cancel"}
+            </Button>
+          )}
+          {!readOnly && (
+            <Button variant="primary" onClick={save} disabled={saving}>
+              {saving ? "Saving..." : saved && onPost ? "Post" : submitLabel}
+            </Button>
+          )}
+        </div>
+      }
+    >
       <div className="flex flex-col gap-5">
       <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
         <FormSection className="pb-0">
@@ -446,7 +670,7 @@ export function MovementForm({
               label="Transaction type"
               value={form.typeId}
               onChange={(e) => handleTypeChange(e.target.value)}
-              disabled={typesLoading}
+              disabled={typesLoading || readOnly}
             >
               <option value="">Select type...</option>
               {types.map((t) => (
@@ -460,25 +684,27 @@ export function MovementForm({
                 label="Date"
                 type="date"
                 value={form.movementDate}
-                disabled={!editPostingDate}
+                disabled={!editPostingDate || readOnly}
                 onChange={(e) => setForm({ ...form, movementDate: e.target.value })}
               />
             </div>
-            <div className="flex items-end pb-0.5">
-              <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-foreground">
-                <Checkbox
-                  checked={editPostingDate}
-                  onCheckedChange={(v) => setEditPostingDate(v === true)}
-                />
-                Edit posting date
-              </label>
-            </div>
+            {!readOnly && (
+              <div className="flex items-end pb-0.5">
+                <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-foreground">
+                  <Checkbox
+                    checked={editPostingDate}
+                    onCheckedChange={(v) => setEditPostingDate(v === true)}
+                  />
+                  Edit posting date
+                </label>
+              </div>
+            )}
             <div className="sm:col-start-2">
               <Input
                 label="Time"
                 type="time"
                 value={form.movementTime}
-                disabled={!editPostingDate}
+                disabled={!editPostingDate || readOnly}
                 onChange={(e) => setForm({ ...form, movementTime: e.target.value })}
               />
             </div>
@@ -487,8 +713,9 @@ export function MovementForm({
                 label="Default warehouse"
                 value={fromDefault}
                 onChange={(e) => setFromDefault(e.target.value)}
+                disabled={readOnly}
               >
-                <option value="">— none —</option>
+                <option value=""></option>
                 {warehouses.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
@@ -501,8 +728,9 @@ export function MovementForm({
                 label="Target warehouse"
                 value={toDefault}
                 onChange={(e) => setToDefault(e.target.value)}
+                disabled={readOnly}
               >
-                <option value="">— none —</option>
+                <option value=""></option>
                 {warehouses.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
@@ -510,58 +738,50 @@ export function MovementForm({
                 ))}
               </Select>
             </div>
-            <div className="sm:col-span-2">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="movement-description">Description</Label>
-                <Textarea
-                  id="movement-description"
-                  rows={4}
-                  placeholder="Optional note"
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                />
-              </div>
-            </div>
           </FormGrid>
         </FormSection>
-      </div>
 
-      <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
-      <FormSection className="pb-0">
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[240px]">
-            <ScanBarcode
-              size={15}
-              strokeWidth={2}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              value={scanInput}
-              onChange={(e) => setScanInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void handleScanned(scanInput);
-              }}
-              placeholder="Scan barcode lalu Enter..."
-              className="h-10 pl-9 pr-3 font-mono text-[13px] shadow-none focus-visible:ring-1"
-            />
+        <div className="my-6 h-px bg-border" />
+
+        <FormSection className="pb-0">
+        <div className="mb-4 grid gap-x-8 sm:grid-cols-2">
+          <div>
+            <div className="mb-2">
+              <span className="text-[13px] font-medium text-foreground">
+                Scan Barcode
+              </span>
+            </div>
+            <div className="relative">
+              <Input
+                value={scanInput}
+                disabled={readOnly}
+                onChange={(e) => setScanInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleScanned(scanInput);
+                }}
+                placeholder="Scan Barcode"
+                className="h-8 rounded-md pr-11 pl-3 font-mono text-[13px] shadow-none focus-visible:ring-1"
+              />
+              {!readOnly && (
+                <button
+                  type="button"
+                  aria-label="Scan with camera"
+                  onClick={() => setCameraOpen(true)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-zinc-200/80 hover:text-foreground"
+                >
+                  <Camera size={16} strokeWidth={2} />
+                </button>
+              )}
+            </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-10 gap-1.5 px-3 text-xs"
-            onClick={() => setCameraOpen(true)}
-          >
-            <Camera size={15} strokeWidth={2} />
-            Camera
-          </Button>
         </div>
 
-        {scanError && (
+        {!readOnly && scanError && (
           <p className="mb-3 rounded-md bg-muted px-3 py-2 text-[12.5px] text-destructive">
             {scanError}
           </p>
         )}
-        {lastScan && (
+        {!readOnly && lastScan && (
           <div className="mb-4 flex items-center gap-2.5 rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12.5px] text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300">
             <CheckCircle2 size={15} strokeWidth={2} className="shrink-0" />
             <span className="font-mono text-xs">{lastScan.code}</span>
@@ -575,11 +795,196 @@ export function MovementForm({
         )}
 
         <div className="overflow-hidden rounded-lg border border-border">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              {rows.length} item{rows.length === 1 ? "" : "s"}
-            </span>
+          <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border bg-muted/40 px-3 py-2">
             <div className="flex items-center gap-2">
+              {!readOnly && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2.5 text-xs shadow-none"
+                    >
+                      <Columns3 size={13} strokeWidth={2} />
+                      Columns
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                      Show columns
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {SCAN_TABLE_COLUMNS.map((col) => (
+                      <DropdownMenuCheckboxItem
+                        key={col.id}
+                        checked={visibleCols[col.id]}
+                        onCheckedChange={(v) =>
+                          setVisibleCols((prev) => ({ ...prev, [col.id]: v === true }))
+                        }
+                        className="text-xs"
+                      >
+                        {col.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          </div>
+
+          {rows.length === 0 ? (
+            <div className="px-4 py-10 text-center">
+              <ScanBarcode size={26} strokeWidth={1.6} className="mx-auto mb-2 text-muted-foreground" />
+              <p className="text-[13px] font-medium text-foreground">
+                {readOnly ? "Tidak ada item" : "Belum ada item"}
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                {readOnly
+                  ? "Transaksi ini tidak memiliki baris item."
+                  : "Scan barcode pertama untuk memulai, atau tambah baris manual."}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table className="table-fixed border-collapse text-left text-sm [&_th]:border-r [&_th]:border-border/60 [&_td]:border-r [&_td]:border-border/60 [&_th]:last:border-r-0 [&_td]:last:border-r-0">
+                <TableHeader className="bg-muted/40 [&_tr]:border-border">
+                  <TableRow className="border-border hover:bg-transparent">
+                    {!readOnly && (
+                      <TableHead className="w-10 px-3">
+                        <Checkbox
+                          checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                          onCheckedChange={toggleAll}
+                          aria-label="Select all rows"
+                        />
+                      </TableHead>
+                    )}
+                    <TableHead className="w-10 px-3">No.</TableHead>
+                    {visibleCols.source && <TableHead className="w-[260px] px-4">Source Warehouse</TableHead>}
+                    {visibleCols.target && <TableHead className="w-[260px] px-4">Target Warehouse</TableHead>}
+                    {visibleCols.itemCode && <TableHead className="px-4">Item Code</TableHead>}
+                    {visibleCols.qty && <TableHead className="w-[150px] px-4 text-right">Qty</TableHead>}
+                    {visibleCols.batch && <TableHead className="w-[150px] px-4">Batch</TableHead>}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r, idx) => (
+                    <TableRow
+                      key={r.key}
+                      className={cn(
+                        "border-border/70",
+                        !readOnly && selectedKeys.has(r.key) && "bg-muted/50"
+                      )}
+                    >
+                      {!readOnly && (
+                        <TableCell className="px-3">
+                          <Checkbox
+                            checked={selectedKeys.has(r.key)}
+                            onCheckedChange={() => toggleRow(r.key)}
+                            aria-label={`Select row ${idx + 1}`}
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell className="px-3 font-mono text-sm text-muted-foreground">                        {idx + 1}
+                      </TableCell>
+                      {visibleCols.source && (
+                        <TableCell className="px-4">
+                          <TableSearchSelect
+                            value={r.fromWarehouseId}
+                            options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+                            placeholder=""
+                            onChange={(v) => setRow(r.key, { fromWarehouseId: v })}
+                            disabled={readOnly}
+                            registerRef={registerCell(`${r.key}:source`)}
+                            onTab={() => tabNext(r.key, "source")}
+                          />
+                        </TableCell>
+                      )}
+                      {visibleCols.target && (
+                        <TableCell className="px-4">
+                          <TableSearchSelect
+                            value={r.toWarehouseId}
+                            options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+                            placeholder=""
+                            onChange={(v) => setRow(r.key, { toWarehouseId: v })}
+                            disabled={readOnly}
+                            registerRef={registerCell(`${r.key}:target`)}
+                            onTab={() => tabNext(r.key, "target")}
+                          />
+                        </TableCell>
+                      )}
+                      {visibleCols.itemCode && (
+                        <TableCell className="px-4">
+                          <TableSearchSelect
+                            value={r.itemId}
+                            options={items.map((i) => ({
+                              value: i.id,
+                              label: `${i.name}: ${i.code}`,
+                            }))}
+                            placeholder=""
+                            onChange={(v) => {
+                              const item = itemOf(v);
+                              setRow(r.key, { itemId: v, uomId: item?.uomId ?? "" });
+                            }}
+                            disabled={readOnly}
+                            registerRef={registerCell(`${r.key}:itemCode`)}
+                            onTab={() => tabNext(r.key, "itemCode")}
+                          />
+                        </TableCell>
+                      )}
+                      {visibleCols.qty && (
+                        <TableCell className="px-4 text-right">
+                          <QtyCalculator
+                            value={r.qty}
+                            disabled={readOnly}
+                            onChange={(v) => setRow(r.key, { qty: v })}
+                            registerRef={registerCell(`${r.key}:qty`)}
+                            onTab={() => {
+                              if (readOnly) return;
+                              tabNext(r.key, "qty");
+                            }}
+                          />
+                        </TableCell>
+                      )}
+                      {visibleCols.batch && (
+                        <TableCell className="px-4">
+                          <input
+                            type="text"
+                            value={r.batchNumber}
+                            placeholder="—"
+                            disabled={readOnly}
+                            ref={registerCell(`${r.key}:batch`)}
+                            onChange={(e) => setRow(r.key, { batchNumber: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === "Tab") {
+                                e.preventDefault();
+                                tabNext(r.key, "batch");
+                              }
+                            }}
+                            className="h-8 w-full min-w-[90px] border-none bg-transparent px-1 font-mono text-sm text-foreground focus:outline-none focus:ring-0 disabled:opacity-100"
+                          />
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+
+        {!readOnly && (
+          <div className="mt-3 flex items-center justify-start">
+            {selectedKeys.size > 0 ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={removeSelected}
+              >
+                <Trash2 size={13} strokeWidth={2} />
+                Delete ({selectedKeys.size})
+              </Button>
+            ) : (
               <Button
                 variant="outline"
                 size="sm"
@@ -590,7 +995,7 @@ export function MovementForm({
                     batchNumber: "",
                     fromWarehouseId: kind === "RECEIPT" ? "" : fromDefault,
                     toWarehouseId: kind === "ISSUE" ? "" : toDefault,
-                    qty: "1",
+                    qty: "",
                     uomId: "",
                   })
                 }
@@ -598,149 +1003,9 @@ export function MovementForm({
                 <Plus size={13} strokeWidth={2} />
                 Add row
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1.5 px-2.5 text-xs shadow-none"
-                  >
-                    <Columns3 size={13} strokeWidth={2} />
-                    Columns
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-                    Show columns
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {SCAN_TABLE_COLUMNS.map((col) => (
-                    <DropdownMenuCheckboxItem
-                      key={col.id}
-                      checked={visibleCols[col.id]}
-                      onCheckedChange={(v) =>
-                        setVisibleCols((prev) => ({ ...prev, [col.id]: v === true }))
-                      }
-                      className="text-xs"
-                    >
-                      {col.label}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            )}
           </div>
-
-          {rows.length === 0 ? (
-            <div className="px-4 py-10 text-center">
-              <ScanBarcode size={26} strokeWidth={1.6} className="mx-auto mb-2 text-muted-foreground" />
-              <p className="text-[13px] font-medium text-foreground">Belum ada item</p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                Scan barcode pertama untuk memulai, atau tambah baris manual.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table className="border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border/60 [&_td]:border-r [&_td]:border-border/60 [&_th]:last:border-r-0 [&_td]:last:border-r-0">
-                <TableHeader className="bg-muted/40 [&_tr]:border-border">
-                  <TableRow className="border-border hover:bg-transparent">
-                    <TableHead className="w-10 px-3">No.</TableHead>
-                    {visibleCols.source && kind !== "RECEIPT" && (
-                      <TableHead>Source Warehouse</TableHead>
-                    )}
-                    {visibleCols.target && kind !== "ISSUE" && (
-                      <TableHead>Target Warehouse</TableHead>
-                    )}
-                    {visibleCols.itemCode && <TableHead>Item Code</TableHead>}
-                    {visibleCols.qty && <TableHead className="text-right">Qty</TableHead>}
-                    {visibleCols.batch && <TableHead>Batch</TableHead>}
-                    <TableHead className="w-10 px-2" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((r, idx) => (
-                    <TableRow key={r.key} className="border-border/70">
-                      <TableCell className="px-3 font-mono text-xs text-muted-foreground">
-                        {idx + 1}
-                      </TableCell>
-                      {visibleCols.source && kind !== "RECEIPT" && (
-                        <TableCell>
-                          <TableSearchSelect
-                            value={r.fromWarehouseId}
-                            options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
-                            placeholder="— none —"
-                            onChange={(v) => setRow(r.key, { fromWarehouseId: v })}
-                          />
-                        </TableCell>
-                      )}
-                      {visibleCols.target && kind !== "ISSUE" && (
-                        <TableCell>
-                          <TableSearchSelect
-                            value={r.toWarehouseId}
-                            options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
-                            placeholder="— none —"
-                            onChange={(v) => setRow(r.key, { toWarehouseId: v })}
-                          />
-                        </TableCell>
-                      )}
-                      {visibleCols.itemCode && (
-                        <TableCell>
-                          <TableSearchSelect
-                            value={r.itemId}
-                            options={items.map((i) => ({
-                              value: i.id,
-                              label: `${i.code} — ${i.name}`,
-                            }))}
-                            placeholder="Select item..."
-                            onChange={(v) => {
-                              const item = itemOf(v);
-                              setRow(r.key, { itemId: v, uomId: item?.uomId ?? "" });
-                            }}
-                          />
-                        </TableCell>
-                      )}
-                      {visibleCols.qty && (
-                        <TableCell className="text-right">
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.001"
-                            value={r.qty}
-                            onChange={(e) => setRow(r.key, { qty: e.target.value })}
-                            className="h-8 w-24 border-none bg-transparent px-1 text-right font-mono text-xs text-foreground focus:outline-none focus:ring-0"
-                          />
-                        </TableCell>
-                      )}
-                      {visibleCols.batch && (
-                        <TableCell>
-                          <input
-                            type="text"
-                            value={r.batchNumber}
-                            placeholder="—"
-                            onChange={(e) => setRow(r.key, { batchNumber: e.target.value })}
-                            className="h-8 w-full min-w-[120px] border-none bg-transparent px-1 font-mono text-xs text-foreground focus:outline-none focus:ring-0"
-                          />
-                        </TableCell>
-                      )}
-                      <TableCell className="px-2 text-right">
-                        <button
-                          type="button"
-                          aria-label="Remove row"
-                          onClick={() =>
-                            setRows((prev) => prev.filter((x) => x.key !== r.key))
-                          }
-                          className="rounded-sm p-1 text-muted-foreground transition-colors hover:text-destructive"
-                        >
-                          <Trash2 size={14} strokeWidth={2} />
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </div>
+        )}
 
         {error && (
           <p className="mt-5 rounded-lg bg-muted px-3 py-2 text-[12.5px] text-destructive">
@@ -751,7 +1016,7 @@ export function MovementForm({
       </div>
       </div>
 
-      {cameraOpen && (
+      {!readOnly && cameraOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black/90 p-4">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-[13px] font-medium text-white">
@@ -778,16 +1043,6 @@ export function MovementForm({
         </div>
       )}
 
-      <FormActions>
-        <Button variant="ghost" onClick={() => navigate("/app/transaction")}>
-          <ArrowLeft size={15} strokeWidth={2} />
-          Back
-        </Button>
-        <Button variant="primary" onClick={save} disabled={saving}>
-          <Plus size={15} strokeWidth={2} />
-          {saving ? "Saving..." : submitLabel}
-        </Button>
-      </FormActions>
-    </FormPage>
+      </FormPage>
   );
 }

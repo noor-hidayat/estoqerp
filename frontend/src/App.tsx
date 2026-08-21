@@ -28,7 +28,6 @@ import StockPage from "@/app/app/inventory/page";
 import TransactionsPage from "@/app/app/transaction/page";
 import NewTransactionPage from "@/app/app/transaction/new/page";
 import TransactionDetailPage from "@/app/app/transaction/[id]/page";
-import EditTransactionPage from "@/app/app/transaction/[id]/edit/page";
 import StockLedgerPage from "@/app/app/inventory/ledger/page";
 import BatchesPage from "@/app/app/inventory/batches/page";
 import StockLocationsPage from "@/app/app/data-library/locations/page";
@@ -120,7 +119,6 @@ export default function App() {
           <Route path="transaction" element={<TransactionsPage />} />
           <Route path="transaction/new" element={<NewTransactionPage />} />
           <Route path="transaction/:id" element={<TransactionDetailPage />} />
-          <Route path="transaction/:id/edit" element={<EditTransactionPage />} />
           <Route path="inventory/ledger" element={<StockLedgerPage />} />
           <Route path="inventory/batches" element={<BatchesPage />} />
           <Route path="data-library/locations" element={<StockLocationsPage />} />
