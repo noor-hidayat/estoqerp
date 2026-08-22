@@ -1,4 +1,4 @@
-const CACHE_NAME = "estoq-v22";
+const CACHE_NAME = "estoq-v23";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
@@ -40,13 +40,34 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Fetch — cache-first strategy for static assets, network-first for API
+// Fetch — network-first untuk navigasi (HTML), cache-first untuk aset statis
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
   // API requests — network only
   if (url.pathname.startsWith("/api/")) {
+    return;
+  }
+
+  // Navigasi (HTML) — selalu ambil versi terbaru dari server,
+  // fallback ke cache hanya saat offline.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200 && response.type === "basic") {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches
+            .match(request)
+            .then((cached) => cached || caches.match("/index.html"))
+        )
+    );
     return;
   }
 
