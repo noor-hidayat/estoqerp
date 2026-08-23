@@ -77,10 +77,13 @@ export default function BranchesPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.branches"]}>
       <PageHeader
         title="Branches"
-
         actions={
-          <Button onClick={() => navigate("/app/data-library/branches/new")}>
-            <Plus size={15} strokeWidth={2} />
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => navigate("/app/data-library/branches/new")}
+          >
+            <Plus size={14} strokeWidth={2} />
             Add Branch
           </Button>
         }

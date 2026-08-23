@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { ChevronsUpDown, LogOut } from "lucide-react";
 import { useSession, ROLE_LABELS } from "@/lib/session";
 import { hueBg } from "@/lib/utils";
-import { useStockMovement, useProject } from "@/lib/api/query";
+import { useStockMovement, useOpnameProject } from "@/lib/api/query";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { NAV } from "./nav";
 import { getPageTitle } from "./route-titles";
+import { GlobalSearch } from "./global-search";
 
 export function Topbar() {
   const pathname = usePathname();
@@ -36,7 +37,7 @@ export function Topbar() {
   }, [pathname]);
 
   const { data: movement } = useStockMovement(ids.movementId);
-  const { data: project } = useProject(ids.projectId);
+  const { data: project } = useOpnameProject(ids.projectId);
 
   // Title dinamis: transaksi → nama tipe transaksi, stock opname → nama project.
   const dynamicSubtitle = useMemo(
@@ -109,6 +110,7 @@ export function Topbar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+        <GlobalSearch />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="group flex cursor-pointer items-center gap-2.5 rounded-lg py-1.5 pl-1.5 pr-2.5 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-accent">

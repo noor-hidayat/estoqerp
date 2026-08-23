@@ -64,10 +64,13 @@ export default function UomPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["master.uom"]}>
       <PageHeader
         title="UOM"
-        description="Unit of measure used for items and transactions."
         actions={
-          <Button onClick={() => navigate("/app/data-library/uom/new")}>
-            <Plus size={15} strokeWidth={2} />
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => navigate("/app/data-library/uom/new")}
+          >
+            <Plus size={14} strokeWidth={2} />
             Add UOM
           </Button>
         }

@@ -132,7 +132,6 @@ export default function AiSettingsPage() {
         <PageHeader
           eyebrow="Settings"
           title="AI Assistant"
-          description="Konfigurasi provider AI untuk asisten analis Estoq. API key disimpan terenkripsi di database."
         />
 
         {loading ? (

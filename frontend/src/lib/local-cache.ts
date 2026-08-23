@@ -27,7 +27,6 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORES.items)) {
         const s = db.createObjectStore(STORES.items, { keyPath: "id" });
         s.createIndex("code", "code", { unique: false });
-        s.createIndex("barcodeId", "barcodeId", { unique: false });
         s.createIndex("itemGroupId", "itemGroupId", { unique: false });
       }
       if (!db.objectStoreNames.contains(STORES.itemGroups)) {

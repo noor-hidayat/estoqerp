@@ -12,9 +12,13 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",
     "db:seed-dummy": "tsx src/db/seed-dummy.ts",
-    "db:backfill-ids": "tsx src/db/backfill-ids.ts",
+    "db:seed-transfer": "tsx src/db/seed-transfer-bulk.ts",
+    "db:backfill-transfer": "tsx src/db/apply-transfer-effects.ts",
+    "db:backfill-ids": "tsx src/db/migrate-opname.ts",
     "db:backfill-movement-ids": "tsx src/db/backfill-movement-ids.ts",
-    "db:migrate-rbac": "tsx src/db/migrate-rbac.ts"
+    "db:migrate-rbac": "tsx src/db/migrate-rbac.ts",
+    "db:migrate-opname": "tsx src/db/migrate-opname.ts"
+
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

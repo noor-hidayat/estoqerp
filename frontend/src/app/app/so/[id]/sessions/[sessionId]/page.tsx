@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ScanLine } from "lucide-react";
-import { useProject, useScanSessions, useScanRecords, useItemsList, useLocations, useUsers } from "@/lib/api/query";
+import { useOpnameProject, useOpnameScans, useOpnameScanDetails, useItemsList, useLocations, useUsers } from "@/lib/api/query";
 import { formatDateTime, formatNumber } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -19,15 +19,16 @@ interface RecordRow {
   itemName: string;
   itemCode?: string;
   quantity: number;
+  batch?: string;
   identified: boolean;
   scannedAt: string;
 }
 
-export default function ScanSessionDetailPage() {
+export default function ScanDetailPage() {
   const params = useParams<{ id: string; sessionId: string }>();
-  const { data: project, isLoading: projectLoading } = useProject(params.id);
-  const { data: sessions = [], isLoading: sessionsLoading } = useScanSessions({ projectId: params.id });
-  const { data: recordsData } = useScanRecords({ projectId: params.id, sessionId: params.sessionId, pageSize: 10000 });
+  const { data: project, isLoading: projectLoading } = useOpnameProject(params.id);
+  const { data: scans = [], isLoading: scansLoading } = useOpnameScans({ opnameId: params.id });
+  const { data: recordsData } = useOpnameScanDetails({ scanId: params.sessionId, pageSize: 10000 });
   const { data: items = [] } = useItemsList();
   const { data: locations = [] } = useLocations();
   const { data: users = [] } = useUsers();
@@ -37,15 +38,15 @@ export default function ScanSessionDetailPage() {
     return <AccessDenied />;
   }
 
-  if (projectLoading || sessionsLoading) return <ShellLoader />;
+  if (projectLoading || scansLoading) return <ShellLoader />;
 
-  const session = sessions.find((s) => s.id === params.sessionId);
+  const scan = scans.find((s) => s.id === params.sessionId);
 
-  if (!project || !session) {
+  if (!project || !scan) {
     return (
       <div className="py-20 text-center">
         <p className="text-lg font-semibold text-foreground">
-          Scan session not found
+          Scan not found
         </p>
         <Link
           href={`/app/so/${params.id}`}
@@ -65,8 +66,9 @@ export default function ScanSessionDetailPage() {
   const distinctItems = new Set(records.map((r) => r.itemId).filter(Boolean))
     .size;
 
-  const location = locations.find((l) => l.id === session.locationId);
-  const user = users.find((u) => u.id === session.scannedBy);
+  const user = users.find((u) => u.id === scan.scannedBy);
+  const locIds = new Set(records.map((r) => r.locationId).filter(Boolean) as string[]);
+  const locationsUsed = locations.filter((l) => locIds.has(l.id));
 
   const itemOf = (itemId?: string) =>
     items.find((i) => i.id === itemId);
@@ -79,6 +81,7 @@ export default function ScanSessionDetailPage() {
       itemName: item?.name ?? "—",
       itemCode: item?.code,
       quantity: r.quantity,
+      batch: r.batch,
       identified: Boolean(r.itemId),
       scannedAt: r.scannedAt,
     };
@@ -113,6 +116,13 @@ export default function ScanSessionDetailPage() {
       cell: (r) => <span className="font-mono text-xs tabular-nums">{formatNumber(r.quantity)}</span>,
     },
     {
+      id: "batch",
+      header: "Batch",
+      cell: (r) => (
+        <span className="font-mono text-xs text-muted-foreground">{r.batch || "—"}</span>
+      ),
+    },
+    {
       id: "source",
       header: "Source",
       cell: (r) =>
@@ -144,7 +154,7 @@ export default function ScanSessionDetailPage() {
         crumbs={[
           { label: "Project", href: "/app/so" },
           { label: "Project Details", href: `/app/so/${project.id}` },
-          { label: "Session Details" },
+          { label: "Scan Details" },
         ]}
       />
       <div className="mb-6">
@@ -152,8 +162,10 @@ export default function ScanSessionDetailPage() {
           {project.name}
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          {location ? `${location.code} — ${location.name}` : "Location —"} ·{" "}
-          {user?.name ?? "—"}
+          {locationsUsed.length > 0
+            ? locationsUsed.map((l) => `${l.code} — ${l.name}`).join(", ")
+            : "Location —"}{" "}
+          · {user?.name ?? "—"}
         </p>
       </div>
 
@@ -190,10 +202,10 @@ export default function ScanSessionDetailPage() {
         searchPlaceholder="Search barcode or item..."
         getSearchText={(r) => `${r.barcode} ${r.itemName}`}
         initialSort={{ id: "time", dir: "desc" }}
-        minWidth={720}
+        minWidth={820}
         emptyIcon={<ScanLine size={26} strokeWidth={2} />}
-        emptyTitle="No scans in this session yet"
-        emptyDescription="Barcode scans in this session will be recorded here."
+        emptyTitle="No scans in this record yet"
+        emptyDescription="Barcode scans in this record will be shown here."
       />
     </div>
   );

@@ -89,10 +89,13 @@ export default function LocationsPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.locations"]}>
 <PageHeader
         title="Locations"
-
         actions={
-          <Button onClick={() => navigate("/app/data-library/locations/new")}>
-            <Plus size={15} strokeWidth={2} />
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => navigate("/app/data-library/locations/new")}
+          >
+            <Plus size={14} strokeWidth={2} />
             Add Location
           </Button>
         }

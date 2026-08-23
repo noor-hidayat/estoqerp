@@ -6,7 +6,7 @@ import {
   FileSpreadsheet,
   BarChart3,
 } from "lucide-react";
-import { useProjects, useProjectStats, useAllWarehouses, useBranches, useItemGroups, useItemsList } from "@/lib/api/query";
+import { useOpnameProjects, useOpnameStats, useItemGroups, useItemsList } from "@/lib/api/query";
 import { formatNumber } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
 import { PageHeader } from "@/components/ui/page-header";
@@ -21,13 +21,14 @@ type ProjectRow = {
   code: string;
   name: string;
   unit: string;
+  warehouseName: string;
   systemQty: number;
   countedQty: number;
   diff: number;
 };
 
 export default function ProjectReportPage() {
-  const { data: projects = [], isLoading: projectsLoading } = useProjects();
+  const { data: projects = [], isLoading: projectsLoading } = useOpnameProjects();
   const [projectId, setProjectId] = useState("");
 
   useEffect(() => {
@@ -37,9 +38,7 @@ export default function ProjectReportPage() {
   }, [projects, projectId]);
 
   const project = projects.find((p) => p.id === projectId);
-  const { data: stats, isLoading: statsLoading } = useProjectStats(project?.id);
-  const { data: warehouses = [] } = useAllWarehouses();
-  const { data: branches = [] } = useBranches();
+  const { data: stats, isLoading: statsLoading } = useOpnameStats(project?.id);
   const { data: items = [] } = useItemsList();
   const { data: itemGroups = [] } = useItemGroups();
 
@@ -52,6 +51,7 @@ export default function ProjectReportPage() {
         code: r.itemCode,
         name: r.itemName,
         unit: r.unit,
+        warehouseName: r.warehouseName,
         systemQty: r.systemQty,
         countedQty: r.countedQty,
         diff: r.diff,
@@ -64,6 +64,7 @@ export default function ProjectReportPage() {
     { key: "name" as const, header: "Item Name" },
     { key: "itemGroup" as const, header: "Item Group" },
     { key: "unit" as const, header: "Unit" },
+    { key: "warehouseName" as const, header: "Warehouse" },
     { key: "systemQty" as const, header: "System Qty", format: (v: unknown) => formatNumber(Number(v)) },
     { key: "countedQty" as const, header: "Counted Qty", format: (v: unknown) => formatNumber(Number(v)) },
     { key: "diff" as const, header: "Variance", format: (v: unknown) => formatNumber(Number(v)) },
@@ -76,7 +77,8 @@ export default function ProjectReportPage() {
       code: item?.code ?? r.code,
       name: item?.name ?? r.name,
       itemGroup: ig?.name ?? "—",
-      unit: item?.unit ?? r.unit,
+      unit: r.unit,
+      warehouseName: r.warehouseName,
       systemQty: r.systemQty,
       countedQty: r.countedQty,
       diff: r.diff,
@@ -86,9 +88,10 @@ export default function ProjectReportPage() {
   const handleExport = (type: "xlsx" | "pdf") => {
     if (!project) return;
     const base = `project-report-${project.name.replace(/\s+/g, "-").toLowerCase()}`;
+    const whNames = project.warehouses.map((w) => w.warehouseName).join(", ");
     const meta = {
       title: `Stock Opname Report — ${project.name}`,
-      subtitle: `${warehouses.find((w) => w.id === project.warehouseId)?.name ?? ""} · ${branches.find((b) => b.id === project.branchId)?.name ?? ""}`,
+      subtitle: whNames || "",
     };
     if (type === "xlsx") exportXlsx(exportRows, exportColumns, base, "Report");
     else exportPdf(exportRows, exportColumns, base, meta);
@@ -131,9 +134,13 @@ export default function ProjectReportPage() {
       id: "unit",
       header: "Unit",
       cell: (r) => {
-        const item = items.find((i) => i.id === r.itemId);
-        return <span className="text-xs text-muted-foreground">{item?.unit ?? r.unit}</span>;
+        return <span className="text-xs text-muted-foreground">{r.unit}</span>;
       },
+    },
+    {
+      id: "warehouse",
+      header: "Warehouse",
+      cell: (r) => <span className="text-xs text-muted-foreground">{r.warehouseName}</span>,
     },
     {
       id: "system",
@@ -219,7 +226,7 @@ export default function ProjectReportPage() {
         <DataTable
           columns={columns}
           data={rows}
-          getRowId={(r) => r.itemId}
+          getRowId={(r) => `${r.itemId}-${r.warehouseName}`}
           loading={statsLoading}
           searchPlaceholder="Search items..."
           getSearchText={(r) => `${r.name} ${r.code}`}

@@ -76,10 +76,13 @@ export default function WarehousesPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.warehouses"]}>
       <PageHeader
         title="Warehouses"
-
         actions={
-          <Button onClick={() => navigate("/app/data-library/warehouses/new")}>
-            <Plus size={15} strokeWidth={2} />
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => navigate("/app/data-library/warehouses/new")}
+          >
+            <Plus size={14} strokeWidth={2} />
             Add Warehouse
           </Button>
         }

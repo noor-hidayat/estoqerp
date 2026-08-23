@@ -4,6 +4,7 @@ import type { AnyPgColumn, AnyPgTable } from "drizzle-orm/pg-core";
 import { db } from "../db/pool";
 import * as schema from "../db/schema";
 import { parseBatchNumber, type BatchFormatLike } from "../lib/batch-parse";
+import { nextRowId } from "../lib/id";
 import { canAccessEntity, canViewOpnameContext, checkAnyPermission, checkPermission, systemRoleId } from "../middleware/rbac";
 
 // Tabel relasi yang disinkronisasi frontend dengan pola "hapus dulu, insert
@@ -15,9 +16,9 @@ const INSERT_OR_IGNORE = new Set([
   "userSettings",
 ]);
 
-// Kolom id tidak punya default di DB — id dibuat di sini dengan format terbaca
-// (pm_001, br_001, itm_001, ...). Frontend tidak mengirim id saat insert agar
-// penomoran tidak balapan antar klien.
+// Kolom id tidak punya default di DB — id dibuat di sini dengan format
+// {prefix}-{YYMM}-{0001} (itm-2608-0001, br-2608-0001, ...). Frontend tidak
+// mengirim id saat insert agar penomoran tidak balapan antar klien.
 const ID_PREFIXES: Record<string, string> = {
   rolePermissions: "pm",
   branchAccesses: "bxa",
@@ -31,25 +32,21 @@ const ID_PREFIXES: Record<string, string> = {
   barcodeFormats: "fmt",
   batchFormats: "bfmt",
   stockBalances: "sb",
-  opnameEntries: "ent",
+  batches: "bat",
   uom: "uom",
   movementTypes: "mvt",
-  batches: "bat",
   opnameWarehouses: "opw",
-  opnameCounts: "opc",
-};
-
-// Tabel volume tinggi (sesi & record scan): id UUID berprefix — tidak perlu
-// scan tabel untuk mencari nomor berikutnya.
-const UUID_ID_TABLES: Record<string, string> = {
-  scanSessions: "ses",
-  scanRecords: "rec",
+  opnameScans: "ops",
+  opnameScanDetails: "osd",
   stockMovementDetails: "smd",
   stockLedger: "sld",
   stockBatches: "stb",
-  opnameSessions: "ops",
-  opnameScans: "opsc",
+  stockBarcodes: "sbc",
 };
+
+// Semua tabel memakai id serial {prefix}-{YYMM}-{0001} — lihat nextRowId().
+// Tidak ada lagi id UUID: tabel volume tinggi (scan detail, ledger) ikut
+// serial bulanan, dihitung via LIKE prefix agar tidak scan seluruh tabel.
 
 function isUniqueViolation(e: unknown): boolean {
   return (
@@ -71,13 +68,13 @@ const DELETE_BLOCK_MESSAGES: Record<string, string> = {
   itemGroups:
     "Grup item ini masih dipakai oleh item — pindahkan item ke grup lain atau hapus item-nya terlebih dahulu.",
   items:
-    "Item ini masih tercatat dalam hasil stock opname (opname entries) — data opname yang sudah masuk perhitungan tidak bisa dihapus.",
+    "Item ini masih tercatat dalam hasil stock opname (scan detail) — data opname yang sudah masuk perhitungan tidak bisa dihapus.",
   branches:
-    "Branch ini masih dipakai oleh gudang atau project — pindahkan atau hapus data terkait terlebih dahulu.",
+    "Branch ini masih dipakai oleh gudang atau project opname — pindahkan atau hapus data terkait terlebih dahulu.",
   warehouses:
-    "Gudang ini masih dipakai oleh lokasi, project, atau stock balance — pindahkan atau hapus data terkait terlebih dahulu.",
+    "Gudang ini masih dipakai oleh lokasi, project opname, atau stock balance — pindahkan atau hapus data terkait terlebih dahulu.",
   locations:
-    "Lokasi ini masih dipakai oleh sesi scan, record scan, atau hasil opname — hapus data terkait terlebih dahulu.",
+    "Lokasi ini masih dipakai oleh scan opname atau stock — hapus data terkait terlebih dahulu.",
   roles:
     "Role ini masih dipakai oleh user — pindahkan user ke role lain terlebih dahulu.",
   users:
@@ -87,7 +84,7 @@ const DELETE_BLOCK_MESSAGES: Record<string, string> = {
   uom:
     "Satuan ini masih dipakai oleh item atau transaksi — pindahkan atau hapus data terkait terlebih dahulu.",
   batches:
-    "Batch ini masih tercatat dalam transaksi atau ledger — hapus data terkait terlebih dahulu.",
+    "Batch ini masih tercatat dalam transaksi atau scan opname — hapus data terkait terlebih dahulu.",
 };
 
 async function ensureRowId(
@@ -95,31 +92,10 @@ async function ensureRowId(
   values: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   if (values.id) return values;
-  const uuidPrefix = UUID_ID_TABLES[tableName];
-  if (uuidPrefix) {
-    return { ...values, id: `${uuidPrefix}_${crypto.randomUUID()}` };
-  }
-  if (tableName === "projects") {
-    // ID project: "SOP-001", "SOP-002", ... (legacy "1", "2", ... tetap dihitung)
-    const rows = await db.select({ id: schema.projects.id }).from(schema.projects);
-    const max = rows.reduce((m, r) => {
-      const id = String(r.id);
-      const n = id.startsWith("SOP-") ? Number(id.slice(4)) : Number(id);
-      return Number.isFinite(n) && n > m ? n : m;
-    }, 0);
-    return { ...values, id: `SOP-${String(max + 1).padStart(3, "0")}` };
-  }
   const prefix = ID_PREFIXES[tableName];
   if (!prefix) return values;
   const table = CRUD_TABLES[tableName];
-  const rows = await db.select({ id: idColumn(table) }).from(table);
-  const max = rows.reduce((m, r) => {
-    const id = String(r.id);
-    if (!id.startsWith(prefix + "_")) return m;
-    const n = Number(id.slice(prefix.length + 1));
-    return Number.isFinite(n) && n > m ? n : m;
-  }, 0);
-  return { ...values, id: `${prefix}_${String(max + 1).padStart(3, "0")}` };
+  return { ...values, id: await nextRowId(db, table, prefix) };
 }
 
 const CRUD_TABLES: Record<string, AnyPgTable> = {
@@ -135,10 +111,6 @@ const CRUD_TABLES: Record<string, AnyPgTable> = {
   stockBalances: schema.stockBalances,
   barcodeFormats: schema.barcodeFormats,
   batchFormats: schema.batchFormats,
-  projects: schema.projects,
-  scanSessions: schema.scanSessions,
-  scanRecords: schema.scanRecords,
-  opnameEntries: schema.opnameEntries,
   userSettings: schema.userSettings,
   uom: schema.uom,
   movementTypes: schema.movementTypes,
@@ -147,10 +119,10 @@ const CRUD_TABLES: Record<string, AnyPgTable> = {
   stockLedger: schema.stockLedger,
   batches: schema.batches,
   stockBatches: schema.stockBatches,
+  stockBarcodes: schema.stockBarcodes,
   opnameWarehouses: schema.opnameWarehouses,
-  opnameCounts: schema.opnameCounts,
-  opnameSessions: schema.opnameSessions,
   opnameScans: schema.opnameScans,
+  opnameScanDetails: schema.opnameScanDetails,
 };
 
 export const crudRouter = Router();
@@ -281,12 +253,6 @@ const TABLE_MENU: Record<string, string | string[]> = {
   items: "master",
   barcodeFormats: "master",
   batchFormats: "master",
-  projects: "opname",
-  // Dibaca lintas fitur: halaman Scan, daftar Session, detail Session, dan
-  // laporan Riwayat Scan — cukup punya salah satu menu untuk MEMBACA.
-  scanSessions: ["opname.detail.scan", "opname.detail.sessions", "opname.detail.sessions.detail"],
-  scanRecords: ["opname.detail.scan", "opname.detail.sessions", "opname.detail.sessions.detail"],
-  opnameEntries: "opname",
   userSettings: "opname.variance.column",
   uom: "master",
   movementTypes: "master.movementTypes",
@@ -295,17 +261,19 @@ const TABLE_MENU: Record<string, string | string[]> = {
   stockLedger: "inventory.stockLedger",
   batches: "inventory.batches",
   stockBatches: "inventory.batches",
+  stockBarcodes: "inventory.batches",
   opnameWarehouses: "opname",
-  opnameCounts: "opname",
-  opnameSessions: "opname",
-  opnameScans: "opname",
+  // Dibaca lintas fitur: halaman Scan, riwayat scan, detail scan, dan
+  // laporan Riwayat Scan — cukup punya salah satu menu untuk MEMBACA.
+  opnameScans: ["opname.detail.scan", "opname.detail.sessions", "opname.detail.sessions.detail"],
+  opnameScanDetails: ["opname.detail.scan", "opname.detail.sessions", "opname.detail.sessions.detail"],
 };
 
-// MENULIS sesi/catatan scan (membuat sesi, menyimpan scan, menutup sesi)
+// MENULIS scan (membuat header scan, menyimpan detail barcode, menutup scan)
 // adalah aksi "Scan" — wajib punya permission menu scan, bukan menu lain.
 const WRITE_MENU_OVERRIDE: Record<string, string> = {
-  scanSessions: "opname.detail.scan",
-  scanRecords: "opname.detail.scan",
+  opnameScans: "opname.detail.scan",
+  opnameScanDetails: "opname.detail.scan",
 };
 
 /** Normalisasi menu tabel → daftar menu yang dicek. */
@@ -386,9 +354,6 @@ const SORT_COLS: Record<string, AnyPgColumn> = {
   locations: schema.locations.code,
   itemGroups: schema.itemGroups.code,
   branches: schema.branches.code,
-  projects: schema.projects.createdAt,
-  scanSessions: schema.scanSessions.startedAt,
-  scanRecords: schema.scanRecords.scannedAt,
   stockBalances: schema.stockBalances.id,
   users: schema.users.name,
   roles: schema.roles.name,
@@ -400,8 +365,9 @@ const SORT_COLS: Record<string, AnyPgColumn> = {
   stockLedger: schema.stockLedger.transactionDate,
   batches: schema.batches.createdAt,
   stockBatches: schema.stockBatches.updatedAt,
-  opnameSessions: schema.opnameSessions.startAt,
-  opnameScans: schema.opnameScans.scannedAt,
+  stockBarcodes: schema.stockBarcodes.updatedAt,
+  opnameScans: schema.opnameScans.startedAt,
+  opnameScanDetails: schema.opnameScanDetails.scannedAt,
 };
 
 function getOrderBy(req: Request, tableName: string) {
@@ -420,6 +386,7 @@ const SEARCHABLE_COLS: Record<string, AnyPgColumn[]> = {
   batches: [schema.batches.batchNumber, schema.batches.status],
   batchFormats: [schema.batchFormats.name, schema.batchFormats.id],
   stockBatches: [schema.stockBatches.batchId],
+  stockBarcodes: [schema.stockBarcodes.barcode, schema.stockBarcodes.itemId],
   stockMovements: [
     schema.stockMovements.id,
     schema.stockMovements.status,
@@ -429,7 +396,6 @@ const SEARCHABLE_COLS: Record<string, AnyPgColumn[]> = {
   items: [
     schema.items.code,
     schema.items.name,
-    schema.items.unit,
     schema.items.alternativeCode,
     schema.items.itemGroupId,
     schema.items.id,
@@ -437,37 +403,38 @@ const SEARCHABLE_COLS: Record<string, AnyPgColumn[]> = {
 };
 
 /**
- * Kondisi WHERE untuk pencarian teks lintas kolom. scanRecords dicari sampai
- * nama hasil join (item, project, lokasi, user) lewat subquery EXISTS agar
- * bentuk SELECT utama tidak berubah.
+ * Kondisi WHERE untuk pencarian teks lintas kolom. opnameScanDetails dicari
+ * sampai nama hasil join (item, project, lokasi, user) lewat subquery EXISTS
+ * agar bentuk SELECT utama tidak berubah.
  */
 function searchCondition(tableName: string, q: string): ReturnType<typeof sql> | undefined {
   const p = `%${q}%`;
-  if (tableName === "scanRecords") {
+  if (tableName === "opnameScanDetails") {
     const s = schema;
     return sql`(
-      ${s.scanRecords.barcode}::text ILIKE ${p}
-      OR ${s.scanRecords.id}::text ILIKE ${p}
-      OR ${s.scanRecords.quantity}::text ILIKE ${p}
-      OR ${s.scanRecords.source}::text ILIKE ${p}
-      OR ${s.scanRecords.qtyMode}::text ILIKE ${p}
-      OR ${s.scanRecords.sessionId}::text ILIKE ${p}
+      ${s.opnameScanDetails.barcode}::text ILIKE ${p}
+      OR ${s.opnameScanDetails.id}::text ILIKE ${p}
+      OR ${s.opnameScanDetails.quantity}::text ILIKE ${p}
+      OR ${s.opnameScanDetails.source}::text ILIKE ${p}
+      OR ${s.opnameScanDetails.qtyMode}::text ILIKE ${p}
+      OR ${s.opnameScanDetails.scanId}::text ILIKE ${p}
+      OR ${s.opnameScanDetails.batch}::text ILIKE ${p}
       OR EXISTS (
-        SELECT 1 FROM ${s.items} WHERE ${s.items.id} = ${s.scanRecords.itemId}
+        SELECT 1 FROM ${s.items} WHERE ${s.items.id} = ${s.opnameScanDetails.itemId}
           AND (${s.items.code}::text ILIKE ${p} OR ${s.items.name}::text ILIKE ${p})
       )
       OR EXISTS (
-        SELECT 1 FROM ${s.projects} WHERE ${s.projects.id} = ${s.scanRecords.projectId}
-          AND ${s.projects.name}::text ILIKE ${p}
+        SELECT 1 FROM ${s.opnameProjects} WHERE ${s.opnameProjects.id} = ${s.opnameScanDetails.opnameId}
+          AND ${s.opnameProjects.name}::text ILIKE ${p}
       )
       OR EXISTS (
-        SELECT 1 FROM ${s.locations} WHERE ${s.locations.id} = ${s.scanRecords.locationId}
+        SELECT 1 FROM ${s.locations} WHERE ${s.locations.id} = ${s.opnameScanDetails.locationId}
           AND ${s.locations.code}::text ILIKE ${p}
       )
       OR EXISTS (
-        SELECT 1 FROM ${s.scanSessions} WHERE ${s.scanSessions.id} = ${s.scanRecords.sessionId}
+        SELECT 1 FROM ${s.opnameScans} WHERE ${s.opnameScans.id} = ${s.opnameScanDetails.scanId}
           AND EXISTS (
-            SELECT 1 FROM ${s.users} WHERE ${s.users.id} = ${s.scanSessions.scannedBy}
+            SELECT 1 FROM ${s.users} WHERE ${s.users.id} = ${s.opnameScans.scannedBy}
               AND ${s.users.name}::text ILIKE ${p}
           )
       )
@@ -505,23 +472,6 @@ async function applyEntityScope(req: Request, tableName: string) {
       );
     }
     return sql`FALSE`;
-  }
-  if (tableName === "projects") {
-    const conds: ReturnType<typeof sql>[] = [];
-    if (branchIds.length > 0) conds.push(inArray(s.projects.branchId, branchIds));
-    if (warehouseIds.length > 0) conds.push(inArray(s.projects.warehouseId, warehouseIds));
-    return conds.length > 0 ? or(...conds) : sql`FALSE`;
-  }
-  if (tableName === "scanSessions" || tableName === "scanRecords" || tableName === "opnameEntries") {
-    const tbl: AnyPgTable = tableName === "scanSessions" ? s.scanSessions : tableName === "scanRecords" ? s.scanRecords : s.opnameEntries;
-    const projectCol = (tbl as unknown as { projectId: AnyPgColumn }).projectId;
-    const projConds: ReturnType<typeof sql>[] = [];
-    if (branchIds.length > 0) projConds.push(inArray(s.projects.branchId, branchIds));
-    if (warehouseIds.length > 0) projConds.push(inArray(s.projects.warehouseId, warehouseIds));
-    if (projConds.length > 0) {
-      return inArray(projectCol, db.select({ id: s.projects.id }).from(s.projects).where(or(...projConds)));
-    }
-    return undefined;
   }
   if (tableName === "stockBalances") {
     if (warehouseIds.length > 0) return inArray(s.stockBalances.warehouseId, warehouseIds);
@@ -562,22 +512,42 @@ async function applyEntityScope(req: Request, tableName: string) {
     }
     return sql`FALSE`;
   }
-  if (
-    tableName === "opnameWarehouses" ||
-    tableName === "opnameCounts" ||
-    tableName === "opnameSessions" ||
-    tableName === "opnameScans"
-  ) {
-    const tbl: AnyPgTable =
-      tableName === "opnameWarehouses"
-        ? s.opnameWarehouses
-        : tableName === "opnameCounts"
-          ? s.opnameCounts
-          : tableName === "opnameSessions"
-            ? s.opnameSessions
-            : s.opnameScans;
-    const col = (tbl as unknown as { warehouseId: AnyPgColumn }).warehouseId;
-    if (warehouseIds.length > 0) return inArray(col, warehouseIds);
+  if (tableName === "opnameWarehouses") {
+    if (warehouseIds.length > 0) return inArray(s.opnameWarehouses.warehouseId, warehouseIds);
+    if (branchIds.length > 0) {
+      return inArray(
+        s.opnameWarehouses.warehouseId,
+        db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, branchIds))
+      ) as ReturnType<typeof sql>;
+    }
+    return sql`FALSE`;
+  }
+  if (tableName === "opnameScans") {
+    // Header scan tidak punya warehouse — scope via opname_warehouses.
+    const whConds: ReturnType<typeof sql>[] = [];
+    if (warehouseIds.length > 0) whConds.push(inArray(s.opnameWarehouses.warehouseId, warehouseIds));
+    if (branchIds.length > 0) {
+      whConds.push(
+        inArray(
+          s.opnameWarehouses.warehouseId,
+          db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, branchIds))
+        ) as ReturnType<typeof sql>
+      );
+    }
+    if (whConds.length === 0) return undefined;
+    return inArray(
+      s.opnameScans.opnameId,
+      db.select({ opnameId: s.opnameWarehouses.opnameId }).from(s.opnameWarehouses).where(or(...whConds))
+    ) as ReturnType<typeof sql>;
+  }
+  if (tableName === "opnameScanDetails") {
+    if (warehouseIds.length > 0) return inArray(s.opnameScanDetails.warehouseId, warehouseIds);
+    if (branchIds.length > 0) {
+      return inArray(
+        s.opnameScanDetails.warehouseId,
+        db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, branchIds))
+      ) as ReturnType<typeof sql>;
+    }
     return sql`FALSE`;
   }
   return undefined;
@@ -612,28 +582,6 @@ async function buildWhere(req: Request, table: AnyPgTable, tableName: string) {
     const itemId = queryStr(req, "itemId");
     if (itemId) conditions.push(eq(s.stockBalances.itemId, itemId));
   }
-  if (tableName === "projects") {
-    const branchId = queryStr(req, "branchId");
-    if (branchId) conditions.push(eq(s.projects.branchId, branchId));
-    const projectId = queryStr(req, "projectId");
-    if (projectId) conditions.push(eq(s.projects.projectId, projectId));
-  }
-  if (tableName === "scanSessions") {
-    const projectId = queryStr(req, "projectId");
-    if (projectId) conditions.push(eq(s.scanSessions.projectId, projectId));
-    const status = queryStr(req, "status");
-    if (status) conditions.push(sql`${s.scanSessions.status} = ${status}`);
-  }
-  if (tableName === "scanRecords") {
-    const projectId = queryStr(req, "projectId");
-    if (projectId) conditions.push(eq(s.scanRecords.projectId, projectId));
-    const sessionId = queryStr(req, "sessionId");
-    if (sessionId) conditions.push(eq(s.scanRecords.sessionId, sessionId));
-    const source = queryStr(req, "source");
-    if (source) conditions.push(sql`${s.scanRecords.source} = ${source}`);
-    const date = queryStr(req, "date");
-    if (date) conditions.push(sql`DATE(${s.scanRecords.scannedAt}) = ${date}`);
-  }
   if (tableName === "rolePermissions") {
     const roleId = queryStr(req, "roleId");
     if (roleId) conditions.push(eq(s.rolePermissions.roleId, roleId));
@@ -642,9 +590,35 @@ async function buildWhere(req: Request, table: AnyPgTable, tableName: string) {
     const roleId = queryStr(req, "roleId");
     if (roleId) conditions.push(eq(s.branchAccesses.roleId, roleId));
   }
-  if (tableName === "opnameEntries") {
-    const projectId = queryStr(req, "projectId");
-    if (projectId) conditions.push(eq(s.opnameEntries.projectId, projectId));
+  if (tableName === "opnameWarehouses") {
+    const opnameId = queryStr(req, "opnameId");
+    if (opnameId) conditions.push(eq(s.opnameWarehouses.opnameId, opnameId));
+  }
+  if (tableName === "opnameScans") {
+    const opnameId = queryStr(req, "opnameId");
+    if (opnameId) conditions.push(eq(s.opnameScans.opnameId, opnameId));
+    const status = queryStr(req, "status");
+    if (status) conditions.push(sql`${s.opnameScans.status} = ${status}`);
+  }
+  if (tableName === "opnameScanDetails") {
+    const opnameId = queryStr(req, "opnameId");
+    if (opnameId) conditions.push(eq(s.opnameScanDetails.opnameId, opnameId));
+    const scanId = queryStr(req, "scanId");
+    if (scanId) conditions.push(eq(s.opnameScanDetails.scanId, scanId));
+    const source = queryStr(req, "source");
+    if (source) conditions.push(sql`${s.opnameScanDetails.source} = ${source}`);
+    const date = queryStr(req, "date");
+    if (date) conditions.push(sql`DATE(${s.opnameScanDetails.scannedAt}) = ${date}`);
+  }
+  if (tableName === "stockBarcodes") {
+    const warehouseId = queryStr(req, "warehouseId");
+    if (warehouseId) conditions.push(eq(s.stockBarcodes.warehouseId, warehouseId));
+    const barcode = queryStr(req, "barcode");
+    if (barcode) conditions.push(eq(s.stockBarcodes.barcode, barcode));
+    const itemId = queryStr(req, "itemId");
+    if (itemId) conditions.push(eq(s.stockBarcodes.itemId, itemId));
+    const batchId = queryStr(req, "batchId");
+    if (batchId) conditions.push(eq(s.stockBarcodes.batchId, batchId));
   }
 
   return conditions.length > 0 ? and(...conditions) : undefined;
@@ -877,14 +851,12 @@ crudRouter.get("/items/lookup", async (req, res) => {  if (!req.user) {
       const values: Record<string, string> = {};
       let itemCode: string | null = null;
       let itemGroupCode: string | null = null;
-      let barcodeId: string | null = null;
 
       for (const seg of segments) {
         const val = barcode.slice(seg.start - 1, seg.end);
         values[seg.field] = val;
         if (seg.field === "ITEM_CODE") itemCode = val;
         if (seg.field === "ITEM_GROUP") itemGroupCode = val;
-        if (seg.field === "BARCODE_ID") barcodeId = val;
       }
 
       // Segmen BATCH wajib menunjuk format batch — tanpa ikatan format tidak valid.
@@ -898,14 +870,6 @@ crudRouter.get("/items/lookup", async (req, res) => {  if (!req.user) {
         if (bf) batch = parseBatchNumber(values.BATCH, [bf]);
       }
 
-      if (barcodeId) {
-        const item = itemsAll.find((it) => it.barcodeId === barcodeId);
-        if (item) {
-          const ig = itemGroupsAll.find((c) => c.id === item.itemGroupId) ?? null;
-          res.json({ found: true, item, itemGroup: ig ? { id: ig.id, code: ig.code, name: ig.name } : null, matched: true, formatId: fmt.id, formatName: fmt.name, values, batchNumber: values.BATCH ?? undefined, batch });
-          return;
-        }
-      }
       if (itemCode) {
         const item = itemsAll.find((it) => it.code.toLowerCase() === itemCode!.toLowerCase());
         if (item) {
@@ -935,52 +899,54 @@ crudRouter.get("/items/lookup", async (req, res) => {  if (!req.user) {
   }
 });
 
-// GET /scan-records/check?projectId=&barcode=&excludeSessionId=
-crudRouter.get("/scan-records/check", async (req, res) => {
+// GET /opname-scan-details/check?opnameId=&barcode=&excludeScanId=
+// Cek duplikat barcode unik dalam satu project opname (termasuk scan yang
+// sudah di-post dari sesi lain).
+crudRouter.get("/opname-scan-details/check", async (req, res) => {
   if (!(await checkPermission(req, res, "opname", "view"))) return;
   try {
-    const projectId = queryStr(req, "projectId");
+    const opnameId = queryStr(req, "opnameId");
     const barcode = queryStr(req, "barcode");
-    const excludeSessionId = queryStr(req, "excludeSessionId");
-    if (!projectId || !barcode) { res.json({ exists: false }); return; }
+    const excludeScanId = queryStr(req, "excludeScanId");
+    if (!opnameId || !barcode) { res.json({ exists: false }); return; }
 
     const conds: ReturnType<typeof sql>[] = [
-      eq(schema.scanRecords.projectId, projectId),
-      eq(schema.scanRecords.barcode, barcode),
+      eq(schema.opnameScanDetails.opnameId, opnameId),
+      eq(schema.opnameScanDetails.barcode, barcode),
     ];
-    if (excludeSessionId) {
-      conds.push(sql`${schema.scanRecords.sessionId} != ${excludeSessionId}`);
+    if (excludeScanId) {
+      conds.push(sql`${schema.opnameScanDetails.scanId} != ${excludeScanId}`);
     }
 
-    const [record] = await db
+    const [detail] = await db
       .select({
-        sessionId: schema.scanRecords.sessionId,
-        locationId: schema.scanRecords.locationId,
-        scannedAt: schema.scanRecords.scannedAt,
-        scannedBy: schema.scanSessions.scannedBy,
+        scanId: schema.opnameScanDetails.scanId,
+        locationId: schema.opnameScanDetails.locationId,
+        scannedAt: schema.opnameScanDetails.scannedAt,
+        scannedBy: schema.opnameScans.scannedBy,
       })
-      .from(schema.scanRecords)
-      .leftJoin(schema.scanSessions, eq(schema.scanRecords.sessionId, schema.scanSessions.id))
+      .from(schema.opnameScanDetails)
+      .leftJoin(schema.opnameScans, eq(schema.opnameScanDetails.scanId, schema.opnameScans.id))
       .where(and(...conds))
-      .orderBy(sql`${schema.scanRecords.scannedAt} DESC`)
+      .orderBy(sql`${schema.opnameScanDetails.scannedAt} DESC`)
       .limit(1);
 
-    if (!record) { res.json({ exists: false }); return; }
+    if (!detail) { res.json({ exists: false }); return; }
 
-    const [user] = record.scannedBy
-      ? await db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, record.scannedBy)).limit(1)
+    const [user] = detail.scannedBy
+      ? await db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, detail.scannedBy)).limit(1)
       : [null];
-    const [loc] = record.locationId
-      ? await db.select({ code: schema.locations.code }).from(schema.locations).where(eq(schema.locations.id, record.locationId)).limit(1)
+    const [loc] = detail.locationId
+      ? await db.select({ code: schema.locations.code }).from(schema.locations).where(eq(schema.locations.id, detail.locationId)).limit(1)
       : [null];
 
     res.json({
       exists: true,
       record: {
-        sessionId: record.sessionId,
+        scanId: detail.scanId,
         scannedBy: user?.name ?? "—",
         locationCode: loc?.code ?? "—",
-        scannedAt: record.scannedAt,
+        scannedAt: detail.scannedAt,
       },
     });
   } catch (e) {
@@ -1002,179 +968,9 @@ crudRouter.get("/batch-formats/parse", async (req, res) => {
   }
 });
 
-// GET /projects/:id/sessions — sessions + nama user/lokasi, qty, barcode,
-// item terakhir, dan agregat proyek. Menghindari fetch semua items/locations/
-// users/scanRecords di client.
-crudRouter.get("/projects/:id/sessions", async (req, res) => {
-  if (!(await checkPermission(req, res, "opname", "view"))) return;
-  try {
-    const projectId = paramString(req, "id");
-    const [project] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId)).limit(1);
-    if (!project) { res.status(404).json({ error: "Project tidak ditemukan." }); return; }
-
-    const sessions = await db
-      .select({
-        id: schema.scanSessions.id,
-        projectId: schema.scanSessions.projectId,
-        locationId: schema.scanSessions.locationId,
-        scannedBy: schema.scanSessions.scannedBy,
-        startedAt: schema.scanSessions.startedAt,
-        endedAt: schema.scanSessions.endedAt,
-        status: schema.scanSessions.status,
-        userName: schema.users.name,
-        locationCode: schema.locations.code,
-      })
-      .from(schema.scanSessions)
-      .leftJoin(schema.users, eq(schema.scanSessions.scannedBy, schema.users.id))
-      .leftJoin(schema.locations, eq(schema.scanSessions.locationId, schema.locations.id))
-      .where(eq(schema.scanSessions.projectId, projectId))
-      .orderBy(desc(schema.scanSessions.startedAt), desc(schema.scanSessions.id));
-
-    const [projAgg] = await db
-      .select({
-        barcodes: sql<number>`count(*)`,
-        qty: sql<number>`coalesce(sum(${schema.scanRecords.quantity}), 0)`,
-        itemCount: sql<number>`count(distinct ${schema.scanRecords.itemId})`,
-      })
-      .from(schema.scanRecords)
-      .where(eq(schema.scanRecords.projectId, projectId));
-
-    const aggMap = new Map<string, { barcodes: number; qty: number; itemCount: number }>();
-    if (sessions.length > 0) {
-      const sessionIds = sessions.map((x) => x.id);
-      const aggRows = await db
-        .select({
-          sessionId: schema.scanRecords.sessionId,
-          barcodes: sql<number>`count(*)`,
-          qty: sql<number>`coalesce(sum(${schema.scanRecords.quantity}), 0)`,
-          itemCount: sql<number>`count(distinct ${schema.scanRecords.itemId})`,
-        })
-        .from(schema.scanRecords)
-        .where(inArray(schema.scanRecords.sessionId, sessionIds))
-        .groupBy(schema.scanRecords.sessionId);
-      for (const r of aggRows) aggMap.set(r.sessionId, r);
-
-      const lastRows = await db
-        .selectDistinctOn([schema.scanRecords.sessionId], {
-          sessionId: schema.scanRecords.sessionId,
-          itemId: schema.scanRecords.itemId,
-          itemName: schema.items.name,
-          itemUnit: schema.items.unit,
-        })
-        .from(schema.scanRecords)
-        .leftJoin(schema.items, eq(schema.scanRecords.itemId, schema.items.id))
-        .where(inArray(schema.scanRecords.sessionId, sessionIds))
-        .orderBy(
-          asc(schema.scanRecords.sessionId),
-          desc(schema.scanRecords.scannedAt),
-          desc(schema.scanRecords.id)
-        );
-      for (const r of lastRows) {
-        if (r.sessionId && !aggMap.has(r.sessionId)) aggMap.set(r.sessionId, { barcodes: 0, qty: 0, itemCount: 0 });
-      }
-      const lastMap = new Map(lastRows.filter((r) => !!r.sessionId).map((r) => [r.sessionId as string, r]));
-      const enriched = sessions.map((sess) => {
-        const agg = aggMap.get(sess.id);
-        const last = lastMap.get(sess.id);
-        return {
-          ...sess,
-          userName: sess.userName ?? "—",
-          locationCode: sess.locationCode ?? "—",
-          barcodes: Number(agg?.barcodes ?? 0),
-          qty: Number(agg?.qty ?? 0),
-          itemCount: Number(agg?.itemCount ?? 0),
-          lastItemId: last?.itemId ?? null,
-          lastItemName: last?.itemName ?? "—",
-          lastItemUnit: last?.itemUnit ?? "—",
-        };
-      });
-      res.json({
-        sessions: enriched,
-        totalBarcodes: Number(projAgg?.barcodes ?? 0),
-        totalQty: Number(projAgg?.qty ?? 0),
-        itemCount: Number(projAgg?.itemCount ?? 0),
-      });
-      return;
-    }
-
-    res.json({ sessions: [], totalBarcodes: 0, totalQty: 0, itemCount: 0 });
-  } catch (e) {
-    res.status(500).json({ error: messageOf(e) });
-  }
-});
-
-// GET /projects/:id/stats
-crudRouter.get("/projects/:id/stats", async (req, res) => {
-  if (!(await checkPermission(req, res, "opname", "view"))) return;
-  try {
-    const projectId = paramString(req, "id");
-    const [project] = await db.select().from(schema.projects).where(eq(schema.projects.id, projectId)).limit(1);
-    if (!project) { res.status(404).json({ error: "Project tidak ditemukan." }); return; }
-
-    const [{ count: totalLoc }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(schema.locations)
-      .where(eq(schema.locations.warehouseId, project.warehouseId));
-
-    const scannedLocs = await db
-      .selectDistinct({ locationId: schema.scanRecords.locationId })
-      .from(schema.scanRecords)
-      .where(sql`${schema.scanRecords.projectId} = ${projectId} AND ${schema.scanRecords.locationId} IS NOT NULL`);
-
-    const whLocIds = new Set(
-      (await db.select({ id: schema.locations.id }).from(schema.locations)
-        .where(eq(schema.locations.warehouseId, project.warehouseId)))
-        .map((l) => l.id)
-    );
-    const counted = scannedLocs.filter((s) => s.locationId && whLocIds.has(s.locationId)).length;
-    const pct = Number(totalLoc) > 0 ? Math.round((counted / Number(totalLoc)) * 100) : 0;
-
-    const records = await db
-      .select({ itemId: schema.scanRecords.itemId, quantity: schema.scanRecords.quantity })
-      .from(schema.scanRecords)
-      .where(eq(schema.scanRecords.projectId, projectId));
-
-    const balances = await db
-      .select({ itemId: schema.stockBalances.itemId, closingQty: schema.stockBalances.closingQty })
-      .from(schema.stockBalances)
-      .where(eq(schema.stockBalances.warehouseId, project.warehouseId));
-
-    const itemsAll = await db.select().from(schema.items);
-
-    const countedByItem = new Map<string, number>();
-    for (const r of records) {
-      if (!r.itemId) continue;
-      countedByItem.set(r.itemId, (countedByItem.get(r.itemId) ?? 0) + r.quantity);
-    }
-
-    const stockByItem = new Map<string, number>();
-    for (const sb of balances) {
-      stockByItem.set(sb.itemId, (stockByItem.get(sb.itemId) ?? 0) + sb.closingQty);
-    }
-
-    const candidateIds = new Set([...stockByItem.keys(), ...countedByItem.keys()]);
-    const variance: { itemId: string; itemCode: string; itemName: string; unit: string; systemQty: number; countedQty: number; diff: number }[] = [];
-
-    for (const itemId of candidateIds) {
-      const item = itemsAll.find((it) => it.id === itemId);
-      if (!item) continue;
-      const systemQty = stockByItem.get(itemId) ?? 0;
-      const countedQty = countedByItem.get(itemId) ?? 0;
-      variance.push({
-        itemId, itemCode: item.code, itemName: item.name, unit: item.unit,
-        systemQty, countedQty,
-        diff: countedQty - systemQty,
-      });
-    }
-    variance.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-
-    res.json({
-      projectId, progress: { total: Number(totalLoc), counted, pct }, variance,
-    });
-  } catch (e) {
-    res.status(500).json({ error: messageOf(e) });
-  }
-});
+// GET /projects/:id/sessions & /projects/:id/stats dipindah ke
+// /api/opname-projects/:id/scans & /api/opname-projects/:id/stats
+// (lihat routes/opname-projects.ts).
 
 crudRouter.get("/:table/:id", async (req, res) => {
   const tableName = paramString(req, "table");
@@ -1235,7 +1031,7 @@ async function resolveBatchFromScan(
     .limit(1);
   if (existing) return existing.id;
 
-  const id = `bat_${crypto.randomUUID()}`;
+  const id = await nextRowId(db, schema.batches, "bat");
   const values: typeof schema.batches.$inferInsert = {
     id,
     itemId,
@@ -1301,12 +1097,16 @@ crudRouter.post("/:table", async (req, res) => {
         values.code = String(values.code).trim();
       }
     }
-    if (tableName === "scanRecords") {
+    if (tableName === "opnameScanDetails") {
       const parsed = (values.parsed ?? {}) as Record<string, unknown>;
       const batchNumber =
         typeof parsed.BATCH === "string" && parsed.BATCH.trim()
           ? parsed.BATCH.trim()
           : null;
+      if (typeof values.batch === "string" && values.batch.trim()) {
+        // Kolom batch (nomor batch) bisa datang dari parsed.BATCH — isi bila kosong.
+        if (!values.batch) values.batch = batchNumber;
+      }
       if (batchNumber && typeof values.itemId === "string") {
         const batchId = await resolveBatchFromScan(values.itemId, batchNumber);
         if (batchId) values.batchId = batchId;
@@ -1321,7 +1121,7 @@ crudRouter.post("/:table", async (req, res) => {
     } catch (e) {
       // Dua request bersamaan bisa menghitung id max+1 yang sama — coba lagi
       // dengan id baru (hanya bila id dibuat di server, bukan dikirim klien).
-      if (!values.id && isUniqueViolation(e) && (ID_PREFIXES[tableName] || tableName === "projects")) {
+      if (!values.id && isUniqueViolation(e) && ID_PREFIXES[tableName]) {
         insertValues = await ensureRowId(tableName, values);
         rows = await db.insert(table).values(insertValues).returning();
       } else {
@@ -1329,6 +1129,61 @@ crudRouter.post("/:table", async (req, res) => {
       }
     }
     const row = rows[0] ?? insertValues;
+    // Flip status project & warehouse saat scan mulai berjalan.
+    if (tableName === "opnameScans") {
+      const opnameId = String(insertValues.opnameId ?? "");
+      if (opnameId) {
+        await db
+          .update(schema.opnameProjects)
+          .set({ status: "IN_PROGRESS", updatedAt: new Date() })
+          .where(eq(schema.opnameProjects.id, opnameId));
+      }
+    }
+    if (tableName === "opnameScanDetails") {
+      const opnameId = String(insertValues.opnameId ?? "");
+      const warehouseId = String(insertValues.warehouseId ?? "");
+      if (opnameId && warehouseId) {
+        await db
+          .update(schema.opnameWarehouses)
+          .set({
+            status: "IN_PROGRESS",
+            startedAt: sql`coalesce(${schema.opnameWarehouses.startedAt}, now())`,
+          })
+          .where(
+            and(
+              eq(schema.opnameWarehouses.opnameId, opnameId),
+              eq(schema.opnameWarehouses.warehouseId, warehouseId),
+              eq(schema.opnameWarehouses.status, "PENDING")
+            )
+          );
+        // Otomatis COMPLETED bila semua lokasi gudang sudah tercount.
+        const [locTotal] = await db
+          .select({ total: sql<number>`count(*)` })
+          .from(schema.locations)
+          .where(eq(schema.locations.warehouseId, warehouseId));
+        const [countedRow] = await db
+          .select({ counted: sql<number>`count(distinct ${schema.opnameScanDetails.locationId})` })
+          .from(schema.opnameScanDetails)
+          .where(
+            and(
+              eq(schema.opnameScanDetails.opnameId, opnameId),
+              eq(schema.opnameScanDetails.warehouseId, warehouseId),
+              sql`${schema.opnameScanDetails.locationId} IS NOT NULL`
+            )
+          );
+        if (Number(locTotal.total) > 0 && Number(countedRow.counted) >= Number(locTotal.total)) {
+          await db
+            .update(schema.opnameWarehouses)
+            .set({ status: "COMPLETED", completedAt: new Date() })
+            .where(
+              and(
+                eq(schema.opnameWarehouses.opnameId, opnameId),
+                eq(schema.opnameWarehouses.warehouseId, warehouseId)
+              )
+            );
+        }
+      }
+    }
     res.status(201).json(sanitizeRow(table, row as Record<string, unknown>));
   } catch (e) {
     if (

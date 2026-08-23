@@ -7,6 +7,7 @@ import { useOpnameProjects, useDeleteOpnameProject } from "@/lib/api/query";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { cx, timeAgo } from "@/lib/utils";
 
 interface ProjectRow {
@@ -126,20 +127,17 @@ export default function ProjectsPage() {
 
   return (
     <div className="animate-fade-up">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground">Projects</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Manage stock opname projects across all branches.
-          </p>
-        </div>
-        <Button asChild>
-          <Link to="/app/project/new">
-            <Plus size={15} strokeWidth={2.5} />
-            Create Project
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Projects"
+        actions={
+          <Button size="sm" className="h-7 px-2.5 text-xs" asChild>
+            <Link to="/app/project/new">
+              <Plus size={14} strokeWidth={2} />
+              Create Project
+            </Link>
+          </Button>
+        }
+      />
 
       <DataTable
         columns={columns}

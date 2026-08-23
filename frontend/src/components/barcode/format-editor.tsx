@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/form-page";
 import { SegmentBar, fieldColor, fieldLabelShort } from "./segment-visualizer";
 import { cx } from "@/lib/utils";
-import { nextSegId } from "@/lib/mock/store";
+import { nextSegId } from "@/lib/segment-id";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
 const FIELD_OPTIONS: SegmentField[] = [

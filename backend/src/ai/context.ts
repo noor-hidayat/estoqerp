@@ -41,6 +41,8 @@ export async function buildDataContext(scope: AiScope): Promise<string> {
     );
   const itemGroups = await db.select().from(s.itemGroups);
   const items = await db.select().from(s.items).then((all) => all.slice(0, MAX_ITEMS));
+  const uomsAll = await db.select().from(s.uom);
+  const uomById = new Map(uomsAll.map((u) => [u.id, u]));
   const barcodeFormats = await db.select().from(s.barcodeFormats).limit(20);
   const users = await db
     .select({ id: s.users.id, name: s.users.name, role: s.users.role })
@@ -95,67 +97,105 @@ export async function buildDataContext(scope: AiScope): Promise<string> {
     .sort((a, b) => b.qty - a.qty)
     .slice(0, 30);
 
-  // ---- projects ----
+  // ---- projects opname (4 tabel) ----
   const projects = await db
     .select({
-      id: s.projects.id,
-      name: s.projects.name,
-      branchId: s.projects.branchId,
-      warehouseId: s.projects.warehouseId,
-      mode: s.projects.mode,
-      status: s.projects.status,
-      createdAt: s.projects.createdAt,
+      id: s.opnameProjects.id,
+      name: s.opnameProjects.name,
+      mode: s.opnameProjects.mode,
+      status: s.opnameProjects.status,
+      createdAt: s.opnameProjects.createdAt,
     })
-    .from(s.projects)
-    .then((all) => {
-      let rows = all;
-      if (!isAdmin) {
-        rows = hasBr || hasWh
-          ? rows.filter((p) => branchIds.includes(p.branchId) || warehouseIds.includes(p.warehouseId))
-          : [];
-      }
-      return rows
+    .from(s.opnameProjects)
+    .then((all) =>
+      all
         .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
-        .slice(0, MAX_PROJECTS);
-    });
+        .slice(0, MAX_PROJECTS)
+    );
+
+  // Scope proyek: harus punya minimal 1 opname_warehouse di scope user.
+  let projectIds = projects.map((p) => p.id);
+  if (!isAdmin && (hasBr || hasWh)) {
+    const whOfBranches = hasBr
+      ? (await db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, branchIds))).map((w) => w.id)
+      : [];
+    const scopeWhIds = [...new Set([...warehouseIds, ...whOfBranches])];
+    if (scopeWhIds.length === 0) {
+      projectIds = [];
+    } else {
+      const scoped = await db
+        .selectDistinct({ opnameId: s.opnameWarehouses.opnameId })
+        .from(s.opnameWarehouses)
+        .where(inArray(s.opnameWarehouses.warehouseId, scopeWhIds));
+      projectIds = scoped.map((r) => r.opnameId);
+    }
+    projects.splice(0, projects.length, ...projects.filter((p) => projectIds.includes(p.id)));
+  }
 
   const projectById = new Map(projects.map((p) => [p.id, p]));
-  const projectIds = projects.map((p) => p.id);
+  projectIds = projects.map((p) => p.id);
+
+  // warehouse peserta per proyek (untuk nama gudang/cabang).
+  const opWhAll = projectIds.length > 0
+    ? await db
+        .select({
+          opnameId: s.opnameWarehouses.opnameId,
+          warehouseId: s.opnameWarehouses.warehouseId,
+        })
+        .from(s.opnameWarehouses)
+        .where(inArray(s.opnameWarehouses.opnameId, projectIds))
+    : [];
+  const whIdsOfProjects = [...new Set(opWhAll.map((r) => r.warehouseId))];
+  const whOfProjects = whIdsOfProjects.length > 0
+    ? await db.select().from(s.warehouses).where(inArray(s.warehouses.id, whIdsOfProjects))
+    : [];
+  const whOfProjectsById = new Map(whOfProjects.map((w) => [w.id, w]));
+  const projectWhIds = new Map<string, string[]>();
+  const projectWhNames = new Map<string, string[]>();
+  for (const r of opWhAll) {
+    const idList = projectWhIds.get(r.opnameId) ?? [];
+    if (!idList.includes(r.warehouseId)) idList.push(r.warehouseId);
+    projectWhIds.set(r.opnameId, idList);
+    const nameList = projectWhNames.get(r.opnameId) ?? [];
+    const name = whOfProjectsById.get(r.warehouseId)?.name ?? r.warehouseId;
+    if (!nameList.includes(name)) nameList.push(name);
+    projectWhNames.set(r.opnameId, nameList);
+  }
+
   const projectSummary = projects.map((p) => ({
     nama: p.name,
-    cabang: branches.find((b) => b.id === p.branchId)?.name ?? p.branchId,
-    gudang: whById.get(p.warehouseId)?.name ?? p.warehouseId,
+    gudang: projectWhNames.get(p.id) ?? [],
     mode: p.mode,
     status: p.status,
   }));
 
-  // ---- scan sessions & records ----
+  // ---- header scan & detail scan ----
   const sessions = await db
     .select({
-      id: s.scanSessions.id,
-      projectId: s.scanSessions.projectId,
-      scannedBy: s.scanSessions.scannedBy,
-      startedAt: s.scanSessions.startedAt,
-      status: s.scanSessions.status,
+      id: s.opnameScans.id,
+      opnameId: s.opnameScans.opnameId,
+      scannedBy: s.opnameScans.scannedBy,
+      startedAt: s.opnameScans.startedAt,
+      status: s.opnameScans.status,
     })
-    .from(s.scanSessions)
+    .from(s.opnameScans)
     .then((all) =>
       all
-        .filter((r) => (projectIds.length === 0 ? false : projectIds.includes(r.projectId)))
+        .filter((r) => (projectIds.length === 0 ? false : projectIds.includes(r.opnameId)))
         .sort((a, b) => (b.startedAt?.getTime() ?? 0) - (a.startedAt?.getTime() ?? 0))
         .slice(0, MAX_SESSIONS)
     );
 
   const records = await db
     .select({
-      projectId: s.scanRecords.projectId,
-      itemId: s.scanRecords.itemId,
-      quantity: s.scanRecords.quantity,
-      scannedAt: s.scanRecords.scannedAt,
+      opnameId: s.opnameScanDetails.opnameId,
+      itemId: s.opnameScanDetails.itemId,
+      quantity: s.opnameScanDetails.quantity,
+      scannedAt: s.opnameScanDetails.scannedAt,
     })
-    .from(s.scanRecords)
+    .from(s.opnameScanDetails)
     .then((all) => {
-      const filtered = projectIds.length === 0 ? [] : all.filter((r) => projectIds.includes(r.projectId));
+      const filtered = projectIds.length === 0 ? [] : all.filter((r) => projectIds.includes(r.opnameId));
       return filtered
         .sort((a, b) => (b.scannedAt?.getTime() ?? 0) - (a.scannedAt?.getTime() ?? 0))
         .slice(0, MAX_RECORDS);
@@ -163,10 +203,10 @@ export async function buildDataContext(scope: AiScope): Promise<string> {
   const totalScanQty =
     Number(
       (await db
-        .select({ qty: sql<number>`COALESCE(SUM(${s.scanRecords.quantity}), 0)` })
-        .from(s.scanRecords)
+        .select({ qty: sql<number>`COALESCE(SUM(${s.opnameScanDetails.quantity}), 0)` })
+        .from(s.opnameScanDetails)
         .where(
-          projectIds.length > 0 ? inArray(s.scanRecords.projectId, projectIds) : sql`FALSE`
+          projectIds.length > 0 ? inArray(s.opnameScanDetails.opnameId, projectIds) : sql`FALSE`
         ))[0]?.qty ?? 0
     );
 
@@ -179,23 +219,13 @@ export async function buildDataContext(scope: AiScope): Promise<string> {
   }
 
   const progressRows = toProgressRows(
-    projects.map((p) => ({ id: p.id, name: p.name, status: p.status, mode: p.mode, warehouseId: p.warehouseId })),
+    projects.map((p) => ({ id: p.id, name: p.name, status: p.status, mode: p.mode })),
+    projectWhIds,
     whItemCount,
     scanned,
     sessStats,
     entrStats
   );
-
-  // ---- opname entries ----
-  const entries = await db
-    .select({
-      projectId: s.opnameEntries.projectId,
-      itemId: s.opnameEntries.itemId,
-      systemQty: s.opnameEntries.systemQty,
-      countedQty: s.opnameEntries.countedQty,
-    })
-    .from(s.opnameEntries)
-    .then((all) => (projectIds.length === 0 ? [] : all.filter((r) => projectIds.includes(r.projectId)).slice(0, MAX_ENTRIES)));
 
   const sections: string[] = [];
   const push = (title: string, body: unknown) => {
@@ -222,9 +252,8 @@ export async function buildDataContext(scope: AiScope): Promise<string> {
     id: i.id,
     kode: i.code,
     nama: i.name,
-    satuan: i.unit,
+    satuan: i.uomId ? (uomById.get(i.uomId)?.name ?? null) : null,
     grupItem: igById.get(i.itemGroupId)?.name ?? null,
-    harga: i.price,
   })));
   push("barcode_formats", barcodeFormats.map((b) => ({
     nama: b.name,
@@ -237,23 +266,16 @@ export async function buildDataContext(scope: AiScope): Promise<string> {
   push("progres_proyek", progressRows);
   push("sesi_scan_terbaru", sessions.map((r) => ({
     id: r.id,
-    proyek: projectById.get(r.projectId)?.name ?? r.projectId,
+    proyek: projectById.get(r.opnameId)?.name ?? r.opnameId,
     operator: users.find((u) => u.id === r.scannedBy)?.name ?? null,
     mulai: r.startedAt,
     status: r.status,
   })));
   push("hasil_scan_terbaru", records.map((r) => ({
-    proyek: projectById.get(r.projectId)?.name ?? r.projectId,
+    proyek: projectById.get(r.opnameId)?.name ?? r.opnameId,
     barang: itemById.get(r.itemId ?? "")?.name ?? r.itemId,
     qty: r.quantity,
     waktu: r.scannedAt,
-  })));
-  push("entri_opname_terbaru", entries.map((e) => ({
-    proyek: projectById.get(e.projectId)?.name ?? e.projectId,
-    barang: itemById.get(e.itemId)?.name ?? e.itemId,
-    qtySistem: e.systemQty,
-    qtyHitung: e.countedQty,
-    selisih: e.countedQty - e.systemQty,
   })));
   push("pengguna", users.map((u) => ({ nama: u.name, role: u.role })));
 
@@ -273,63 +295,59 @@ interface ScannedStat {
 interface EntryStat {
   projectId: string;
   barangDiisi: number;
-  qtySistem: number;
   qtyHitung: number;
 }
 
 async function progressStats(projectIds: string[]) {
   const where = projectIds.length > 0
-    ? inArray(schema.scanRecords.projectId, projectIds)
+    ? inArray(schema.opnameScanDetails.opnameId, projectIds)
     : sql`FALSE`;
-  const [scanned, sessions, entries] = await Promise.all([
+  const [scanned, sessions] = await Promise.all([
     db
       .select({
-        projectId: schema.scanRecords.projectId,
-        barangTerscan: sql<number>`COUNT(DISTINCT ${schema.scanRecords.itemId})`,
-        qtyScan: sql<number>`COALESCE(SUM(${schema.scanRecords.quantity}), 0)`,
+        projectId: schema.opnameScanDetails.opnameId,
+        barangTerscan: sql<number>`COUNT(DISTINCT ${schema.opnameScanDetails.itemId})`,
+        qtyScan: sql<number>`COALESCE(SUM(${schema.opnameScanDetails.quantity}), 0)`,
       })
-      .from(schema.scanRecords)
+      .from(schema.opnameScanDetails)
       .where(where)
-      .groupBy(schema.scanRecords.projectId),
+      .groupBy(schema.opnameScanDetails.opnameId),
     db
       .select({
-        projectId: schema.scanSessions.projectId,
+        projectId: schema.opnameScans.opnameId,
         jumlahSesi: sql<number>`COUNT(*)`,
       })
-      .from(schema.scanSessions)
-      .where(projectIds.length > 0 ? inArray(schema.scanSessions.projectId, projectIds) : sql`FALSE`)
-      .groupBy(schema.scanSessions.projectId),
-    db
-      .select({
-        projectId: schema.opnameEntries.projectId,
-        barangDiisi: sql<number>`COUNT(DISTINCT ${schema.opnameEntries.itemId})`,
-        qtySistem: sql<number>`COALESCE(SUM(${schema.opnameEntries.systemQty}), 0)`,
-        qtyHitung: sql<number>`COALESCE(SUM(${schema.opnameEntries.countedQty}), 0)`,
-      })
-      .from(schema.opnameEntries)
-      .where(projectIds.length > 0 ? inArray(schema.opnameEntries.projectId, projectIds) : sql`FALSE`)
-      .groupBy(schema.opnameEntries.projectId),
+      .from(schema.opnameScans)
+      .where(projectIds.length > 0 ? inArray(schema.opnameScans.opnameId, projectIds) : sql`FALSE`)
+      .groupBy(schema.opnameScans.opnameId),
   ]);
+  const entries = scanned.map((r) => ({
+    projectId: r.projectId,
+    barangDiisi: Number(r.barangTerscan),
+    qtyHitung: Number(r.qtyScan),
+  }));
   return {
     scanned: new Map<string, ScannedStat>(
       scanned.map((r) => [r.projectId, { projectId: r.projectId, barangTerscan: Number(r.barangTerscan), qtyScan: Number(r.qtyScan) }])
     ),
     sessions: new Map<string, number>(sessions.map((r) => [r.projectId, Number(r.jumlahSesi)])),
     entries: new Map<string, EntryStat>(
-      entries.map((r) => [r.projectId, { projectId: r.projectId, barangDiisi: Number(r.barangDiisi), qtySistem: Number(r.qtySistem), qtyHitung: Number(r.qtyHitung) }])
+      entries.map((r) => [r.projectId, { projectId: r.projectId, barangDiisi: r.barangDiisi, qtyHitung: r.qtyHitung }])
     ),
   };
 }
 
 function toProgressRows(
-  projs: { id: string; name: string; status: string; mode: string; warehouseId: string }[],
+  projs: { id: string; name: string; status: string; mode: string }[],
+  projectWhIds: Map<string, string[]>,
   whItemCount: Map<string, number>,
   scanned: Map<string, ScannedStat>,
   sessions: Map<string, number>,
   entries: Map<string, EntryStat>
 ) {
   return projs.map((p) => {
-    const total = whItemCount.get(p.warehouseId) ?? 0;
+    const whIds = projectWhIds.get(p.id) ?? [];
+    const total = whIds.reduce((sum, whId) => sum + (whItemCount.get(whId) ?? 0), 0);
     const sc = scanned.get(p.id);
     const ent = entries.get(p.id);
     const terscan = sc?.barangTerscan ?? 0;
@@ -343,7 +361,7 @@ function toProgressRows(
       jumlahSesi: sessions.get(p.id) ?? 0,
       persenProgress: total > 0 ? Math.round((terscan / total) * 100) : null,
       entri: ent
-        ? { barangDiisi: ent.barangDiisi, qtySistem: ent.qtySistem, qtyHitung: ent.qtyHitung }
+        ? { barangDiisi: ent.barangDiisi, qtyHitung: ent.qtyHitung }
         : null,
     };
   });
@@ -398,7 +416,7 @@ export async function lookupEntities(q: string, scope: AiScope): Promise<string>
     db.select().from(schema.items).where(match(schema.items.name)).limit(25),
     db.select().from(schema.warehouses).where(match(schema.warehouses.name)).limit(10),
     db.select().from(schema.branches).where(match(schema.branches.name)).limit(10),
-    db.select().from(schema.projects).where(match(schema.projects.name)).limit(10),
+    db.select().from(schema.opnameProjects).where(match(schema.opnameProjects.name)).limit(10),
     db.select().from(schema.itemGroups).where(match(schema.itemGroups.name)).limit(10),
   ]);
 
@@ -406,8 +424,11 @@ export async function lookupEntities(q: string, scope: AiScope): Promise<string>
   const push = (title: string, body: unknown) =>
     sections.push(`## ${title}\n${JSON.stringify(body)}`);
 
+  const uomsAll = await db.select().from(schema.uom);
+  const uomById = new Map(uomsAll.map((u) => [u.id, u]));
+
   if (itemsM.length > 0) {
-    push("barang_terkait", itemsM.map((i) => ({ kode: i.code, nama: i.name, satuan: i.unit })));
+    push("barang_terkait", itemsM.map((i) => ({ kode: i.code, nama: i.name, satuan: i.uomId ? (uomById.get(i.uomId)?.name ?? null) : null })));
   }
   if (whM.length > 0) {
     push("gudang_terkait", whM.map((w) => ({ kode: w.code, nama: w.name })));
@@ -483,76 +504,94 @@ export async function lookupEntities(q: string, scope: AiScope): Promise<string>
     })));
   }
 
-  // ---- proyek yang cocok: sesi, scan & entri terbaru ----
+  // ---- proyek yang cocok: scan & progres terbaru ----
   if (projM.length > 0) {
     let matched = projM;
     if (!scope.isAdmin) {
-      matched = scope.branchIds.length > 0 || hasWh
-        ? projM.filter((p) => scope.branchIds.includes(p.branchId) || scopeWh.includes(p.warehouseId))
+      const scopeWhIds = Array.from(new Set([...scope.warehouseIds]));
+      const brWhIds = scope.branchIds.length > 0
+        ? (await db.select({ id: schema.warehouses.id }).from(schema.warehouses).where(inArray(schema.warehouses.branchId, scope.branchIds))).map((w) => w.id)
         : [];
+      const allScopeWh = [...new Set([...scopeWhIds, ...brWhIds])];
+      if (allScopeWh.length === 0) {
+        matched = [];
+      } else {
+        const scoped = await db
+          .selectDistinct({ opnameId: schema.opnameWarehouses.opnameId })
+          .from(schema.opnameWarehouses)
+          .where(inArray(schema.opnameWarehouses.warehouseId, allScopeWh));
+        const scopedIds = new Set(scoped.map((r) => r.opnameId));
+        matched = projM.filter((p) => scopedIds.has(p.id));
+      }
     }
     if (matched.length > 0) {
       const pIds = matched.map((p) => p.id);
-      const [sess, recs, ents, stats, expCounts] = await Promise.all([
-        db.select().from(schema.scanSessions).where(inArray(schema.scanSessions.projectId, pIds)).limit(200),
+      const [opWhs, scans, details, stats] = await Promise.all([
         db
           .select({
-            projectId: schema.scanRecords.projectId,
-            itemId: schema.scanRecords.itemId,
-            quantity: schema.scanRecords.quantity,
-            scannedAt: schema.scanRecords.scannedAt,
+            opnameId: schema.opnameWarehouses.opnameId,
+            warehouseId: schema.opnameWarehouses.warehouseId,
           })
-          .from(schema.scanRecords)
-          .where(inArray(schema.scanRecords.projectId, pIds))
-          .limit(15),
+          .from(schema.opnameWarehouses)
+          .where(inArray(schema.opnameWarehouses.opnameId, pIds)),
         db
           .select({
-            projectId: schema.opnameEntries.projectId,
-            itemId: schema.opnameEntries.itemId,
-            systemQty: schema.opnameEntries.systemQty,
-            countedQty: schema.opnameEntries.countedQty,
+            id: schema.opnameScans.id,
+            opnameId: schema.opnameScans.opnameId,
           })
-          .from(schema.opnameEntries)
-          .where(inArray(schema.opnameEntries.projectId, pIds))
+          .from(schema.opnameScans)
+          .where(inArray(schema.opnameScans.opnameId, pIds))
+          .limit(200),
+        db
+          .select({
+            opnameId: schema.opnameScanDetails.opnameId,
+            itemId: schema.opnameScanDetails.itemId,
+            quantity: schema.opnameScanDetails.quantity,
+            scannedAt: schema.opnameScanDetails.scannedAt,
+          })
+          .from(schema.opnameScanDetails)
+          .where(inArray(schema.opnameScanDetails.opnameId, pIds))
           .limit(15),
         progressStats(pIds),
-        db
-          .select({
-            warehouseId: schema.stockBalances.warehouseId,
-            cnt: sql<number>`COUNT(DISTINCT ${schema.stockBalances.itemId})`,
-          })
-          .from(schema.stockBalances)
-          .where(inArray(schema.stockBalances.warehouseId, matched.map((p) => p.warehouseId)))
-          .groupBy(schema.stockBalances.warehouseId),
       ]);
+      const whIdsOfMatched = [...new Set(opWhs.map((r) => r.warehouseId))];
+      const expCounts = whIdsOfMatched.length > 0
+        ? await db
+            .select({
+              warehouseId: schema.stockBalances.warehouseId,
+              cnt: sql<number>`COUNT(DISTINCT ${schema.stockBalances.itemId})`,
+            })
+            .from(schema.stockBalances)
+            .where(inArray(schema.stockBalances.warehouseId, whIdsOfMatched))
+            .groupBy(schema.stockBalances.warehouseId)
+        : [];
       const itemName = new Map(itemsM.map((i) => [i.id, i.name]));
       push("proyek_terkait", matched.map((p) => ({
         nama: p.name,
         status: p.status,
         mode: p.mode,
-        jumlahSesiScan: sess.filter((x) => x.projectId === p.id).length,
+        jumlahSesiScan: scans.filter((x) => x.opnameId === p.id).length,
       })));
+      const projectWhIds = new Map<string, string[]>();
+      for (const r of opWhs) {
+        const list = projectWhIds.get(r.opnameId) ?? [];
+        if (!list.includes(r.warehouseId)) list.push(r.warehouseId);
+        projectWhIds.set(r.opnameId, list);
+      }
       const whItemCount = new Map(expCounts.map((r) => [r.warehouseId, Number(r.cnt)]));
       push("progres_proyek_terkait", toProgressRows(
-        matched.map((p) => ({ id: p.id, name: p.name, status: p.status, mode: p.mode, warehouseId: p.warehouseId })),
+        matched.map((p) => ({ id: p.id, name: p.name, status: p.status, mode: p.mode })),
+        projectWhIds,
         whItemCount,
         stats.scanned,
         stats.sessions,
         stats.entries
       ));
-      if (recs.length > 0) {
-        push("scan_proyek_terkait", recs.map((r) => ({
-          proyek: matched.find((p) => p.id === r.projectId)?.name ?? r.projectId,
+      if (details.length > 0) {
+        push("scan_proyek_terkait", details.map((r) => ({
+          proyek: matched.find((p) => p.id === r.opnameId)?.name ?? r.opnameId,
           barang: itemName.get(r.itemId ?? "") ?? r.itemId,
           qty: r.quantity,
-        })));
-      }
-      if (ents.length > 0) {
-        push("entri_proyek_terkait", ents.map((e) => ({
-          proyek: matched.find((p) => p.id === e.projectId)?.name ?? e.projectId,
-          barang: itemName.get(e.itemId) ?? e.itemId,
-          qtySistem: e.systemQty,
-          qtyHitung: e.countedQty,
         })));
       }
     }

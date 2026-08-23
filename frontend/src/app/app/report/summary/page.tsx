@@ -12,13 +12,12 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import {
-  useProjects,
+  useOpnameProjects,
   useItemsList,
   useAllWarehouses,
-  useBranches,
   useStockBalances,
 } from "@/lib/api/query";
-import { formatRupiah } from "@/lib/utils";
+import { formatNumber } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -36,6 +35,8 @@ interface ProjectStatsResponse {
     itemCode: string;
     itemName: string;
     unit: string;
+    warehouseId: string;
+    warehouseName: string;
     systemQty: number;
     countedQty: number;
     diff: number;
@@ -46,7 +47,6 @@ type ProjectRow = {
   id: string;
   name: string;
   warehouse: string;
-  branch: string;
   status: ProjectStatus;
   mode: string;
   counted: number;
@@ -57,38 +57,26 @@ type ProjectRow = {
 export default function SummaryReportPage() {
   const { data: items = [] } = useItemsList();
   const { data: warehouses = [] } = useAllWarehouses();
-  const { data: branches = [] } = useBranches();
-  const { data: projects = [] } = useProjects();
+  const { data: projects = [] } = useOpnameProjects();
   const { data: stockBalances = [] } = useStockBalances();
 
   const projectStatsQueries = useQueries({
     queries: projects.map((p) => ({
-      queryKey: ["project-stats", p.id] as const,
-      queryFn: () => api.get<ProjectStatsResponse>(`/projects/${p.id}/stats`),
+      queryKey: ["opname-stats", p.id] as const,
+      queryFn: () => api.get<ProjectStatsResponse>(`/opname-projects/${p.id}/stats`),
     })),
   });
 
   const data = useMemo(() => {
     const totalItems = items.length;
-
-    const totalValue = items.reduce((acc, item) => {
-      const qty = stockBalances
-        .filter((sb) => sb.itemId === item.id)
-        .reduce((a, sb) => a + sb.closingQty, 0);
-      return acc + item.price * qty;
-    }, 0);
-
-    const warehouseMap = new Map(warehouses.map((w) => [w.id, w]));
-    const branchMap = new Map(branches.map((b) => [b.id, b]));
-
+    const totalQty = stockBalances.reduce((a, sb) => a + sb.closingQty, 0);
     const projectRows: ProjectRow[] = projects.map((p, i) => {
       const stats = projectStatsQueries[i]?.data;
       const progress = stats?.progress ?? { total: 0, counted: 0, pct: 0 };
       return {
         id: p.id,
         name: p.name,
-        warehouse: warehouseMap.get(p.warehouseId)?.name ?? "—",
-        branch: branchMap.get(p.branchId)?.name ?? "—",
+        warehouse: p.warehouses.map((w) => w.warehouseName).join(", ") || "—",
         status: p.status,
         mode: p.mode,
         counted: progress.counted,
@@ -103,12 +91,11 @@ export default function SummaryReportPage() {
     const overallPct =
       totalCandidate === 0 ? 0 : Math.round((totalCounted / totalCandidate) * 100);
 
-    return { totalItems, totalValue, overallPct, projectRows };
-  }, [items, stockBalances, warehouses, branches, projects, projectStatsQueries]);
+    return { totalItems, totalQty, overallPct, projectRows };
+  }, [items, stockBalances, projects, projectStatsQueries]);
 
   const exportColumns = [
     { key: "name" as const, header: "Project" },
-    { key: "branch" as const, header: "Branch" },
     { key: "warehouse" as const, header: "Warehouse" },
     { key: "counted" as const, header: "Locations Counted" },
     { key: "total" as const, header: "Total Locations" },
@@ -119,7 +106,7 @@ export default function SummaryReportPage() {
     const base = "summary-report";
     const meta = {
       title: "Summary Report — Stock Opname",
-      subtitle: `Total stock value ${formatRupiah(data.totalValue)} · ${data.totalItems} master items · completion ${data.overallPct}%`,
+      subtitle: `Total stock ${formatNumber(data.totalQty)} unit · ${data.totalItems} master items · completion ${data.overallPct}%`,
     };
     if (type === "xlsx")
       exportXlsx(data.projectRows, exportColumns, base, "Summary");
@@ -136,10 +123,10 @@ export default function SummaryReportPage() {
     },
     {
       id: "location",
-      header: "Cabang / Gudang",
+      header: "Gudang",
       cell: (p) => (
         <span className="text-xs text-muted-foreground">
-          {p.branch} · {p.warehouse}
+          {p.warehouse}
         </span>
       ),
     },
@@ -236,9 +223,9 @@ export default function SummaryReportPage() {
           <div className="mb-4 inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Coins size={18} strokeWidth={2} />
           </div>
-          <p className="text-[12px] font-medium text-muted-foreground">Total system stock value</p>
+          <p className="text-[12px] font-medium text-muted-foreground">Total system stock</p>
           <p className="mt-1 font-mono text-xl font-semibold tracking-tight text-foreground">
-            {formatRupiah(data.totalValue)}
+            {formatNumber(data.totalQty)} unit
           </p>
         </div>
       </div>
@@ -252,7 +239,7 @@ export default function SummaryReportPage() {
           data={data.projectRows}
           getRowId={(p) => p.id}
           searchPlaceholder="Search projects..."
-          getSearchText={(p) => `${p.name} ${p.branch} ${p.warehouse}`}
+          getSearchText={(p) => `${p.name} ${p.warehouse}`}
           initialSort={{ id: "name", dir: "asc" }}
           minWidth={860}
           emptyIcon={<Package size={26} strokeWidth={2} />}

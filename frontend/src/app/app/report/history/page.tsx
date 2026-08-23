@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { FileDown, FileSpreadsheet, History } from "lucide-react";
 
-import { useProjects, useScanRecords, useItemsList, useLocations, useUsers, useScanSessions } from "@/lib/api/query";
-import type { ScanRecord } from "@/types";
+import { useOpnameProjects, useOpnameScanDetails, useItemsList, useLocations, useUsers, useOpnameScans } from "@/lib/api/query";
+import type { OpnameScanDetail } from "@/types";
 import { api } from "@/lib/api/client";
 import { formatDateTime, formatNumber } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
@@ -23,7 +23,7 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 export default function ScanHistoryPage() {
-  const { data: projects = [], isLoading: projectsLoading } = useProjects();
+  const { data: projects = [], isLoading: projectsLoading } = useOpnameProjects();
   const [projectId, setProjectId] = useState("all");
   const [source, setSource] = useState("all");
   const [date, setDate] = useState("");
@@ -33,7 +33,7 @@ export default function ScanHistoryPage() {
   const [exporting, setExporting] = useState(false);
 
   const filterParams = useMemo(() => ({
-    projectId: projectId !== "all" ? projectId : undefined,
+    opnameId: projectId !== "all" ? projectId : undefined,
     source: source !== "all" ? source : undefined,
     date: date || undefined,
     query: query || undefined,
@@ -41,15 +41,15 @@ export default function ScanHistoryPage() {
     pageSize,
   }), [projectId, source, date, query, page, pageSize]);
 
-  const { data: recordsData, isLoading: recordsLoading } = useScanRecords(filterParams);
+  const { data: recordsData, isLoading: recordsLoading } = useOpnameScanDetails(filterParams);
   const { data: items = [] } = useItemsList();
   const { data: locations = [] } = useLocations();
   const { data: users = [] } = useUsers();
-  const { data: sessions = [] } = useScanSessions();
+  const { data: scans = [] } = useOpnameScans();
 
-  const sessionMap = useMemo(
-    () => new Map(sessions.map((s) => [s.id, s])),
-    [sessions]
+  const scanMap = useMemo(
+    () => new Map(scans.map((s) => [s.id, s])),
+    [scans]
   );
 
   const exportColumns = [
@@ -68,21 +68,21 @@ export default function ScanHistoryPage() {
     setExporting(true);
     try {
       const exportParams: Record<string, string> = {};
-      if (projectId !== "all") exportParams.projectId = projectId;
+      if (projectId !== "all") exportParams.opnameId = projectId;
       if (source !== "all") exportParams.source = source;
       if (date) exportParams.date = date;
       if (query) exportParams.query = query;
       exportParams.pageSize = String(recordsData?.total ?? 500);
 
       const sp = new URLSearchParams(exportParams);
-      const res = await api.get<{ rows: ScanRecord[]; total: number }>(
-        `/scanRecords?${sp.toString()}`
+      const res = await api.get<{ rows: OpnameScanDetail[]; total: number }>(
+        `/opnameScanDetails?${sp.toString()}`
       );
       const data = res.rows.map((r) => {
         const item = items.find((i) => i.id === r.itemId);
-        const project = projects.find((p) => p.id === r.projectId);
-        const session = sessionMap.get(r.sessionId);
-        const user = users.find((u) => u.id === session?.scannedBy);
+        const project = projects.find((p) => p.id === r.opnameId);
+        const scan = scanMap.get(r.scanId);
+        const user = users.find((u) => u.id === scan?.scannedBy);
         const loc = locations.find((l) => l.id === r.locationId);
         return {
           waktu: formatDateTime(r.scannedAt),
@@ -110,7 +110,7 @@ export default function ScanHistoryPage() {
   const rows = recordsData?.rows ?? [];
   const total = recordsData?.total ?? 0;
 
-  const columns: DataTableColumn<ScanRecord>[] = [
+  const columns: DataTableColumn<OpnameScanDetail>[] = [
     {
       id: "time",
       header: "Time",
@@ -126,7 +126,7 @@ export default function ScanHistoryPage() {
       header: "Project",
       cell: (r) => (
         <span className="max-w-[160px] truncate text-[12.5px] text-muted-foreground">
-          {projects.find((p) => p.id === r.projectId)?.name ?? "—"}
+          {projects.find((p) => p.id === r.opnameId)?.name ?? "—"}
         </span>
       ),
       className: "max-w-[160px]",
@@ -271,7 +271,7 @@ export default function ScanHistoryPage() {
         minWidth={980}
         emptyIcon={<History size={26} strokeWidth={2} />}
         emptyTitle="No scan data yet"
-        emptyDescription="Adjust filters or start a scan session to record transactions."
+        emptyDescription="Adjust filters or start a scan to record transactions."
         onResetFilters={() => {
           setProjectId("all");
           setSource("all");

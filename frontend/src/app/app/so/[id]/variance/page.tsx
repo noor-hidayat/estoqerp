@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { useProject, useProjectStats, useUpdate } from "@/lib/api/query";
+import { useOpnameProject, useOpnameStats, useUpdateOpnameProject } from "@/lib/api/query";
 import { formatNumber } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ interface VarianceRow {
   itemName: string;
   itemCode: string;
   unit: string;
+  warehouseName: string;
   systemQty: number;
   countedQty: number;
   diff: number;
@@ -33,9 +34,9 @@ export default function ProjectVariancePage() {
   const id = params.id;
   const { isSystem, permissions } = useSession();
 
-  const { data: project, isLoading: projectLoading } = useProject(id);
-  const { data: projectStats } = useProjectStats(id);
-  const updateProject = useUpdate("projects");
+  const { data: project, isLoading: projectLoading } = useOpnameProject(id);
+  const { data: projectStats } = useOpnameStats(id);
+  const updateProject = useUpdateOpnameProject();
 
   const [onlyDiff, setOnlyDiff] = useState(true);
 
@@ -76,6 +77,12 @@ export default function ProjectVariancePage() {
         </div>
       ),
       className: "min-w-[220px]",
+    },
+    {
+      id: "warehouse",
+      header: "Warehouse",
+      sortValue: (r) => r.warehouseName,
+      cell: (r) => <span className="text-xs text-muted-foreground">{r.warehouseName}</span>,
     },
     {
       id: "system",
@@ -144,7 +151,7 @@ export default function ProjectVariancePage() {
             {formatNumber(totalSystem)}
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Stock reference in master item
+            Stock reference in stock balance
           </p>
         </div>
         <div className="rounded-md border border-border bg-card p-5">
@@ -207,20 +214,20 @@ export default function ProjectVariancePage() {
       <DataTable
         columns={columns}
         data={filtered}
-        getRowId={(r) => r.itemId}
+        getRowId={(r) => `${r.itemId}-${r.warehouseName}`}
         searchPlaceholder="Search items..."
-        getSearchText={(r) => `${r.itemName} ${r.itemCode}`}
-        minWidth={760}
+        getSearchText={(r) => `${r.itemName} ${r.itemCode} ${r.warehouseName}`}
+        minWidth={860}
         emptyIcon={<CheckCircle2 size={26} strokeWidth={2} />}
         emptyTitle="No variance"
-        emptyDescription="All items match system stock. Add a scan session if needed."
+        emptyDescription="All items match system stock. Add a scan if needed."
       />
 
       {filtered.length > 0 && (
         <p className="mt-4 flex items-center gap-2 text-[12px] text-muted-foreground">
           <Scale size={14} strokeWidth={2} />
-          Variance is calculated automatically from total scan per item vs system stock in
-          master item.
+          Variance is calculated automatically from total scan per item per warehouse vs system
+          stock balance.
         </p>
       )}
     </div>

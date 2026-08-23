@@ -17,6 +17,7 @@ import {
   useStockBalanceSummary,
   useAllWarehouses,
   useItems,
+  useUoms,
   type StockBalanceLedgerRow,
 } from "@/lib/api/query";
 import type { Item } from "@/types";
@@ -55,6 +56,8 @@ export default function StockBalancePage() {
   }, [itemQuery]);
 
   const { data: allWarehouses = [] } = useAllWarehouses();
+  const { data: uoms = [] } = useUoms();
+  const uomById = useMemo(() => new Map(uoms.map((u) => [u.id, u])), [uoms]);
   const { data: suggestionsResult, isLoading: suggestionsLoading } = useItems({
     query: debouncedQuery || undefined,
     pageSize: 10,
@@ -293,7 +296,9 @@ export default function StockBalancePage() {
                         >
                           <span className="font-mono text-xs text-muted-foreground">{it.code}</span>
                           <span className="min-w-0 flex-1 truncate font-medium">{it.name}</span>
-                          <span className="shrink-0 text-xs text-muted-foreground">{it.unit}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {it.uomId ? (uomById.get(it.uomId)?.name ?? "—") : "—"}
+                          </span>
                         </button>
                       ))
                     )}

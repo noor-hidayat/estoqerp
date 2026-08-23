@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Layers } from "lucide-react";
 import {
   useBatches,
@@ -143,11 +144,20 @@ export default function BatchesPage() {
       id: "batch",
       header: "Batch Number",
       sortValue: (r) => r.batchNumber,
-      cell: (r) => (
-        <span className="whitespace-nowrap font-mono text-xs font-medium text-foreground">
-          {r.batchNumber}
-        </span>
-      ),
+      cell: (r) => {
+        const q = new URLSearchParams();
+        q.set("batch", r.batchId);
+        if (warehouseId !== "all") q.set("wh", warehouseId);
+        if (itemId !== "all") q.set("item", itemId);
+        return (
+          <Link
+            to={`/app/inventory/batches/barcode?${q.toString()}`}
+            className="whitespace-nowrap font-mono text-xs font-medium text-primary hover:underline"
+          >
+            {r.batchNumber}
+          </Link>
+        );
+      },
       className: "min-w-[150px]",
     },
     {

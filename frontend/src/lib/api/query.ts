@@ -2,11 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import type {
   Branch, Warehouse, Location, ItemGroup, Item, StockBalance,
-  BarcodeFormat, Project, ProjectStatus, ScanSession, ScanRecord, OpnameEntry,
+  BarcodeFormat, ProjectStatus,
   User, Role, RolePermission, BranchAccess,
-  OpnameProject, OpnameProjectDetail,
+  OpnameProject, OpnameProjectDetail, OpnameProjectListItem,
+  OpnameWarehouse, OpnameScan, OpnameScanDetail, OpnameScanDetailsResponse, OpnameStats,
   MovementType, Uom, StockMovementListRow, StockMovementDetailFull,
-  StockLedgerRow, MovementInput, Batch, StockBatch, BatchFormat,
+  StockLedgerRow, MovementInput, Batch, StockBatch, StockBarcode, BatchFormat,
   ScanHistoryRow,
 } from "@/types";
 
@@ -227,6 +228,21 @@ export function useStockBatches(params?: { warehouseId?: string; batchId?: strin
   );
 }
 
+export function useStockBarcodes(params?: {
+  warehouseId?: string;
+  barcode?: string;
+  itemId?: string;
+  batchId?: string;
+  query?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  return useResourceList<StockBarcode>(
+    "stockBarcodes",
+    params as Record<string, unknown>
+  );
+}
+
 export function useStockMovements(params?: {
   query?: string;
   typeId?: string;
@@ -349,57 +365,55 @@ export function useDeleteMovement() {
   });
 }
 
-export function useProjects(params?: { branchId?: string; projectId?: string }) {
-  return useResourceList<Project>("projects", params as Record<string, unknown>);
-}
-
-export function useProject(id?: string) {
-  return useResourceOne<Project>("projects", id);
-}
-
-export function useScanSessions(params?: { projectId?: string; status?: string }) {
-  return useResourceList<ScanSession>("scanSessions", params as Record<string, unknown>);
-}
-
-export function useScanRecords(params?: { projectId?: string; sessionId?: string; source?: string; date?: string; query?: string; page?: number; pageSize?: number }) {
-  return usePaginatedList<ScanRecord>("scanRecords", params as Record<string, unknown>);
-}
-
-export interface ProjectSession {
-  id: string;
-  projectId: string;
-  locationId: string | null;
-  scannedBy: string | null;
-  startedAt: string;
-  endedAt: string | null;
-  status: string;
-  userName: string;
-  locationCode: string;
-  barcodes: number;
-  qty: number;
-  itemCount: number;
-  lastItemId: string | null;
-  lastItemName: string;
-  lastItemUnit: string;
-}
-
-export interface ProjectSessionsResponse {
-  sessions: ProjectSession[];
-  totalBarcodes: number;
-  totalQty: number;
-  itemCount: number;
-}
-
-export function useProjectSessions(projectId?: string) {
+export function useOpnameProjects() {
   return useQuery({
-    queryKey: ["project-sessions", projectId],
-    queryFn: () => api.get<ProjectSessionsResponse>(`/projects/${projectId}/sessions`),
+    queryKey: ["opnameProjects"],
+    queryFn: () => api.get<OpnameProjectListItem[]>("/opname-projects"),
+  });
+}
+
+export function useOpnameProject(id?: string) {
+  return useQuery({
+    queryKey: ["opnameProjects", id],
+    queryFn: () => api.get<OpnameProject>(`/opname-projects/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useOpnameProjectDetail(id?: string) {
+  return useQuery({
+    queryKey: ["opnameProjects", id, "detail"],
+    queryFn: () => api.get<OpnameProjectDetail>(`/opname-projects/${id}/detail`),
+    enabled: !!id,
+  });
+}
+
+export function useOpnameWarehouses(params?: { opnameId?: string }) {
+  return useResourceList<OpnameWarehouse>("opnameWarehouses", params as Record<string, unknown>);
+}
+
+export function useOpnameScans(params?: { opnameId?: string; status?: string }) {
+  return useResourceList<OpnameScan>("opnameScans", params as Record<string, unknown>);
+}
+
+export function useOpnameScanDetails(params?: { opnameId?: string; scanId?: string; source?: string; date?: string; query?: string; page?: number; pageSize?: number }) {
+  return usePaginatedList<OpnameScanDetail>("opnameScanDetails", params as Record<string, unknown>);
+}
+
+export function useProjectScans(projectId?: string) {
+  return useQuery({
+    queryKey: ["opname-scans", projectId],
+    queryFn: () => api.get<OpnameScanDetailsResponse>(`/opname-projects/${projectId}/scans`),
     enabled: !!projectId,
   });
 }
 
-export function useOpnameEntries(projectId?: string) {
-  return useResourceList<OpnameEntry>("opnameEntries", projectId ? { projectId } : undefined);
+export function useOpnameStats(projectId?: string) {
+  return useQuery({
+    queryKey: ["opname-stats", projectId],
+    queryFn: () => api.get<OpnameStats>(`/opname-projects/${projectId}/stats`),
+    enabled: !!projectId,
+  });
 }
 
 export function useUser(id?: string) {
@@ -437,38 +451,6 @@ export function useDashboard() {
   });
 }
 
-export function useProjectStats(projectId?: string) {
-  return useQuery({
-    queryKey: ["project-stats", projectId],
-    queryFn: () => api.get<{
-      projectId: string;
-      progress: { total: number; counted: number; pct: number };
-      variance: { itemId: string; itemCode: string; itemName: string; unit: string; systemQty: number; countedQty: number; diff: number }[];
-    }>(`/projects/${projectId}/stats`),
-    enabled: !!projectId,
-  });
-}
-
-export function useOpnameProjects() {
-  return useQuery({
-    queryKey: ["opnameProjects"],
-    queryFn: () => api.get<(OpnameProject & {
-      jumlahGudang: number;
-      status: ProjectStatus;
-      progress: { counted: number; total: number; pct: number };
-      warehouses: { id: string; warehouseName: string; status: string }[];
-    })[]>("/opname-projects"),
-  });
-}
-
-export function useOpnameProjectDetail(id?: string) {
-  return useQuery({
-    queryKey: ["opnameProjects", id, "detail"],
-    queryFn: () => api.get<OpnameProjectDetail>(`/opname-projects/${id}/detail`),
-    enabled: !!id,
-  });
-}
-
 export function useCreateOpnameProject() {
   const qc = useQueryClient();
   return useMutation({
@@ -488,10 +470,11 @@ export function useCreateOpnameProject() {
 export function useUpdateOpnameProject() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: { name?: string; deadline?: string | null } }) =>
+    mutationFn: ({ id, patch }: { id: string; patch: { name?: string; deadline?: string | null; status?: string } }) =>
       api.patch(`/opname-projects/${id}`, patch),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["opnameProjects"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
@@ -525,14 +508,14 @@ export function useItemLookup(barcode: string | null, formatId?: string) {
   });
 }
 
-export function useBarcodeCheck(projectId?: string, barcode?: string, excludeSessionId?: string) {
+export function useBarcodeCheck(opnameId?: string, barcode?: string, excludeScanId?: string) {
   return useQuery({
-    queryKey: ["barcode-check", projectId, barcode, excludeSessionId],
+    queryKey: ["barcode-check", opnameId, barcode, excludeScanId],
     queryFn: () => api.get<{
       exists: boolean;
-      record?: { sessionId: string; scannedBy: string; locationCode: string; scannedAt: string };
-    }>(`/scan-records/check${qs({ projectId: projectId!, barcode: barcode!, excludeSessionId })}`),
-    enabled: !!projectId && !!barcode,
+      record?: { scanId: string; scannedBy: string; locationCode: string; scannedAt: string };
+    }>(`/opname-scan-details/check${qs({ opnameId: opnameId!, barcode: barcode!, excludeScanId })}`),
+    enabled: !!opnameId && !!barcode,
     staleTime: 60_000,
   });
 }

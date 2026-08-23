@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { FileDown, FileSpreadsheet, TriangleAlert } from "lucide-react";
-import { useProjects, useAllWarehouses } from "@/lib/api/query";
+import { useOpnameProjects } from "@/lib/api/query";
 import { api } from "@/lib/api/client";
 import { formatNumber } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
@@ -17,7 +17,7 @@ import { ShellLoader } from "@/components/ui/loader";
 interface VarianceStats {
   projectId: string;
   progress: { total: number; counted: number; pct: number };
-  variance: { itemId: string; itemCode: string; itemName: string; unit: string; systemQty: number; countedQty: number; diff: number }[];
+  variance: { itemId: string; itemCode: string; itemName: string; unit: string; warehouseId: string; warehouseName: string; systemQty: number; countedQty: number; diff: number }[];
 }
 
 interface VarianceRow {
@@ -33,8 +33,7 @@ interface VarianceRow {
 }
 
 export default function VarianceReportPage() {
-  const { data: projects = [], isLoading: projectsLoading } = useProjects();
-  const { data: warehouses = [] } = useAllWarehouses();
+  const { data: projects = [], isLoading: projectsLoading } = useOpnameProjects();
   const [projectId, setProjectId] = useState("all");
   const [mode, setMode] = useState<"all" | "diff">("diff");
 
@@ -48,8 +47,8 @@ export default function VarianceReportPage() {
 
   const statsQueries = useQueries({
     queries: targetProjects.map((project) => ({
-      queryKey: ["project-stats", project.id],
-      queryFn: () => api.get<VarianceStats>(`/projects/${project.id}/stats`),
+      queryKey: ["opname-stats", project.id],
+      queryFn: () => api.get<VarianceStats>(`/opname-projects/${project.id}/stats`),
       staleTime: 30_000,
     })),
   });
@@ -67,15 +66,14 @@ export default function VarianceReportPage() {
           code: r.itemCode,
           name: r.itemName,
           unit: r.unit,
-          warehouse:
-            warehouses.find((w) => w.id === project.warehouseId)?.name ?? "—",
+          warehouse: r.warehouseName,
           systemQty: r.systemQty,
           countedQty: r.countedQty,
           diff: r.diff,
         }))
         .filter((r) => mode === "all" || r.diff !== 0);
     });
-  }, [targetProjects, statsQueries, warehouses, mode]);
+  }, [targetProjects, statsQueries, mode]);
 
   const exportColumns = [
     { key: "projectName" as const, header: "Project" },
@@ -171,7 +169,7 @@ export default function VarianceReportPage() {
       <DataTable
         columns={columns}
         data={rows}
-        getRowId={(r) => `${r.projectId}-${r.code}`}
+        getRowId={(r) => `${r.projectId}-${r.code}-${r.warehouse}`}
         loading={anyLoading}
         searchPlaceholder="Search items..."
         getSearchText={(r) => `${r.name} ${r.code} ${r.projectName}`}

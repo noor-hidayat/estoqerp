@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "../db/pool";
 import { refreshTokens, users, roles, rolePermissions, branchAccesses, branches, warehouses } from "../db/schema";
+import { nextRowId } from "../lib/id";
 import { config } from "../config";
 import { requireAuth, requireRoles, type AuthUser } from "../middleware/auth";
 import { signAccessToken } from "../utils/jwt";
@@ -63,13 +64,7 @@ async function findUserByEmail(email: string) {
 }
 
 async function nextUserId(): Promise<string> {
-  const rows = await db.select({ id: users.id }).from(users);
-  const max = rows.reduce((m, r) => {
-    if (!r.id.startsWith("usr_")) return m;
-    const n = Number(r.id.slice(4));
-    return Number.isFinite(n) && n > m ? n : m;
-  }, 0);
-  return `usr_${String(max + 1).padStart(3, "0")}`;
+  return nextRowId(db, users, "usr");
 }
 
 authRouter.post("/login", async (req, res) => {

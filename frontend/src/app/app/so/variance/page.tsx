@@ -6,8 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useQueries } from "@tanstack/react-query";
 import { Scale } from "lucide-react";
 import {
-  useProjects,
-  useAllWarehouses,
+  useOpnameProjects,
 } from "@/lib/api/query";
 import { api } from "@/lib/api/client";
 import { formatNumber } from "@/lib/utils";
@@ -23,7 +22,7 @@ import { AccessDenied } from "@/components/ui/role-guard";
 interface VarianceStats {
   projectId: string;
   progress: { total: number; counted: number; pct: number };
-  variance: { itemId: string; itemCode: string; itemName: string; unit: string; systemQty: number; countedQty: number; diff: number }[];
+  variance: { itemId: string; itemCode: string; itemName: string; unit: string; warehouseId: string; warehouseName: string; systemQty: number; countedQty: number; diff: number }[];
 }
 
 interface VarianceRow {
@@ -45,8 +44,7 @@ export default function VarianceReviewPage() {
     if (urlProjectId) setProjectId(urlProjectId);
   }, [urlProjectId]);
 
-  const { data: projects = [] } = useProjects();
-  const { data: warehouses = [] } = useAllWarehouses();
+  const { data: projects = [] } = useOpnameProjects();
 
   const targetProjects = useMemo(
     () =>
@@ -58,8 +56,8 @@ export default function VarianceReviewPage() {
 
   const statsQueries = useQueries({
     queries: targetProjects.map((project) => ({
-      queryKey: ["project-stats", project.id],
-      queryFn: () => api.get<VarianceStats>(`/projects/${project.id}/stats`),
+      queryKey: ["opname-stats", project.id],
+      queryFn: () => api.get<VarianceStats>(`/opname-projects/${project.id}/stats`),
       staleTime: 30_000,
     })),
   });
@@ -68,12 +66,11 @@ export default function VarianceReviewPage() {
     return targetProjects.flatMap((project, i) => {
       const data = statsQueries[i]?.data;
       if (!data?.variance) return [];
-      const wh = warehouses.find((w) => w.id === project.warehouseId);
       return data.variance
         .map((r) => ({
           projectId: project.id,
           projectName: project.name,
-          warehouseName: wh?.name ?? "—",
+          warehouseName: r.warehouseName,
           itemCode: r.itemCode,
           itemName: r.itemName,
           diff: r.diff,
@@ -84,7 +81,7 @@ export default function VarianceReviewPage() {
       const q = query.toLowerCase();
       return r.itemName.toLowerCase().includes(q) || r.itemCode.includes(q);
     }).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-  }, [targetProjects, statsQueries, warehouses, query]);
+  }, [targetProjects, statsQueries, query]);
 
   const { isSystem, permissions } = useSession();
 

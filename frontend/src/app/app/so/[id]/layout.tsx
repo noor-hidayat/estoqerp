@@ -8,13 +8,10 @@ import { CheckCircle2, Trash2 } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import {
-  useProject,
-  useAllWarehouses,
-  useBranches,
-  useRemove,
-  useUpdate,
+  useOpnameProject,
+  useUpdateOpnameProject,
+  useDeleteOpnameProject,
 } from "@/lib/api/query";
-import { api } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { cx } from "@/lib/utils";
@@ -23,7 +20,7 @@ import { ShellLoader } from "@/components/ui/loader";
 const TABS = [
   { id: "", label: "Summary", menu: "opname.detail" },
   { id: "scan", label: "Scan", menu: "opname.detail.scan" },
-  { id: "sessions", label: "Scan Sessions", menu: "opname.detail.sessions" },
+  { id: "sessions", label: "Scan History", menu: "opname.detail.sessions" },
   { id: "variance", label: "Variance Review", menu: "opname.detail.variance" },
 ];
 
@@ -31,19 +28,13 @@ export default function ProjectLayout() {
   const params = useParams<{ id: string }>();
   const pathname = usePathname();
   const router = useRouter();
-  const { access, isSystem, permissions } = useSession();
+  const { isSystem, permissions } = useSession();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const { data: project, isLoading: projectLoading } = useProject(params.id);
-  const { data: warehouses = [] } = useAllWarehouses();
-  const { data: branches = [] } = useBranches();
-
-  const removeProject = useRemove("projects");
-  const removeRecord = useRemove("scanRecords");
-  const removeSession = useRemove("scanSessions");
-  const removeEntry = useRemove("opnameEntries");
-  const updateProject = useUpdate("projects");
+  const { data: project, isLoading: projectLoading } = useOpnameProject(params.id);
+  const updateProject = useUpdateOpnameProject();
+  const deleteProject = useDeleteOpnameProject();
 
   if (projectLoading) return <ShellLoader />;
 
@@ -63,25 +54,6 @@ export default function ProjectLayout() {
     );
   }
 
-  if (!access.branchIds.includes(project.branchId)) {
-    return (
-      <div className="py-20 text-center">
-        <p className="text-lg font-semibold text-foreground">Access restricted</p>
-        <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-          This stock opname is outside the branches allowed for your account.
-        </p>
-        <Link
-          href="/app/so"
-          className="mt-4 inline-block text-sm font-medium text-primary hover:text-primary/80"
-        >
-          Back to Stock Opname
-        </Link>
-      </div>
-    );
-  }
-
-  const wh = warehouses.find((w) => w.id === project.warehouseId);
-  const branch = branches.find((b) => b.id === project.branchId);
   const isActive = pathname === `/app/so/${project.id}`;
   const canFinalize =
     can(isSystem, permissions, "opname", "update") && project.status === "IN_PROGRESS";
@@ -97,21 +69,7 @@ export default function ProjectLayout() {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const [recordsRes, sessionsRes, entriesRes] = await Promise.all([
-        api.get<{ rows: { id: string }[] }>(`/scanRecords?projectId=${project.id}&pageSize=10000`),
-        api.get<{ rows: { id: string }[] }>(`/scanSessions?projectId=${project.id}`),
-        api.get<{ rows: { id: string }[] }>(`/opnameEntries?projectId=${project.id}`),
-      ]);
-      for (const r of recordsRes.rows ?? []) {
-        await removeRecord.mutateAsync(r.id);
-      }
-      for (const s of sessionsRes.rows ?? []) {
-        await removeSession.mutateAsync(s.id);
-      }
-      for (const e of entriesRes.rows ?? []) {
-        await removeEntry.mutateAsync(e.id);
-      }
-      await removeProject.mutateAsync(project.id);
+      await deleteProject.mutateAsync(project.id);
       router.replace("/app/so");
     } catch {
       setDeleting(false);
@@ -127,7 +85,8 @@ export default function ProjectLayout() {
               {project.name}
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              {branch?.name} · {wh?.name}
+              {project.mode === "COMPARE" ? "Compare" : "Scratch"} ·{" "}
+              {project.description || "Stock opname project"}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -189,7 +148,7 @@ export default function ProjectLayout() {
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         title="Delete project?"
-        description="Project, scan sessions, and all scan records within it will be permanently deleted."
+        description="Project, its warehouses, and all scan records within it will be permanently deleted."
         footer={
           <>
             <Button

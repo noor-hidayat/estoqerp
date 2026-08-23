@@ -6,8 +6,14 @@ import {
   ArrowLeftRight,
   CircleAlert,
   ScanLine,
+  Warehouse as WarehouseIcon,
 } from "lucide-react";
-import { useProject, useProjectStats, useProjectSessions } from "@/lib/api/query";
+import {
+  useOpnameProject,
+  useOpnameStats,
+  useProjectScans,
+  useOpnameProjectDetail,
+} from "@/lib/api/query";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { formatId, formatNumber, timeAgo } from "@/lib/utils";
@@ -18,9 +24,10 @@ import { AccessDenied } from "@/components/ui/role-guard";
 export default function ProjectOverviewPage() {
   const params = useParams<{ id: string }>();
   const { isSystem, permissions } = useSession();
-  const { data: project, isLoading: projectLoading } = useProject(params.id);
-  const { data: stats, isLoading: statsLoading } = useProjectStats(params.id);
-  const { data: sessionsData, isLoading: sessionsLoading } = useProjectSessions(params.id);
+  const { data: project, isLoading: projectLoading } = useOpnameProject(params.id);
+  const { data: stats, isLoading: statsLoading } = useOpnameStats(params.id);
+  const { data: scansData, isLoading: scansLoading } = useProjectScans(params.id);
+  const { data: detail, isLoading: detailLoading } = useOpnameProjectDetail(params.id);
 
   const canView = (menu: string) => can(isSystem, permissions, menu, "view");
   const canSessions = canView("opname.detail.sessions");
@@ -31,14 +38,15 @@ export default function ProjectOverviewPage() {
     return <AccessDenied />;
   }
 
-  if (projectLoading || statsLoading || sessionsLoading) return <ShellLoader />;
+  if (projectLoading || statsLoading || scansLoading || detailLoading) return <ShellLoader />;
   if (!project) return null;
 
-  const sessions = sessionsData?.sessions ?? [];
+  const scans = scansData?.scans ?? [];
   const variance = stats?.variance ?? [];
   const progress = stats?.progress ?? { total: 0, counted: 0, pct: 0 };
   const totalScanned = variance.reduce((acc, r) => acc + r.countedQty, 0);
   const diffItems = variance.filter((r) => r.diff !== 0);
+  const warehouses = detail?.warehouses ?? [];
 
   return (
     <div>
@@ -55,7 +63,7 @@ export default function ProjectOverviewPage() {
           compact
           label="Qty counted"
           value={formatNumber(totalScanned)}
-          sub={`${sessionsData?.totalBarcodes ?? 0} scan transactions`}
+          sub={`${scansData?.totalBarcodes ?? 0} barcodes scanned`}
           icon={<ScanLine size={16} strokeWidth={2} />}
         />
         <Stat
@@ -67,9 +75,9 @@ export default function ProjectOverviewPage() {
         />
         <Stat
           compact
-          label="Scan sessions"
-          value={sessions.length}
-          sub={`${sessions.filter((s) => s.status === "ACTIVE").length} active sessions`}
+          label="Scan records"
+          value={scans.length}
+          sub={`${warehouses.length} warehouses`}
           icon={<ArrowLeftRight size={16} strokeWidth={2} />}
         />
       </div>
@@ -79,7 +87,7 @@ export default function ProjectOverviewPage() {
           <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-[0_10px_30px_-12px_rgb(17_17_17/0.08)]">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <h2 className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Scan sessions
+                Scan history
               </h2>
               {canSessions && (
                 <Link
@@ -91,13 +99,13 @@ export default function ProjectOverviewPage() {
               )}
             </div>
 
-            {sessions.length === 0 ? (
+            {scans.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-                No scan sessions yet.
+                No scans yet.
               </p>
             ) : (
               <div className="divide-y divide-border">
-                {sessions.slice(0, 10).map((s, i) => (
+                {scans.slice(0, 10).map((s, i) => (
                   <Link
                     key={s.id}
                     href={
@@ -116,10 +124,10 @@ export default function ProjectOverviewPage() {
                       {s.lastItemName}
                     </span>
                     <span className="truncate font-mono text-[11px] text-muted-foreground">
-                      {s.locationCode}
+                      {(s.locations ?? []).join(", ")}
                     </span>
                     <span className="text-right font-mono text-[13px] font-semibold text-foreground">
-                      {formatNumber(s.qty)}
+                      {formatNumber(s.qty ?? 0)}
                     </span>
                     <span className="truncate text-[11.5px] text-muted-foreground">
                       {s.userName}
@@ -132,11 +140,42 @@ export default function ProjectOverviewPage() {
               </div>
             )}
           </div>
+
+          {warehouses.length > 0 && (
+            <div className="overflow-hidden rounded-2xl border border-border/80 bg-card">
+              <div className="border-b border-border px-5 py-4">
+                <h2 className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Warehouses
+                </h2>
+              </div>
+              <div className="divide-y divide-border">
+                {warehouses.map((w) => (
+                  <div
+                    key={w.id}
+                    className="flex items-center gap-3 px-5 py-3"
+                  >
+                    <WarehouseIcon size={15} strokeWidth={2} className="shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-foreground">
+                        {w.warehouseName ?? "—"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {w.branchName ?? "—"} · {w.countedLokasi ?? 0}/{w.totalLokasi ?? 0} locations
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
+                      {w.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div>
           <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <h3 className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
               Top variance
             </h3>
             {canVariance && (
@@ -158,7 +197,7 @@ export default function ProjectOverviewPage() {
               const d = row.diff;
               return (
                 <div
-                  key={row.itemId}
+                  key={`${row.itemId}-${row.warehouseId}`}
                   className="flex items-center gap-3 border-b border-border px-5 py-3.5 last:border-0"
                 >
                   <div className="min-w-0 flex-1">
@@ -166,7 +205,7 @@ export default function ProjectOverviewPage() {
                       {row.itemName ?? "—"}
                     </p>
                     <p className="font-mono text-[11px] text-muted-foreground">
-                      system {formatNumber(row.systemQty)} → physical{" "}
+                      {row.warehouseName} · system {formatNumber(row.systemQty)} → physical{" "}
                       {formatNumber(row.countedQty)}
                     </p>
                   </div>

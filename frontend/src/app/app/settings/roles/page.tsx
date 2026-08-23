@@ -128,10 +128,13 @@ export default function RolesPage() {
     <RoleGuard roles={["role_sys_admin"]} menus={["settings.roles"]}>
       <PageHeader
         title="Roles"
-
         actions={
-          <Button onClick={() => navigate("/app/settings/roles/new")}>
-            <Plus size={15} strokeWidth={2} /> Add Role
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => navigate("/app/settings/roles/new")}
+          >
+            <Plus size={14} strokeWidth={2} /> Add Role
           </Button>
         }
       />

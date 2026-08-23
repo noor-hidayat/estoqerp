@@ -31,7 +31,6 @@ export default function EditItemPage() {
   const [form, setForm] = useState({
     code: "",
     name: "",
-    unit: "",
     uomId: "",
     itemGroupId: "",
     alternativeCode: "",
@@ -46,7 +45,6 @@ export default function EditItemPage() {
       setForm({
         code: item.code,
         name: item.name,
-        unit: item.unit ?? "",
         uomId: item.uomId ?? "",
         itemGroupId: item.itemGroupId,
         alternativeCode: item.alternativeCode ?? "",
@@ -66,7 +64,6 @@ export default function EditItemPage() {
       return;
     }
     if (!id) return;
-    const uom = uoms.find((u) => u.id === form.uomId);
     try {
       await updateItem.mutateAsync({
         id,
@@ -74,7 +71,6 @@ export default function EditItemPage() {
           ...form,
           code: form.code.trim(),
           name: form.name.trim(),
-          unit: uom?.name ?? "",
           uomId: form.uomId,
           alternativeCode: form.alternativeCode.trim() || null,
           description: form.description.trim() || null,

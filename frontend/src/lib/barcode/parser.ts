@@ -133,22 +133,12 @@ export function parseWithFormat(
   let itemId: string | undefined;
   let item: Item | undefined;
 
-  const barcodeId = values.BARCODE_ID;
-  if (barcodeId) {
+  const itemCode = values.ITEM_CODE;
+  if (itemCode) {
     item = ctx.items.find(
-      (i) => i.barcodeId?.toLowerCase() === barcodeId.toLowerCase()
+      (i) => i.code.toLowerCase() === itemCode.toLowerCase()
     );
     if (item) itemId = item.id;
-  }
-
-  if (!item) {
-    const itemCode = values.ITEM_CODE;
-    if (itemCode) {
-      item = ctx.items.find(
-        (i) => i.code.toLowerCase() === itemCode.toLowerCase()
-      );
-      if (item) itemId = item.id;
-    }
   }
 
   const itemGroupCode = values.ITEM_GROUP || undefined;

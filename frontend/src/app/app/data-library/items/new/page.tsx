@@ -22,7 +22,6 @@ import { useErrorToast } from "@/hooks/use-error-toast";
 const EMPTY = {
   code: "",
   name: "",
-  unit: "",
   uomId: "",
   itemGroupId: "",
   alternativeCode: "",
@@ -49,13 +48,11 @@ export default function NewItemPage() {
       setError("UOM is required.");
       return;
     }
-    const uom = uoms.find((u) => u.id === form.uomId);
     try {
       await insertItem.mutateAsync({
         ...form,
         code: form.code.trim(),
         name: form.name.trim(),
-        unit: uom?.name ?? "",
         uomId: form.uomId,
         alternativeCode: form.alternativeCode.trim() || null,
         description: form.description.trim() || null,

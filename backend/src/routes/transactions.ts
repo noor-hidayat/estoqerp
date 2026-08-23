@@ -18,6 +18,7 @@ import type { NodePgTransaction } from "drizzle-orm/node-postgres/session";
 import { db } from "../db/pool";
 import * as schema from "../db/schema";
 import { parseBatchNumber, type BatchFormatLike } from "../lib/batch-parse";
+import { nextRowId } from "../lib/id";
 import {
   canAccessEntity,
   checkPermission,
@@ -154,32 +155,10 @@ function parseBody(body: unknown): { ok: true; value: MovementInput } | { ok: fa
   };
 }
 
-/** Token tanggal dalam series: dd (hari), MM (bulan), yy (tahun 2 digit),
- * yyyy (tahun 4 digit), HH (jam). Contoh series "RCV-DDMMYY" → "RCV-250817". */
-function expandSeriesDate(series: string, date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  let s = series.toUpperCase();
-  s = s.replace(/YYYY/g, String(date.getFullYear()));
-  s = s.replace(/YY/g, pad(date.getFullYear() % 100));
-  s = s.replace(/DD/g, pad(date.getDate()));
-  s = s.replace(/MM/g, pad(date.getMonth() + 1));
-  s = s.replace(/HH/g, pad(date.getHours()));
-  return s;
-}
-
-async function nextMovementNumber(tx: Tx, series: string, date: Date): Promise<string> {
-  const expanded = expandSeriesDate(series, date);
-  const safeSeries = /^[A-Za-z0-9_-]{1,20}$/.test(expanded) ? expanded : "SMV";
-  await tx.execute(sql`LOCK TABLE stock_movements IN EXCLUSIVE MODE`);
-  const rows = await tx.select({ n: schema.stockMovements.id }).from(schema.stockMovements);
-  const prefix = `${safeSeries}-`;
-  const max = rows.reduce((m, r) => {
-    const id = String(r.n);
-    if (!id.startsWith(prefix)) return m;
-    const n = Number(id.slice(prefix.length));
-    return Number.isFinite(n) && n > m ? n : m;
-  }, 0);
-  return `${prefix}${String(max + 1).padStart(4, "0")}`;
+async function nextMovementNumber(tx: Tx, _series: string, date: Date): Promise<string> {
+  // Format id global: smv-YYMM-0001 (nomor dokumen memakai prefix tetap,
+  // bukan series tipe transaksi, agar konsisten dengan id tabel lain).
+  return nextRowId(tx, schema.stockMovements, "smv", date, { lock: true });
 }
 
 async function validateWarehouseAccess(req: Request, res: Response, details: DetailInput[]): Promise<boolean> {
@@ -327,7 +306,7 @@ async function resolveBatch(
     await maybeFillBatchMeta(tx, existing.id);
     return existing.id;
   }
-  const id = `bat_${crypto.randomUUID()}`;
+  const id = await nextRowId(tx, schema.batches, "bat");
   const values: typeof schema.batches.$inferInsert = {
     id,
     itemId,
@@ -495,7 +474,7 @@ async function applyMovementEffect(
         .where(eq(schema.stockBalances.id, existing.id));
     } else {
       await tx.insert(schema.stockBalances).values({
-        id: `sb_${crypto.randomUUID()}`,
+        id: await nextRowId(tx, schema.stockBalances, "sb"),
         warehouseId,
         itemId,
         openingQty: 0,
@@ -551,7 +530,7 @@ async function applyMovementEffect(
         .where(eq(schema.stockBatches.id, row.id));
     } else {
       await tx.insert(schema.stockBatches).values({
-        id: `stb_${crypto.randomUUID()}`,
+        id: await nextRowId(tx, schema.stockBatches, "stb"),
         batchId,
         warehouseId,
         qty: String(next),
@@ -588,7 +567,7 @@ async function applyMovementEffect(
   for (const { itemId, warehouseId, qtyIn, qtyOut, batchId } of ledAgg.values()) {
     if (qtyIn === 0 && qtyOut === 0) continue;
     await tx.insert(schema.stockLedger).values({
-      id: `sld_${crypto.randomUUID()}`,
+      id: await nextRowId(tx, schema.stockLedger, "sld"),
       transactionId: movement.id,
       transactionType: typeCode,
       transactionDate: movement.movementDate,
@@ -691,7 +670,7 @@ async function insertMovementWithDetails(
   for (const d of input.details) {
     const batchId = await resolveBatch(tx, d.itemId, d.batchNumber ?? null);
     await tx.insert(schema.stockMovementDetails).values({
-      id: `smd_${crypto.randomUUID()}`,
+      id: await nextRowId(tx, schema.stockMovementDetails, "smd"),
       movementId,
       itemId: d.itemId,
       fromWarehouseId: d.fromWarehouseId,
@@ -913,7 +892,7 @@ transactionsRouter.get("/scan-history", async (req: Request, res: Response) => {
       batchNumber: s.batches.batchNumber,
       itemCode: s.items.code,
       itemName: s.items.name,
-      unit: s.items.unit,
+      unit: s.uom.name,
       serialNumber: s.stockMovementDetails.serialNumber,
       qty: s.stockMovementDetails.qty,
       createdAt: s.stockMovementDetails.createdAt,
@@ -922,6 +901,7 @@ transactionsRouter.get("/scan-history", async (req: Request, res: Response) => {
     .leftJoin(s.stockMovements, eq(s.stockMovements.id, s.stockMovementDetails.movementId))
     .leftJoin(s.movementTypes, eq(s.movementTypes.id, s.stockMovements.typeId))
     .leftJoin(s.items, eq(s.items.id, s.stockMovementDetails.itemId))
+    .leftJoin(s.uom, eq(s.uom.id, s.items.uomId))
     .leftJoin(s.batches, eq(s.batches.id, s.stockMovementDetails.batchId))
     .where(where)
     .orderBy(desc(s.stockMovementDetails.createdAt))
@@ -1043,7 +1023,7 @@ transactionsRouter.get("/:id", async (req: Request, res: Response) => {
       itemId: s.stockMovementDetails.itemId,
       itemCode: s.items.code,
       itemName: s.items.name,
-      unit: s.items.unit,
+      unit: s.uom.name,
       fromWarehouseId: s.stockMovementDetails.fromWarehouseId,
       fromWarehouseCode: fromWh.code,
       fromWarehouseName: fromWh.name,
@@ -1174,7 +1154,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
       for (const d of input.details) {
         const batchId = await resolveBatch(tx, d.itemId, d.batchNumber ?? null);
         await tx.insert(schema.stockMovementDetails).values({
-          id: `smd_${crypto.randomUUID()}`,
+          id: await nextRowId(tx, schema.stockMovementDetails, "smd"),
           movementId: param(req, "id"),
           itemId: d.itemId,
           fromWarehouseId: d.fromWarehouseId,
@@ -1548,7 +1528,7 @@ stockLedgerRouter.get("/", async (req: Request, res: Response) => {
       itemId: s.stockLedger.itemId,
       itemCode: s.items.code,
       itemName: s.items.name,
-      unit: s.items.unit,
+      unit: s.uom.name,
       warehouseId: s.stockLedger.warehouseId,
       warehouseCode: s.warehouses.code,
       warehouseName: s.warehouses.name,
@@ -1567,6 +1547,7 @@ stockLedgerRouter.get("/", async (req: Request, res: Response) => {
     })
     .from(s.stockLedger)
     .leftJoin(s.items, eq(s.items.id, s.stockLedger.itemId))
+    .leftJoin(s.uom, eq(s.uom.id, s.items.uomId))
     .leftJoin(s.warehouses, eq(s.warehouses.id, s.stockLedger.warehouseId))
     .leftJoin(s.locations, eq(s.locations.id, s.stockLedger.locationId))
     .leftJoin(s.batches, eq(s.batches.id, s.stockLedger.batchId))

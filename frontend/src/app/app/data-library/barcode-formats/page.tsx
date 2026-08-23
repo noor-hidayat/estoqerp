@@ -143,10 +143,13 @@ export default function BarcodeFormatsPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["master.barcodeFormats"]}>
       <PageHeader
         title="Format Barcode"
-
         actions={
-          <Button onClick={() => navigate("/app/data-library/barcode-formats/new")}>
-            <Plus size={15} strokeWidth={2} />
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => navigate("/app/data-library/barcode-formats/new")}
+          >
+            <Plus size={14} strokeWidth={2} />
             Create Format
           </Button>
         }

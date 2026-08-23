@@ -73,10 +73,13 @@ export default function ItemGroupsPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["master.itemGroups"]}>
       <PageHeader
         title="Item Groups"
-
         actions={
-          <Button onClick={() => navigate("/app/data-library/item-groups/new")}>
-            <Plus size={15} strokeWidth={2} />
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => navigate("/app/data-library/item-groups/new")}
+          >
+            <Plus size={14} strokeWidth={2} />
             Add Item Group
           </Button>
         }

@@ -18,9 +18,6 @@ export type OpnameMode = (typeof opnameModes)[number];
 export const projectStatuses = ["DRAFT", "IN_PROGRESS", "APPROVED", "CANCELLED"] as const;
 export type ProjectStatus = (typeof projectStatuses)[number];
 
-export const sessionStatuses = ["ACTIVE", "CLOSED"] as const;
-export type SessionStatus = (typeof sessionStatuses)[number];
-
 export const qtyModes = ["AUTO", "MANUAL"] as const;
 export const scanSources = ["SCANNER", "CAMERA", "MANUAL"] as const;
 
@@ -227,14 +224,10 @@ export const items = pgTable("items", {
   id: text("id").primaryKey(),
   code: text("code").notNull(),
   name: text("name").notNull(),
-  unit: text("unit").notNull(),
   itemGroupId: text("item_group_id")
     .notNull()
     .references(() => itemGroups.id),
-  price: integer("price").notNull().default(0),
   hue: integer("hue").notNull().default(200),
-  barcodeId: text("barcode_id"),
-  qty: integer("qty"),
   uomId: text("uom_id").references(() => uom.id),
   alternativeCode: text("alternative_code"),
   uomQty: numeric("uom_qty", { precision: 15, scale: 3 }),
@@ -281,116 +274,21 @@ export const batchFormats = pgTable("batch_formats", {
 export const opnameProjects = pgTable("opname_projects", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  mode: text("mode", { enum: opnameModes }).notNull().default("COMPARE"),
+  status: text("status", { enum: projectStatuses })
+    .notNull()
+    .default("DRAFT"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
   deadline: timestamp("deadline", { withTimezone: true }),
-  createdBy: text("created_by").references(() => users.id),
   opnameDate: date("opname_date"),
-  status: text("status").notNull().default("DRAFT"),
+  createdBy: text("created_by").references(() => users.id),
   description: text("description"),
 });
-
-export const projects = pgTable(
-  "projects",
-  {
-    id: text("id").primaryKey(),
-    name: text("name").notNull(),
-    projectId: text("project_id").references(() => opnameProjects.id, {
-      onDelete: "set null",
-    }),
-    branchId: text("branch_id")
-      .notNull()
-      .references(() => branches.id),
-    warehouseId: text("warehouse_id")
-      .notNull()
-      .references(() => warehouses.id),
-    mode: text("mode", { enum: opnameModes }).notNull(),
-    status: text("status", { enum: projectStatuses })
-      .notNull()
-      .default("DRAFT"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    deadline: timestamp("deadline", { withTimezone: true }),
-    createdBy: text("created_by").references(() => users.id),
-  },
-  (t) => [
-    index("idx_projects_project_id").on(t.projectId),
-    index("idx_projects_created_by").on(t.createdBy),
-  ]
-);
-
-export const scanSessions = pgTable(
-  "scan_sessions",
-  {
-    id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
-    locationId: text("location_id").references(() => locations.id),
-    scannedBy: text("scanned_by").references(() => users.id),
-    startedAt: timestamp("started_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    endedAt: timestamp("ended_at", { withTimezone: true }),
-    status: text("status", { enum: sessionStatuses })
-      .notNull()
-      .default("ACTIVE"),
-  },
-  (t) => [index("idx_scan_sessions_project").on(t.projectId)]
-);
-
-export const scanRecords = pgTable(
-  "scan_records",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id")
-      .notNull()
-      .references(() => scanSessions.id, { onDelete: "cascade" }),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
-    barcode: text("barcode").notNull(),
-    itemId: text("item_id").references(() => items.id, { onDelete: "set null" }),
-    batchId: text("batch_id").references(() => batches.id, {
-      onDelete: "set null",
-    }),
-    parsed: jsonb("parsed").notNull().default({}),
-    quantity: integer("quantity").notNull().default(1),
-    qtyMode: text("qty_mode", { enum: qtyModes }).notNull().default("AUTO"),
-    source: text("source", { enum: scanSources }).notNull().default("SCANNER"),
-    locationId: text("location_id").references(() => locations.id),
-    scannedAt: timestamp("scanned_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    index("idx_scan_records_session").on(t.sessionId),
-    index("idx_scan_records_project").on(t.projectId),
-  ]
-);
-
-export const opnameEntries = pgTable(
-  "opname_entries",
-  {
-    id: text("id").primaryKey(),
-    projectId: text("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
-    itemId: text("item_id")
-      .notNull()
-      .references(() => items.id),
-    locationId: text("location_id").references(() => locations.id),
-    systemQty: integer("system_qty").notNull().default(0),
-    countedQty: integer("counted_qty").notNull().default(0),
-  },
-  (t) => [index("idx_opname_entries_project").on(t.projectId)]
-);
-
-// ---------------------------------------------------------------------------
-// BATCH — nomor batch/lot per item + on-hand per (batch, warehouse)
-// ---------------------------------------------------------------------------
 
 export const batchStatuses = ["ACTIVE", "EMPTY"] as const;
 
@@ -443,6 +341,43 @@ export const stockBatches = pgTable(
   ]
 );
 
+// ---------------------------------------------------------------------------
+// STOCK BARCODES — isi dari stock_batch: tiap barcode asli (CMS-serial, diambil
+// dari setiap transaksi di stock_movement_details) beserta lokasi gudang
+// terkini. barcode = PK (unik per unit fisik). Tidak ada qty/type. Saat barcode
+// pindah gudang, kolom warehouse_id diperbarui. Sinkron via trigger DB
+// (migration 0025) + backfill awal. Tidak diisi manual dari frontend.
+// ---------------------------------------------------------------------------
+export const stockBarcodes = pgTable(
+  "stock_barcodes",
+  {
+    barcode: text("barcode").primaryKey(),
+    batchId: text("batch_id").references(() => batches.id, {
+      onDelete: "cascade",
+    }),
+    warehouseId: text("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => items.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_stock_barcodes_wh").on(t.warehouseId),
+    index("idx_stock_barcodes_batch").on(t.batchId),
+    index("idx_stock_barcodes_item").on(t.itemId),
+  ]
+);
+
+// ---------------------------------------------------------------------------
+// STOCK BATCH DETAILS — barcode per-unit (barcode asli CMS-serial, bukan
+// batch_number) beserta lokasi gudang terkini. Sinkron dari
+// stock_movement_details via trigger DB (lihat migration 0025) + backfill awal.
+// Tidak diisi manual dari frontend. barcode unik per unit fisik.
+// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // STOCK MOVEMENT + LEDGER (baru — belum dipakai kode)
 // ---------------------------------------------------------------------------
@@ -546,10 +481,14 @@ export const stockLedger = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// OPNAME — struktur baru (belum dipakai kode; tabel lama tetap sampai kode
-// dimigrasi, lalu bisa dihapus: opname_entries, scan_records, scan_sessions,
-// projects)
+// OPNAME — 4 tabel: project, warehouse peserta, scan (header), scan detail
 // ---------------------------------------------------------------------------
+
+export const opnameWhStatuses = ["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
+export type OpnameWhStatus = (typeof opnameWhStatuses)[number];
+
+export const opnameScanStatuses = ["DRAFT", "POSTED", "CANCELED"] as const;
+export type OpnameScanStatus = (typeof opnameScanStatuses)[number];
 
 export const opnameWarehouses = pgTable(
   "opname_warehouses",
@@ -561,35 +500,38 @@ export const opnameWarehouses = pgTable(
     warehouseId: text("warehouse_id")
       .notNull()
       .references(() => warehouses.id),
-    status: text("status").notNull().default("PENDING"),
+    status: text("status", { enum: opnameWhStatuses })
+      .notNull()
+      .default("PENDING"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [index("idx_opname_warehouses_opname").on(t.opnameId)]
+  (t) => [
+    uniqueIndex("uq_opname_warehouses_opname_wh").on(t.opnameId, t.warehouseId),
+    index("idx_opname_warehouses_opname").on(t.opnameId),
+  ]
 );
 
-export const opnameCounts = pgTable(
-  "opname_counts",
+// Header scan — konsepnya sama dengan stock_movements:
+// dibuat DRAFT, detail diisi per barcode, lalu POSTED (atau CANCELED).
+export const opnameScans = pgTable(
+  "opname_scans",
   {
     id: text("id").primaryKey(),
     opnameId: text("opname_id")
       .notNull()
       .references(() => opnameProjects.id, { onDelete: "cascade" }),
-    warehouseId: text("warehouse_id")
+    scannedBy: text("scanned_by").references(() => users.id),
+    status: text("status", { enum: opnameScanStatuses })
       .notNull()
-      .references(() => warehouses.id),
-    itemId: text("item_id")
+      .default("DRAFT"),
+    startedAt: timestamp("started_at", { withTimezone: true })
       .notNull()
-      .references(() => items.id),
-    systemQty: numeric("system_qty", { precision: 15, scale: 3 }).notNull().default("0"),
-    countedQty: numeric("counted_qty", { precision: 15, scale: 3 }).notNull().default("0"),
-    differenceQty: numeric("difference_qty", { precision: 15, scale: 3 }).notNull().default("0"),
-    status: text("status").notNull().default("PENDING"),
-    countedAt: timestamp("counted_at", { withTimezone: true }),
-    countedBy: text("counted_by").references(() => users.id),
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -597,61 +539,42 @@ export const opnameCounts = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [index("idx_opname_counts_opname").on(t.opnameId)]
+  (t) => [index("idx_opname_scans_opname").on(t.opnameId)]
 );
 
-export const opnameSessions = pgTable(
-  "opname_sessions",
+export const opnameScanDetails = pgTable(
+  "opname_scan_details",
   {
     id: text("id").primaryKey(),
+    scanId: text("scan_id")
+      .notNull()
+      .references(() => opnameScans.id, { onDelete: "cascade" }),
     opnameId: text("opname_id")
       .notNull()
       .references(() => opnameProjects.id, { onDelete: "cascade" }),
     warehouseId: text("warehouse_id")
       .notNull()
       .references(() => warehouses.id),
-    locationId: text("location_id")
-      .notNull()
-      .references(() => locations.id),
-    itemId: text("item_id")
-      .notNull()
-      .references(() => items.id),
-    startAt: timestamp("start_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    completedAt: timestamp("completed_at", { withTimezone: true }),
-    createdBy: text("created_by").references(() => users.id),
-  },
-  (t) => [index("idx_opname_sessions_opname").on(t.opnameId)]
-);
-
-export const opnameScans = pgTable(
-  "opname_scans",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id")
-      .notNull()
-      .references(() => opnameSessions.id, { onDelete: "cascade" }),
-    opnameId: text("opname_id")
-      .notNull()
-      .references(() => opnameProjects.id, { onDelete: "cascade" }),
-    warehouseId: text("warehouse_id")
-      .notNull()
-      .references(() => warehouses.id),
-    locationId: text("location_id")
-      .notNull()
-      .references(() => locations.id),
+    locationId: text("location_id").references(() => locations.id),
     itemId: text("item_id")
       .notNull()
       .references(() => items.id),
     barcode: text("barcode").notNull(),
+    batch: text("batch"),
+    batchId: text("batch_id").references(() => batches.id, {
+      onDelete: "set null",
+    }),
+    parsed: jsonb("parsed").notNull().default({}),
+    quantity: integer("quantity").notNull().default(1),
+    qtyMode: text("qty_mode", { enum: qtyModes }).notNull().default("AUTO"),
+    source: text("source", { enum: scanSources }).notNull().default("SCANNER"),
     scannedAt: timestamp("scanned_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    scannedBy: text("scanned_by").references(() => users.id),
   },
   (t) => [
-    index("idx_opname_scans_session").on(t.sessionId),
-    index("idx_opname_scans_opname").on(t.opnameId),
+    index("idx_opname_scan_details_scan").on(t.scanId),
+    index("idx_opname_scan_details_opname").on(t.opnameId),
+    index("idx_opname_scan_details_wh").on(t.warehouseId),
   ]
 );

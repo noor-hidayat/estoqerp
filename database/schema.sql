@@ -12,8 +12,8 @@
 --
 -- Status tabel:
 --   [AKTIF]  dipakai oleh kode aplikasi saat ini
+--   [AKTIF] dipakai kode
 --   [BARU]   belum dipakai kode — disiapkan untuk fitur berikutnya
---   [LEGACY] masih dipakai, direncanakan diganti struktur [BARU] opname
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
@@ -168,12 +168,8 @@ create table if not exists items (
   id text primary key,
   code text not null,
   name text not null,
-  unit text not null,
   item_group_id text not null references item_groups (id),
-  price integer not null default 0,
   hue integer not null default 200,
-  barcode_id text,
-  qty integer,
   uom_id text references uom (id),             -- [BARU]
   alternative_code text,                       -- [BARU]
   uom_qty numeric(15,3),                       -- [BARU]
@@ -297,154 +293,79 @@ create index if not exists idx_stock_ledger_date
   on stock_ledger (transaction_date);
 
 -- ---------------------------------------------------------------------------
--- OPNAME — struktur lama (masih dipakai kode)
+-- OPNAME — 4 tabel: project, warehouse peserta, scan (header), scan detail
 -- ---------------------------------------------------------------------------
--- [AKTIF] Kolom berlabel [BARU] ditambahkan untuk fitur berikutnya.
 create table if not exists opname_projects (
   id text primary key,
   name text not null,
-  created_at timestamptz not null default now(),
-  deadline timestamptz,
-  created_by text references users (id),
-  opname_date date,                            -- [BARU]
-  status text not null default 'DRAFT',        -- [BARU]
-  description text                             -- [BARU]
-);
-
--- [LEGACY] Project per gudang — digantikan opname_warehouses.
-create table if not exists projects (
-  id text primary key,
-  name text not null,
-  project_id text references opname_projects (id) on delete set null,
-  branch_id text not null references branches (id),
-  warehouse_id text not null references warehouses (id),
-  mode text not null check (mode in ('COMPARE', 'SCRATCH')),
+  mode text not null default 'COMPARE'
+    check (mode in ('COMPARE', 'SCRATCH')),
   status text not null default 'DRAFT'
     check (status in ('DRAFT', 'IN_PROGRESS', 'APPROVED', 'CANCELLED')),
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   deadline timestamptz,
-  created_by text references users (id)
+  opname_date date,
+  created_by text references users (id),
+  description text
 );
 
-create index if not exists idx_projects_project_id on projects (project_id);
-create index if not exists idx_projects_created_by on projects (created_by);
-
--- [LEGACY] Digantikan opname_sessions.
-create table if not exists scan_sessions (
+-- Warehouse peserta dalam satu project opname.
+create table if not exists opname_warehouses (
   id text primary key,
-  project_id text not null references projects (id) on delete cascade,
-  location_id text references locations (id),
+  opname_id text not null references opname_projects (id) on delete cascade,
+  warehouse_id text not null references warehouses (id),
+  status text not null default 'PENDING'
+    check (status in ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
+  started_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (opname_id, warehouse_id)
+);
+
+create index if not exists idx_opname_warehouses_opname
+  on opname_warehouses (opname_id);
+
+-- Header scan — konsep sama dengan stock_movements:
+-- dibuat DRAFT, detail diisi per barcode, lalu POSTED (atau CANCELED).
+create table if not exists opname_scans (
+  id text primary key,
+  opname_id text not null references opname_projects (id) on delete cascade,
   scanned_by text references users (id),
+  status text not null default 'DRAFT'
+    check (status in ('DRAFT', 'POSTED', 'CANCELED')),
   started_at timestamptz not null default now(),
-  ended_at timestamptz,
-  status text not null default 'ACTIVE'
-    check (status in ('ACTIVE', 'CLOSED'))
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
-create index if not exists idx_scan_sessions_project on scan_sessions (project_id);
+create index if not exists idx_opname_scans_opname on opname_scans (opname_id);
 
--- [LEGACY] Digantikan opname_scans.
-create table if not exists scan_records (
+-- Detail scan per barcode (warehouse/lokasi per baris, seperti
+-- stock_movement_details punya from/to warehouse).
+create table if not exists opname_scan_details (
   id text primary key,
-  session_id text not null references scan_sessions (id) on delete cascade,
-  project_id text not null references projects (id) on delete cascade,
+  scan_id text not null references opname_scans (id) on delete cascade,
+  opname_id text not null references opname_projects (id) on delete cascade,
+  warehouse_id text not null references warehouses (id),
+  location_id text references locations (id),
+  item_id text not null references items (id),
   barcode text not null,
-  item_id text references items (id) on delete set null,
+  batch text,
+  batch_id text references batches (id) on delete set null,
   parsed jsonb not null default '{}'::jsonb,
   quantity integer not null default 1,
   qty_mode text not null default 'AUTO'
     check (qty_mode in ('AUTO', 'MANUAL')),
   source text not null default 'SCANNER'
     check (source in ('SCANNER', 'CAMERA', 'MANUAL')),
-  location_id text references locations (id),
   scanned_at timestamptz not null default now()
 );
 
-create index if not exists idx_scan_records_session on scan_records (session_id);
-create index if not exists idx_scan_records_project on scan_records (project_id);
-
--- [LEGACY] Digantikan opname_counts.
-create table if not exists opname_entries (
-  id text primary key,
-  project_id text not null references projects (id) on delete cascade,
-  item_id text not null references items (id),
-  location_id text references locations (id),
-  system_qty integer not null default 0,
-  counted_qty integer not null default 0
-);
-
-create index if not exists idx_opname_entries_project on opname_entries (project_id);
-
--- ---------------------------------------------------------------------------
--- OPNAME — struktur baru (belum dipakai kode)
--- ---------------------------------------------------------------------------
--- [BARU] Status per gudang dalam satu project opname.
-create table if not exists opname_warehouses (
-  id text primary key,
-  opname_id text not null references opname_projects (id) on delete cascade,
-  warehouse_id text not null references warehouses (id),
-  status text not null default 'PENDING',
-  started_at timestamptz,
-  completed_at timestamptz,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists idx_opname_warehouses_opname
-  on opname_warehouses (opname_id);
-
--- [BARU] Hasil hitung per item.
-create table if not exists opname_counts (
-  id text primary key,
-  opname_id text not null references opname_projects (id) on delete cascade,
-  warehouse_id text not null references warehouses (id),
-  item_id text not null references items (id),
-  system_qty numeric(15,3) not null default 0,
-  counted_qty numeric(15,3) not null default 0,
-  difference_qty numeric(15,3) not null default 0,
-  status text not null default 'PENDING',
-  counted_at timestamptz,
-  counted_by text references users (id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists idx_opname_counts_opname on opname_counts (opname_id);
-
--- [BARU] Sesi scan per lokasi + item.
-create table if not exists opname_sessions (
-  id text primary key,
-  opname_id text not null references opname_projects (id) on delete cascade,
-  warehouse_id text not null references warehouses (id),
-  location_id text not null references locations (id),
-  item_id text not null references items (id),
-  start_at timestamptz not null default now(),
-  completed_at timestamptz,
-  created_by text references users (id)
-);
-
-create index if not exists idx_opname_sessions_opname on opname_sessions (opname_id);
-
--- [BARU] Log scan barcode.
-create table if not exists opname_scans (
-  id text primary key,
-  session_id text not null references opname_sessions (id) on delete cascade,
-  opname_id text not null references opname_projects (id) on delete cascade,
-  warehouse_id text not null references warehouses (id),
-  location_id text not null references locations (id),
-  item_id text not null references items (id),
-  barcode text not null,
-  scanned_at timestamptz not null default now(),
-  scanned_by text references users (id)
-);
-
-create index if not exists idx_opname_scans_session on opname_scans (session_id);
-create index if not exists idx_opname_scans_opname on opname_scans (opname_id);
-
--- ---------------------------------------------------------------------------
--- Setelah kode dimigrasi ke struktur opname baru, tabel [LEGACY] bisa dihapus:
---
---   drop table if exists opname_entries;
---   drop table if exists scan_records;
---   drop table if exists scan_sessions;
---   drop table if exists projects;
--- ---------------------------------------------------------------------------
+create index if not exists idx_opname_scan_details_scan
+  on opname_scan_details (scan_id);
+create index if not exists idx_opname_scan_details_opname
+  on opname_scan_details (opname_id);
+create index if not exists idx_opname_scan_details_wh
+  on opname_scan_details (warehouse_id);

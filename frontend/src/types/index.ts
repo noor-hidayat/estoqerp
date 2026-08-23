@@ -72,12 +72,8 @@ export interface Item {
   id: string;
   code: string;
   name: string;
-  unit: string;
   itemGroupId: string;
-  price: number;
   hue: number;
-  barcodeId?: string;
-  qty?: number;
   uomId?: string;
   alternativeCode?: string;
   uomQty?: number;
@@ -178,30 +174,54 @@ export type ProjectStatus =
   | "APPROVED"
   | "CANCELLED";
 
+export type OpnameWhStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export type OpnameScanStatus = "DRAFT" | "POSTED" | "CANCELED";
+
 export interface OpnameProject {
   id: string;
   name: string;
+  mode: OpnameMode;
+  status: ProjectStatus;
   createdAt: string;
+  updatedAt: string;
   deadline?: string;
-  createdBy: string;
+  opnameDate?: string;
+  createdBy?: string;
+  description?: string;
+}
+
+export interface OpnameProjectListItem extends OpnameProject {
+  jumlahGudang: number;
+  progress: { counted: number; total: number; pct: number };
+  warehouses: {
+    id: string;
+    warehouseId: string;
+    warehouseName: string;
+    status: OpnameWhStatus;
+    pct?: number;
+    countedLokasi?: number;
+    totalLokasi?: number;
+  }[];
+}
+
+export interface OpnameWarehouse {
+  id: string;
+  opnameId: string;
+  warehouseId: string;
+  status: OpnameWhStatus;
+  startedAt?: string;
+  completedAt?: string;
+  createdAt: string;
+  warehouseName?: string;
+  branchName?: string;
+  totalLokasi?: number;
+  countedLokasi?: number;
+  pct?: number;
 }
 
 export interface OpnameProjectDetail {
   parent: OpnameProject;
-  children: {
-    id: string;
-    name: string;
-    warehouseId: string;
-    branchId: string;
-    mode: OpnameMode;
-    status: ProjectStatus;
-    createdAt: string;
-    totalLokasi: number;
-    countedLokasi: number;
-    pct: number;
-    warehouseName: string;
-    branchName: string;
-  }[];
+  warehouses: OpnameWarehouse[];
   summary: {
     jumlahGudang: number;
     totalLokasi: number;
@@ -211,55 +231,71 @@ export interface OpnameProjectDetail {
   };
 }
 
-export interface Project {
+export interface OpnameScan {
   id: string;
-  name: string;
-  projectId?: string;
-  branchId: string;
-  warehouseId: string;
-  mode: OpnameMode;
-  status: ProjectStatus;
+  opnameId: string;
+  scannedBy?: string;
+  status: OpnameScanStatus;
+  startedAt: string;
+  completedAt?: string;
   createdAt: string;
-  deadline?: string;
-  createdBy: string;
+  updatedAt: string;
+  userName?: string;
+  barcodes?: number;
+  qty?: number;
+  itemCount?: number;
+  warehouses?: string[];
+  locations?: string[];
+  lastItemId?: string | null;
+  lastItemName?: string;
+  lastItemUnit?: string;
 }
 
-export type ScanSessionStatus = "ACTIVE" | "CLOSED";
-
-export interface ScanSession {
-  id: string;
-  projectId: string;
-  locationId?: string;
-  scannedBy: string;
-  startedAt: string;
-  endedAt?: string;
-  status: ScanSessionStatus;
+export interface OpnameScanDetailsResponse {
+  scans: OpnameScan[];
+  totalBarcodes: number;
+  totalQty: number;
+  itemCount: number;
 }
 
 export type ScanSource = "SCANNER" | "CAMERA" | "MANUAL";
 
-export interface ScanRecord {
+export interface OpnameScanDetail {
   id: string;
-  sessionId: string;
-  projectId: string;
+  scanId: string;
+  opnameId: string;
+  warehouseId: string;
+  locationId?: string;
+  itemId: string;
   barcode: string;
-  itemId?: string;
+  batch?: string;
   batchId?: string;
   parsed: Record<string, string>;
   quantity: number;
   qtyMode: "AUTO" | "MANUAL";
   source: ScanSource;
-  locationId?: string;
   scannedAt: string;
+  itemCode?: string;
+  itemName?: string;
+  warehouseName?: string;
+  locationCode?: string;
 }
 
-export interface OpnameEntry {
-  id: string;
+export interface OpnameStats {
   projectId: string;
-  itemId: string;
-  locationId?: string;
-  systemQty: number;
-  countedQty: number;
+  progress: { total: number; counted: number; pct: number };
+  progressByWh: Record<string, { total: number; counted: number; pct: number }>;
+  variance: {
+    itemId: string;
+    itemCode: string;
+    itemName: string;
+    unit: string;
+    warehouseId: string;
+    warehouseName: string;
+    systemQty: number;
+    countedQty: number;
+    diff: number;
+  }[];
 }
 
 export interface MovementType {
@@ -398,6 +434,14 @@ export interface StockBatch {
   batchId: string;
   warehouseId: string;
   qty: number;
+  updatedAt: string;
+}
+
+export interface StockBarcode {
+  barcode: string;
+  warehouseId: string;
+  itemId: string;
+  batchId: string | null;
   updatedAt: string;
 }
 

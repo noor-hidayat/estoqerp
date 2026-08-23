@@ -28,7 +28,7 @@ import {
   FormActions,
 } from "@/components/ui/form-page";
 import { cx } from "@/lib/utils";
-import { nextSegId } from "@/lib/mock/store";
+import { nextSegId } from "@/lib/segment-id";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
 const FIELD_OPTIONS: BatchSegmentField[] = [

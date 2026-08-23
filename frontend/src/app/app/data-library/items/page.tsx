@@ -7,6 +7,7 @@ import {
   useItems,
   useItemGroups,
   useRemove,
+  useUoms,
 } from "@/lib/api/query";
 import { formatNumber, timeAgo } from "@/lib/utils";
 import type { Item } from "@/types";
@@ -35,6 +36,7 @@ export default function ItemsPage() {
     pageSize,
   });
   const { data: itemGroups, isLoading: itemGroupsLoading } = useItemGroups();
+  const { data: uoms = [] } = useUoms();
   const removeItem = useRemove("items");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -83,7 +85,11 @@ export default function ItemsPage() {
     {
       id: "unit",
       header: "UOM",
-      cell: (item) => <span className="whitespace-nowrap text-muted-foreground">{item.unit}</span>,
+      cell: (item) => (
+        <span className="whitespace-nowrap text-muted-foreground">
+          {item.uomId ? (uoms.find((u) => u.id === item.uomId)?.name ?? "—") : "—"}
+        </span>
+      ),
     },
     {
       id: "alternativeCode",
@@ -115,10 +121,13 @@ export default function ItemsPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["master.items"]}>
       <PageHeader
         title="Items"
-
         actions={
-          <Button onClick={() => navigate("/app/data-library/items/new")}>
-            <Plus size={15} strokeWidth={2} />
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => navigate("/app/data-library/items/new")}
+          >
+            <Plus size={14} strokeWidth={2} />
             Add Item
           </Button>
         }

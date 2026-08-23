@@ -1,21 +1,18 @@
-// Seed data dummy: stock sistem + hasil scan opname per gudang,
+// Seed data dummy: hasil scan opname per gudang,
 // dibuat dari item yang sudah ada di database (deterministik, bisa dijalankan ulang).
-import { and, eq, like, desc } from "drizzle-orm";
+import { desc, eq, like } from "drizzle-orm";
 import { db, pool } from "./pool";
 import {
-  branches,
   items,
   locations,
   opnameProjects,
-  projects,
-  scanRecords,
-  scanSessions,
-  stockBalances,
+  opnameScans,
+  opnameScanDetails,
+  opnameWarehouses,
   users,
   warehouses,
 } from "./schema";
-
-const PREFIX = "dmy";
+import { nextRowId } from "../lib/id";
 
 function hashId(s: string): number {
   let h = 0;
@@ -34,85 +31,16 @@ const MULT_BY_CODE: Record<string, number> = {
   "BP-A": 0.9786, // Gdg. Bahan Penolong - A ≈ -2,14%
 };
 
-const DUMMY_BRANCHES = [
-  { code: "PL1", name: "Branch 1", city: "Jakarta" },
-  { code: "PL2", name: "Branch 2", city: "Bekasi" },
-  { code: "PL3", name: "Branch 3", city: "Karawang" },
-  { code: "PL4", name: "Branch 4", city: "Tangerang" },
-  { code: "PL5", name: "Branch 5", city: "Bogor" },
-];
-
-const DUMMY_WAREHOUSES = [
-  { branchCode: "PL1", code: "BB-A", name: "Gdg. Bahan Baku - A", locCode: "BBA-01" },
-  { branchCode: "PL2", code: "BB-B", name: "Gdg. Bahan Baku - B", locCode: "BBB-01" },
-  { branchCode: "PL3", code: "SP-A", name: "Gdg. Sparepart - A", locCode: "SPA-01" },
-  { branchCode: "PL4", code: "SP-B", name: "Gdg. Sparepart - B", locCode: "SPB-01" },
-  { branchCode: "PL5", code: "BP-A", name: "Gdg. Bahan Penolong - A", locCode: "BPA-01" },
-];
-
-// Lokasi dummy yang perlu dipastikan ada (gudang yang belum punya lokasi).
-const DUMMY_LOCATIONS = [
-  { warehouseCode: "BLG-WH01", code: "BLG-01", name: "Area 1" },
-  ...DUMMY_WAREHOUSES.map((w) => ({
-    warehouseCode: w.code,
-    code: w.locCode,
-    name: "Area 1",
-  })),
-];
+const DUMMY_NAME_PREFIX = "Opname Dummy ";
 
 async function main() {
-  // ---- Bersihkan data dummy dari eksekusi sebelumnya ----
-  await db.delete(scanRecords).where(like(scanRecords.sessionId, `ses_${PREFIX}%`));
-  await db.delete(scanSessions).where(like(scanSessions.id, `ses_${PREFIX}%`));
-  await db.delete(stockBalances).where(like(stockBalances.id, `sb_${PREFIX}%`));
-  await db.delete(projects).where(like(projects.id, `SOP-${PREFIX.toUpperCase()}%`));
-  await db.delete(locations).where(like(locations.id, `loc_${PREFIX}%`));
-  await db.delete(warehouses).where(like(warehouses.id, `wh_${PREFIX}%`));
-  await db.delete(branches).where(like(branches.id, `br_${PREFIX}%`));
-
-  // ---- Pastikan branch/gudang/lokasi dummy ada ----
-  let brSeq = 0;
-  let whSeq = 0;
-  let locSeq = 0;
-
-  for (const b of DUMMY_BRANCHES) {
-    brSeq += 1;
-    await db.insert(branches).values({
-      id: `br_${PREFIX}_${String(brSeq).padStart(3, "0")}`,
-      ...b,
-    });
-  }
-  for (const w of DUMMY_WAREHOUSES) {
-    whSeq += 1;
-    const [br] = await db
-      .select({ id: branches.id })
-      .from(branches)
-      .where(eq(branches.code, w.branchCode))
-      .limit(1);
-    await db.insert(warehouses).values({
-      id: `wh_${PREFIX}_${String(whSeq).padStart(3, "0")}`,
-      branchId: br?.id ?? "br_003",
-      code: w.code,
-      name: w.name,
-    });
-  }
-  const whsAll = await db.select().from(warehouses);
-  for (const l of DUMMY_LOCATIONS) {
-    const wh = whsAll.find((w) => w.code === l.warehouseCode);
-    if (!wh) continue;
-    const exists = await db
-      .select({ id: locations.id })
-      .from(locations)
-      .where(and(eq(locations.warehouseId, wh.id), eq(locations.code, l.code)))
-      .limit(1);
-    if (exists[0]) continue;
-    locSeq += 1;
-    await db.insert(locations).values({
-      id: `loc_${PREFIX}_${String(locSeq).padStart(3, "0")}`,
-      warehouseId: wh.id,
-      code: l.code,
-      name: l.name,
-    });
+  // ---- Bersihkan data dummy dari eksekusi sebelumnya (cascade ke scan) ----
+  const dummyProjects = await db
+    .select({ id: opnameProjects.id })
+    .from(opnameProjects)
+    .where(like(opnameProjects.name, `${DUMMY_NAME_PREFIX}%`));
+  for (const p of dummyProjects) {
+    await db.delete(opnameProjects).where(eq(opnameProjects.id, p.id));
   }
 
   // ---- Ambil data master yang sudah ada ----
@@ -127,64 +55,58 @@ async function main() {
     .limit(1);
   const locationsAll = await db.select().from(locations);
 
-  let sesSeq = 0;
-  let projSeq = 0;
-  let recSeq = 0;
-
   for (const wh of whs) {
     const whLoc = locationsAll.find((l) => l.warehouseId === wh.id) ?? null;
     const mult = MULT_BY_CODE[wh.code] ?? 0.97;
 
-    // NOTE: stock balance TIDAK dibuat dari item list — item tidak disimpan
-    // di semua gudang. Stok sistem diisi lewat Import Data → Stock.
-
-    // project terakhir per gudang; buat dummy project bila belum ada
-    const existing = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(eq(projects.warehouseId, wh.id))
-      .orderBy(desc(projects.createdAt), desc(projects.id))
+    // Project dummy terakhir per gudang; buat baru bila belum ada.
+    const [opnameRow] = await db
+      .select({ opnameId: opnameWarehouses.opnameId })
+      .from(opnameWarehouses)
+      .where(eq(opnameWarehouses.warehouseId, wh.id))
+      .orderBy(desc(opnameWarehouses.createdAt))
       .limit(1);
-    let projectId: string;
-    if (existing[0]) {
-      projectId = existing[0].id;
+
+    const now = new Date();
+    let opnameId: string;
+    if (opnameRow?.opnameId) {
+      opnameId = opnameRow.opnameId;
     } else {
-      projSeq += 1;
-      const parentId = `PRJ-${PREFIX.toUpperCase()}-${String(projSeq).padStart(3, "0")}`;
-      projectId = `SOP-${PREFIX.toUpperCase()}-${String(projSeq).padStart(3, "0")}`;
+      opnameId = await nextRowId(db, opnameProjects, "opj", now);
       await db.insert(opnameProjects).values({
-        id: parentId,
-        name: `Opname Dummy ${wh.name}`,
-        createdAt: new Date(),
-        createdBy: admin?.id ?? null,
-      });
-      await db.insert(projects).values({
-        id: projectId,
-        name: `Opname Dummy ${wh.name}`,
-        projectId: parentId,
-        branchId: wh.branchId,
-        warehouseId: wh.id,
+        id: opnameId,
+        name: `${DUMMY_NAME_PREFIX}${wh.name}`,
         mode: "COMPARE",
         status: "IN_PROGRESS",
+        createdAt: now,
+        updatedAt: now,
         createdBy: admin?.id ?? null,
-        createdAt: new Date(),
+      });
+      await db.insert(opnameWarehouses).values({
+        id: await nextRowId(db, opnameWarehouses, "opw", now),
+        opnameId,
+        warehouseId: wh.id,
+        status: "IN_PROGRESS",
+        startedAt: now,
+        createdAt: now,
       });
     }
 
-    // hasil hitung: qty hasil scan = sistem × multiplier ± jitter 5%
-    sesSeq += 1;
-    const sessionId = `ses_${PREFIX}_${String(sesSeq).padStart(4, "0")}`;
-    await db.insert(scanSessions).values({
-      id: sessionId,
-      projectId,
-      locationId: whLoc?.id ?? null,
+    // Header scan (POSTED) per gudang.
+    const scanId = await nextRowId(db, opnameScans, "ops", now);
+    await db.insert(opnameScans).values({
+      id: scanId,
+      opnameId,
       scannedBy: admin?.id ?? null,
-      startedAt: new Date(),
-      endedAt: new Date(),
-      status: "CLOSED",
+      status: "POSTED",
+      startedAt: now,
+      completedAt: now,
+      createdAt: now,
+      updatedAt: now,
     });
 
-    const recValues = itemsAll.map((it) => {
+    // Detail scan per item: qty hasil hitung = sistem × multiplier ± jitter 5%.
+    const detailValues = itemsAll.map((it) => {
       const qty = 50 + (hashId(wh.id + it.id) % 450);
       const counted = Math.max(
         1,
@@ -192,30 +114,30 @@ async function main() {
           qty * mult * (0.95 + (hashId(it.id + wh.id) % 11) / 100)
         )
       );
-      recSeq += 1;
       return {
-        id: `rec_${PREFIX}_${String(recSeq).padStart(6, "0")}`,
-        sessionId,
-        projectId,
-        barcode: it.barcodeId ?? it.code,
+        id: "",
+        scanId,
+        opnameId,
+        warehouseId: wh.id,
+        locationId: whLoc?.id ?? null,
         itemId: it.id,
+        barcode: it.code,
         parsed: {},
         quantity: counted,
         qtyMode: "AUTO" as const,
         source: "SCANNER" as const,
-        locationId: whLoc?.id ?? null,
-        scannedAt: new Date(),
+        scannedAt: now,
       };
     });
-    await db.insert(scanRecords).values(recValues);
+    for (const d of detailValues) {
+      d.id = await nextRowId(db, opnameScanDetails, "osd", now);
+    }
+    await db.insert(opnameScanDetails).values(detailValues);
 
-    const totalSystem = 0;
-    const totalCounted = recValues.reduce((a, r) => a + r.quantity, 0);
-    const selisih = totalCounted - totalSystem;
+    const totalCounted = detailValues.reduce((a, r) => a + r.quantity, 0);
     console.log(
-      `[seed-dummy] ${wh.code} ${wh.name} → project ${projectId}, ` +
-        `${itemsAll.length} item · sistem ${totalSystem} · opname ${totalCounted}` +
-        ` · selisih ${selisih > 0 ? "+" : ""}${selisih}`
+      `[seed-dummy] ${wh.code} ${wh.name} → project ${opnameId}, ` +
+        `${itemsAll.length} item · opname ${totalCounted}`
     );
   }
 

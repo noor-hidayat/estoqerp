@@ -660,11 +660,9 @@ export function MovementForm({
       }
       const to = kind === "ISSUE" ? "" : toDefault;
       const masterQty =
-        resolved.item.qty && resolved.item.qty > 0
-          ? resolved.item.qty
-          : resolved.item.uomQty && Number(resolved.item.uomQty) > 0
-            ? Number(resolved.item.uomQty)
-            : 1;
+        resolved.item.uomQty && Number(resolved.item.uomQty) > 0
+          ? Number(resolved.item.uomQty)
+          : 1;
       // Gabung baris item+batch+gudang yang sama — barcode tiap unit tetap
       // dicatat di row (units) supaya data per barcode tidak hilang saat save.
       const serial = (resolved.values?.SEQUENCE ?? "").trim() || undefined;

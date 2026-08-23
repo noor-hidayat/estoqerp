@@ -15,21 +15,22 @@ import { useSaveShortcut } from "@/lib/use-save-shortcut";
 import { nowMs } from "@/lib/now";
 import { api } from "@/lib/api/client";
 import {
-  useProject,
+  useOpnameProject,
   useLocations,
-  useScanSessions,
-  useScanRecords,
+  useOpnameWarehouses,
+  useOpnameScanDetails,
   useBarcodeFormats,
   useBatchFormats,
   useItemsList,
   useItemGroups,
+  useAllWarehouses,
   useInsert,
   useUpdate,
 } from "@/lib/api/query";
 import { syncMasterCache, getAll } from "@/lib/local-cache";
 import { parseBarcode } from "@/lib/barcode/parser";
-import type { BarcodeFormat, BatchFormat, ItemGroup, Item, ScanRecord, ScanSession } from "@/types";
-import { formatNumber, formatTime, cx } from "@/lib/utils";
+import type { BarcodeFormat, BatchFormat, ItemGroup, Item, OpnameScanDetail, OpnameScan } from "@/types";
+import { formatNumber, cx } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ComboBox } from "@/components/ui/combo-box";
@@ -68,13 +69,12 @@ interface BufferEntry {
   parsed: ScanParsed;
   format: BarcodeFormat;
   count: number;
-  source: ScanRecord["source"];
+  source: OpnameScanDetail["source"];
 }
 
-/** Qty master per barcode — kolom qty, fallback uomQty. */
+/** Qty master per barcode — kolom uomQty. */
 function masterQtyOf(item?: Item): number {
   if (!item) return 0;
-  if (item.qty && item.qty > 0) return item.qty;
   if (item.uomQty && Number(item.uomQty) > 0) return Number(item.uomQty);
   return 0;
 }
@@ -84,23 +84,27 @@ export default function ScanSessionPage() {
   const id = params.id;
   const { user, isSystem, permissions } = useSession();
 
-  const { data: project, isLoading: projectLoading } = useProject(id);
-  const { data: locations = [] } = useLocations(project?.warehouseId);
-  const {
-    data: sessions = [],
-    isLoading: sessionsLoading,
-  } = useScanSessions({ projectId: id, status: "ACTIVE" });
-  const activeSession = sessions[0];
-  const { data: scanRecordsData } = useScanRecords(
-    activeSession?.id
-      ? { sessionId: activeSession.id, pageSize: 1000 }
-      : { pageSize: 1 }
+  const { data: project, isLoading: projectLoading } = useOpnameProject(id);
+  const { data: opWhs = [] } = useOpnameWarehouses({ opnameId: id });
+  const { data: allWarehouses = [] } = useAllWarehouses();
+
+  const projectWhIds = useMemo(() => opWhs.map((w) => w.warehouseId), [opWhs]);
+  const warehouses = useMemo(
+    () => allWarehouses.filter((w) => projectWhIds.includes(w.id)),
+    [allWarehouses, projectWhIds]
   );
-  const sessionRecords = scanRecordsData?.rows ?? [];
+  const [warehouseId, setWarehouseId] = useState("");
+  const { data: locations = [] } = useLocations(warehouseId || undefined);
+  const { data: recentData } = useOpnameScanDetails({ opnameId: id, pageSize: 30 });
+  const recentRecords = recentData?.rows ?? [];
   const { data: formats = [] } = useBarcodeFormats();
   const { data: batchFormats = [] } = useBatchFormats();
   const { data: allItems = [] } = useItemsList();
   const { data: itemGroups = [] } = useItemGroups();
+
+  useEffect(() => {
+    if (!warehouseId && warehouses.length > 0) setWarehouseId(warehouses[0].id);
+  }, [warehouseId, warehouses]);
 
   // Sync master data to IndexedDB so scan can lookup offline
   useEffect(() => {
@@ -114,18 +118,9 @@ export default function ScanSessionPage() {
     }
   }, [formats, allItems, itemGroups, batchFormats]);
 
-  const insertScanSession = useInsert("scanSessions");
-  const insertScanRecord = useInsert("scanRecords");
-  const updateProject = useUpdate("projects");
-  const updateSession = useUpdate("scanSessions");
-
-  // Source of truth for active session: query refetch may lag right after
-  // session is created/closed — this ref is set synchronously so scan records are never
-  // saved without sessionId/locationId.
-  const activeSessionRef = useRef<ScanSession | null>(null);
-  useEffect(() => {
-    activeSessionRef.current = activeSession ?? null;
-  }, [activeSession]);
+  const insertScan = useInsert("opnameScans");
+  const insertDetail = useInsert("opnameScanDetails");
+  const updateScan = useUpdate("opnameScans");
 
   const itemMap = useMemo(() => new Map(allItems.map((i) => [i.id, i])), [allItems]);
   const locationMap = useMemo(() => new Map(locations.map((l) => [l.id, l])), [locations]);
@@ -162,10 +157,9 @@ export default function ScanSessionPage() {
 
   useEffect(() => {
     if (!locationId && locations.length > 0) {
-      const initial = activeSession?.locationId ?? locations[0]?.id ?? "";
-      if (initial) setLocationId(initial);
+      setLocationId(locations[0]?.id ?? "");
     }
-  }, [activeSession?.locationId, locationId, locations]);
+  }, [locationId, locations]);
 
   useSaveShortcut(confirmSave, saveOpen);
 
@@ -186,8 +180,8 @@ export default function ScanSessionPage() {
     );
   }
 
-  const totalQty = sessionRecords.reduce((a, r) => a + r.quantity, 0);
-  const distinctItems = new Set(sessionRecords.map((r) => r.itemId)).size;
+  const totalQty = recentRecords.reduce((a, r) => a + r.quantity, 0);
+  const distinctItems = new Set(recentRecords.map((r) => r.itemId)).size;
 
   const history = buffer.flatMap((e) =>
     Array.from({ length: e.count }, (_, i) => ({
@@ -196,62 +190,44 @@ export default function ScanSessionPage() {
     }))
   );
 
-  const startSession = async (): Promise<ScanSession | null> => {
-    if (activeSessionRef.current) return activeSessionRef.current;
-    if (!locationId) return null;
-    try {
-      const created = (await insertScanSession.mutateAsync({
-        projectId: project.id,
-        locationId,
-        scannedBy: user?.id ?? "",
-        startedAt: new Date().toISOString(),
-        status: "ACTIVE",
-      })) as ScanSession;
-      activeSessionRef.current = created;
-      if (project.status === "DRAFT") {
-        await updateProject.mutateAsync({
-          id: project.id,
-          patch: { status: "IN_PROGRESS" },
-        });
-      }
-      setTimeout(() => inputRef.current?.focus(), 50);
-      return created;
-    } catch (e) {
-      setFeed({
-        ok: false,
-        title: "Failed to start session",
-        detail: e instanceof Error ? e.message : "Try again.",
-      });
-      return null;
-    }
-  };
-
   const recordScans = async (
     items: Array<{
       parsed: ScanParsed;
       quantity: number;
       qtyMode: "AUTO" | "MANUAL";
-      source: ScanRecord["source"];
+      source: OpnameScanDetail["source"];
     }>
   ) => {
-    const session = activeSessionRef.current;
-    if (!session) {
-      throw new Error("Scan session not yet active. Scan a barcode once to start the session.");
+    if (!warehouseId) {
+      throw new Error("Select a warehouse first.");
     }
+    // Header scan — konsep stock_movements: DRAFT → detail → POSTED.
+    const created = (await insertScan.mutateAsync({
+      opnameId: project.id,
+      scannedBy: user?.id ?? "",
+      status: "DRAFT",
+      startedAt: new Date().toISOString(),
+    })) as OpnameScan;
     for (const it of items) {
-      await insertScanRecord.mutateAsync({
-        sessionId: session.id,
-        projectId: project.id,
-        barcode: it.parsed.barcode,
+      await insertDetail.mutateAsync({
+        scanId: created.id,
+        opnameId: project.id,
+        warehouseId,
+        locationId: locationId || undefined,
         itemId: it.parsed.itemId,
+        barcode: it.parsed.barcode,
+        batch: it.parsed.batchNumber ?? undefined,
         parsed: it.parsed.values ?? {},
         quantity: it.quantity,
         qtyMode: it.qtyMode,
         source: it.source,
-        locationId: session.locationId ?? undefined,
         scannedAt: new Date().toISOString(),
       });
     }
+    await updateScan.mutateAsync({
+      id: created.id,
+      patch: { status: "POSTED", completedAt: new Date().toISOString() },
+    });
   };
 
   const resolveLookup = async (barcode: string) => {
@@ -326,8 +302,16 @@ export default function ScanSessionPage() {
 
   const handleScan = async (
     rawBarcode: string,
-    source: ScanRecord["source"] = "SCANNER"
+    source: OpnameScanDetail["source"] = "SCANNER"
   ) => {
+    if (!warehouseId) {
+      setFeed({
+        ok: false,
+        title: "Select Warehouse First",
+        detail: "You must select a warehouse before starting scan.",
+      });
+      return;
+    }
     if (!locationId) {
       setFeed({
         ok: false,
@@ -416,13 +400,10 @@ export default function ScanSessionPage() {
     if (format.uniqueBarcode) {
       const sameCode = buffer.find((e) => e.barcode === barcode);
       if (sameCode) {
-        const scannedBy = user?.name ?? "unknown";
-        const scannedAt =
-          locationMap.get(activeSession?.locationId ?? "")?.code ?? "—";
         setFeed({
           ok: false,
           title: "Duplicate Barcode",
-          detail: `Barcode already scanned by ${scannedBy} at ${scannedAt}.`,
+          detail: `Barcode already scanned at ${locationMap.get(locationId)?.code ?? "—"}.`,
         });
         setInput("");
         return;
@@ -431,13 +412,13 @@ export default function ScanSessionPage() {
       const check = await api.get<{
         exists: boolean;
         record?: {
-          sessionId: string;
+          scanId: string;
           scannedBy: string;
           locationCode: string;
           scannedAt: string;
         };
       }>(
-        `/scan-records/check?projectId=${project.id}&barcode=${encodeURIComponent(barcode)}${activeSessionRef.current?.id ? `&excludeSessionId=${activeSessionRef.current.id}` : ""}`
+        `/opname-scan-details/check?opnameId=${project.id}&barcode=${encodeURIComponent(barcode)}`
       );
       if (check.exists) {
         setFeed({
@@ -482,12 +463,11 @@ export default function ScanSessionPage() {
 
   async function confirmSave() {
     if (saving) return;
-    const session = activeSessionRef.current;
     const items: Array<{
       parsed: ScanParsed;
       quantity: number;
       qtyMode: "AUTO" | "MANUAL";
-      source: ScanRecord["source"];
+      source: OpnameScanDetail["source"];
     }> = [];
     const needsManual = buffer.some((e) => !e.format.qtyPerFormat);
     const manual = needsManual ? Number(manualQty.trim()) : NaN;
@@ -514,25 +494,10 @@ export default function ScanSessionPage() {
       });
     }
     if (items.length === 0) return;
-    if (!session) {
-      setFeed({
-        ok: false,
-        title: "Session not active",
-        detail: "Scan a barcode once to start a new session, then save again.",
-      });
-      return;
-    }
 
     setSaving(true);
     try {
       await recordScans(items);
-      await updateSession.mutateAsync({
-        id: session.id,
-        patch: {
-          status: "CLOSED",
-          endedAt: new Date().toISOString(),
-        },
-      });
     } catch (e) {
       setFeed({
         ok: false,
@@ -545,39 +510,17 @@ export default function ScanSessionPage() {
       return;
     }
 
-    activeSessionRef.current = null;
     setSaving(false);
     setBuffer([]);
     setSaveOpen(false);
     setInput("");
-    setLocationId("");
     inputRef.current?.focus();
-  };
-
-  const closeSession = () => {
-    const session = activeSessionRef.current;
-    if (!session) return;
-    activeSessionRef.current = null;
-    void updateSession.mutateAsync({
-      id: session.id,
-      patch: {
-        status: "CLOSED",
-        endedAt: new Date().toISOString(),
-      },
-    });
-  };
+  }
 
   const submitInput = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
-    void (async () => {
-      if (sessionsLoading) return;
-      if (!activeSessionRef.current && locationId) {
-        const created = await startSession();
-        if (!created) return;
-      }
-      await handleScan(input.trim());
-    })();
+    void handleScan(input.trim());
     setInput("");
   };
 
@@ -589,7 +532,7 @@ export default function ScanSessionPage() {
       <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-background py-20 text-center">
         <CheckCircle2 size={28} strokeWidth={2} className="text-muted-foreground" />
         <h2 className="mt-4 text-lg font-semibold text-foreground">
-          Scan session closed
+          Scan closed
         </h2>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
           Project status is {project.status.toLowerCase()}. Data is final.
@@ -606,17 +549,22 @@ export default function ScanSessionPage() {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0 flex-1 sm:max-w-xs">
               <ComboBox
+                label="Warehouse"
+                value={warehouseId}
+                onChange={setWarehouseId}
+                options={warehouses.map((w) => ({
+                  value: w.id,
+                  label: w.name,
+                }))}
+                placeholder="Select warehouse..."
+                emptyText="No warehouse in this project"
+              />
+            </div>
+            <div className="min-w-0 flex-1 sm:max-w-xs">
+              <ComboBox
                 label="Scan location"
                 value={locationId}
-                onChange={(locId) => {
-                  setLocationId(locId);
-                  if (activeSession) {
-                    void updateSession.mutateAsync({
-                      id: activeSession.id,
-                      patch: { locationId: locId },
-                    });
-                  }
-                }}
+                onChange={setLocationId}
                 options={locations.map((l) => ({
                   value: l.id,
                   label: l.name,
@@ -625,21 +573,6 @@ export default function ScanSessionPage() {
                 emptyText="Location not found"
               />
             </div>
-            {activeSession && (
-              <div className="flex items-center gap-3">
-                <div className="hidden text-right sm:block">
-                  <p className="text-[12.5px] font-semibold text-card-foreground">
-                    Active scan session
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    started {formatTime(activeSession.startedAt)}
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" onClick={closeSession}>
-                  Close Session
-                </Button>
-              </div>
-            )}
           </div>
 
           {lastScanned && (
@@ -656,16 +589,7 @@ export default function ScanSessionPage() {
           {cameraOpen ? (
             <div className="mt-5">
               <CameraScanner
-                onScan={(t) =>
-                  void (async () => {
-                    if (sessionsLoading) return;
-                    if (!activeSessionRef.current && locationId) {
-                      const created = await startSession();
-                      if (!created) return;
-                    }
-                    await handleScan(t, "CAMERA");
-                  })()
-                }
+                onScan={(t) => void handleScan(t, "CAMERA")}
                 onClose={() => setCameraOpen(false)}
               />
             </div>
@@ -782,10 +706,10 @@ export default function ScanSessionPage() {
                       </p>
                       <p className="text-[10px] text-muted-foreground">{e.format.name}</p>
                       {e.format.qtyPerFormat &&
-                        e.parsed.item?.qty &&
-                        e.parsed.item.qty > 0 && (
+                        e.parsed.item?.uomQty &&
+                        Number(e.parsed.item.uomQty) > 0 && (
                           <p className="text-[10px] font-medium text-emerald-600">
-                            master qty {e.parsed.item.qty}
+                            master qty {e.parsed.item.uomQty}
                           </p>
                         )}
                     </div>
@@ -819,7 +743,7 @@ export default function ScanSessionPage() {
                   </h3>
                   <p className="mt-0.5 text-[12px] text-muted-foreground">
                     {buffer.some((e) => !e.format.qtyPerFormat)
-                      ? "Fill in the same qty for all barcodes, then save to session."
+                      ? "Fill in the same qty for all barcodes, then save."
                       : "Qty automatically from master item per barcode."}
                   </p>
                 </div>
@@ -863,7 +787,7 @@ export default function ScanSessionPage() {
                           </span>
                           {e.format.qtyPerFormat ? (
                             <span className="block text-[10px] font-medium text-emerald-600">
-                              master {e.parsed.item?.qty ?? 0}/scan →{" "}
+                              master {e.parsed.item?.uomQty ?? 0}/scan →{" "}
                               {formatNumber(autoQty)}
                             </span>
                           ) : (
@@ -906,7 +830,7 @@ export default function ScanSessionPage() {
       <div className="hidden lg:block">
         <div className="mb-4 grid grid-cols-3 gap-3">
           {[
-            { label: "Scan", value: sessionRecords.length },
+            { label: "Scan", value: recentRecords.length },
             { label: "Total qty", value: formatNumber(totalQty) },
             { label: "Unique items", value: distinctItems },
           ].map((s) => (
@@ -927,16 +851,16 @@ export default function ScanSessionPage() {
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="border-b border-border px-5 py-3.5">
             <h3 className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Latest scans this session
+              Latest scans this project
             </h3>
           </div>
           <div className="max-h-[460px] divide-y divide-border overflow-y-auto">
-            {sessionRecords.length === 0 && (
+            {recentRecords.length === 0 && (
               <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-                No scans in this session yet.
+                No scans in this project yet.
               </p>
             )}
-            {[...sessionRecords]
+            {[...recentRecords]
               .reverse()
               .slice(0, 30)
               .map((r) => {
@@ -949,6 +873,7 @@ export default function ScanSessionPage() {
                       </p>
                       <p className="truncate font-mono text-[10.5px] text-muted-foreground">
                         {r.barcode}
+                        {r.batch ? ` · batch ${r.batch}` : ""}
                       </p>
                     </div>
                     <div className="text-right">

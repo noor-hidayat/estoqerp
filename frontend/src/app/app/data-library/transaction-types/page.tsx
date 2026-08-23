@@ -82,10 +82,13 @@ export default function TransactionTypesPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["master.movementTypes"]}>
       <PageHeader
         title="Transaction Types"
-        description="Base types Receipt, Issue, dan Transfer tersedia bawaan. Kembangkan tipe baru dari salah satunya dan atur series penomoran sendiri."
         actions={
-          <Button onClick={() => navigate("/app/data-library/transaction-types/new")}>
-            <Plus size={15} strokeWidth={2} />
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => navigate("/app/data-library/transaction-types/new")}
+          >
+            <Plus size={14} strokeWidth={2} />
             Add Transaction Type
           </Button>
         }

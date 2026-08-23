@@ -9,54 +9,26 @@ import {
   items,
   locations,
   movementTypes,
-  opnameEntries,
   opnameProjects,
-  projects,
+  opnameScans,
+  opnameScanDetails,
+  opnameWarehouses,
   rolePermissions,
   roles,
-  scanRecords,
-  scanSessions,
   stockBalances,
   uom,
   users,
   warehouses,
 } from "./schema";
+import { nextSeedId } from "../lib/id";
 
 const EMAIL = "admin@opname.id";
 const PASSWORD = "admin";
 
-// ID berurutan: br_001, wh_001, itm_001, ...
+// Counter in-memory untuk seed — format sama dengan DB: {prefix}-{YYMM}-{0001}
 const seqCounters = new Map<string, number>();
-function nextId(prefix: string): string {
-  const n = (seqCounters.get(prefix) ?? 0) + 1;
-  seqCounters.set(prefix, n);
-  return `${prefix}_${String(n).padStart(3, "0")}`;
-}
-
-// ID serial bulanan: rec_yymm_0001, ses_yymm_0001, ...
-const serialCounters = new Map<string, number>();
-function nextSerial(prefix: string, date: Date): string {
-  const yymm = `${String(date.getFullYear()).slice(-2)}${String(
-    date.getMonth() + 1
-  ).padStart(2, "0")}`;
-  const key = `${prefix}_${yymm}`;
-  const n = (serialCounters.get(key) ?? 0) + 1;
-  serialCounters.set(key, n);
-  return `${key}_${String(n).padStart(4, "0")}`;
-}
-
-// ID project: SOP-001, SOP-002, ... (berurutan dari 1)
-let projectSeq = 0;
-function nextProjectId(): string {
-  projectSeq += 1;
-  return `SOP-${String(projectSeq).padStart(3, "0")}`;
-}
-
-// ID parent project: PRJ-001, PRJ-002, ...
-let parentSeq = 0;
-function nextParentId(): string {
-  parentSeq += 1;
-  return `PRJ-${String(parentSeq).padStart(3, "0")}`;
+function nextId(prefix: string, date: Date = new Date()): string {
+  return nextSeedId(seqCounters, prefix, date);
 }
 
 // Barcode 11 digit: ITEM_GROUP(2) + ITEM_CODE(5) + SEQUENCE(4)
@@ -180,7 +152,7 @@ async function seedDummyData(adminId: string) {
     for (const [name, qty] of Object.entries(QTY_MASTER)) {
       await db
         .update(items)
-        .set({ qty })
+        .set({ uomQty: String(qty) })
         .where(eq(items.name, name));
     }
     // Pastikan tipe transaksi bawaan (Receipt/Issue/Transfer) selalu ada.
@@ -257,11 +229,23 @@ async function seedDummyData(adminId: string) {
     await tx.insert(itemGroups).values([igRaw, igPack, igFin, igSp]);
 
     // --- Satuan (UoM) & tipe transaksi stok (builtin: Receipt, Issue, Transfer) ---
-    await tx.insert(uom).values([
+    const uomRows = [
       { id: nextId("uom"), code: "PCS", name: "Pieces" },
       { id: nextId("uom"), code: "KG", name: "Kilogram" },
       { id: nextId("uom"), code: "CRT", name: "Karton" },
       { id: nextId("uom"), code: "LTR", name: "Liter" },
+      { id: nextId("uom"), code: "BTL", name: "Botol" },
+      { id: nextId("uom"), code: "KRN", name: "Karung" },
+      { id: nextId("uom"), code: "ROL", name: "Rol" },
+      { id: nextId("uom"), code: "KLG", name: "Kaleng" },
+    ];
+    await tx.insert(uom).values(uomRows);
+    const uomByUnit = new Map<string, string>([
+      ["pcs", uomRows[0].id],
+      ["botol", uomRows[4].id],
+      ["karung", uomRows[5].id],
+      ["rol", uomRows[6].id],
+      ["kaleng", uomRows[7].id],
     ]);
     await tx.insert(movementTypes).values([
       { id: nextId("mvt"), code: "RECEIPT", name: "Receipt", kind: "RECEIPT", series: "RCV", builtin: true },
@@ -288,11 +272,9 @@ async function seedDummyData(adminId: string) {
       id: nextId("itm"),
       code: d.code,
       name: d.name,
-      unit: d.unit,
       itemGroupId: d.itemGroupId,
-      price: d.price,
       hue: d.hue,
-      barcodeId: d.code,
+      uomId: uomByUnit.get(d.unit) ?? null,
     }));
     await tx.insert(items).values(seededItems);
 
@@ -365,168 +347,112 @@ async function seedDummyData(adminId: string) {
       { id: nextId("bxa"), roleId: "role_staff", entityType: "WAREHOUSE" as const, entityId: whJkt1.id },
     ]);
 
-    // --- Parent Projects & Stock Opnames ---
-    const parent1 = { id: nextParentId(), name: "Opname Tahunan 2025", createdAt: daysAgo(120), deadline: daysAgo(90), createdBy: adminId };
-    const parent2 = { id: nextParentId(), name: "Opname Bulanan September", createdAt: daysAgo(10), deadline: daysAgo(-20), createdBy: admin2.id };
-    const parent3 = { id: nextParentId(), name: "Stocktake Gudang Surabaya", createdAt: daysAgo(6), deadline: daysAgo(-14), createdBy: adminId };
-    const parent4 = { id: nextParentId(), name: "Opname Awal Gudang Bahan Baku", createdAt: daysAgo(2), deadline: daysAgo(-30), createdBy: adminId };
+    // --- Projects opname (4 tabel) ---
+    const parent1 = { id: nextId("opj", daysAgo(120)), name: "Opname Tahunan 2025", mode: "COMPARE" as const, status: "APPROVED" as const, createdAt: daysAgo(120), updatedAt: daysAgo(90), deadline: daysAgo(90), createdBy: adminId };
+    const parent2 = { id: nextId("opj", daysAgo(10)), name: "Opname Bulanan September", mode: "COMPARE" as const, status: "IN_PROGRESS" as const, createdAt: daysAgo(10), updatedAt: hoursAgo(3), deadline: daysAgo(-20), createdBy: admin2.id };
+    const parent3 = { id: nextId("opj", daysAgo(6)), name: "Stocktake Gudang Surabaya", mode: "SCRATCH" as const, status: "IN_PROGRESS" as const, createdAt: daysAgo(6), updatedAt: daysAgo(1), deadline: daysAgo(-14), createdBy: adminId };
+    const parent4 = { id: nextId("opj", daysAgo(2)), name: "Opname Awal Gudang Bahan Baku", mode: "COMPARE" as const, status: "DRAFT" as const, createdAt: daysAgo(2), updatedAt: daysAgo(2), deadline: daysAgo(-30), createdBy: adminId };
     await tx.insert(opnameProjects).values([parent1, parent2, parent3, parent4]);
 
-    const projFinal = {
-      id: nextProjectId(),
-      name: "Opname Tahunan 2025",
-      projectId: parent1.id,
-      branchId: brJkt.id,
-      warehouseId: whJkt1.id,
-      mode: "COMPARE" as const,
-      status: "APPROVED" as const,
-      createdAt: daysAgo(120),
-      deadline: daysAgo(90),
-      createdBy: adminId,
-    };
-    const projActive = {
-      id: nextProjectId(),
-      name: "Opname Bulanan September",
-      projectId: parent2.id,
-      branchId: brJkt.id,
-      warehouseId: whJkt1.id,
-      mode: "COMPARE" as const,
-      status: "IN_PROGRESS" as const,
-      createdAt: daysAgo(10),
-      deadline: daysAgo(-20),
-      createdBy: admin2.id,
-    };
-    await tx.insert(projects).values([
-      projFinal,
-      projActive,
-      {
-        id: nextProjectId(),
-        name: "Stocktake Gudang Surabaya",
-        projectId: parent3.id,
-        branchId: brSby.id,
-        warehouseId: whSby1.id,
-        mode: "SCRATCH" as const,
-        status: "IN_PROGRESS" as const,
-        createdAt: daysAgo(6),
-        deadline: daysAgo(-14),
-        createdBy: adminId,
-      },
-      {
-        id: nextProjectId(),
-        name: "Opname Awal Gudang Bahan Baku",
-        projectId: parent4.id,
-        branchId: brJkt.id,
-        warehouseId: whJkt2.id,
-        mode: "COMPARE" as const,
-        status: "DRAFT" as const,
-        createdAt: daysAgo(2),
-        deadline: daysAgo(-30),
-        createdBy: adminId,
-      },
+    // Warehouse peserta per project (status per gudang).
+    await tx.insert(opnameWarehouses).values([
+      { id: nextId("opw", daysAgo(120)), opnameId: parent1.id, warehouseId: whJkt1.id, status: "COMPLETED" as const, startedAt: daysAgo(118), completedAt: daysAgo(99), createdAt: daysAgo(120) },
+      { id: nextId("opw", daysAgo(10)), opnameId: parent2.id, warehouseId: whJkt1.id, status: "IN_PROGRESS" as const, startedAt: daysAgo(9), createdAt: daysAgo(10) },
+      { id: nextId("opw", daysAgo(6)), opnameId: parent3.id, warehouseId: whSby1.id, status: "IN_PROGRESS" as const, startedAt: daysAgo(5), createdAt: daysAgo(6) },
+      { id: nextId("opw", daysAgo(2)), opnameId: parent4.id, warehouseId: whJkt2.id, status: "PENDING" as const, createdAt: daysAgo(2) },
     ]);
 
-    // --- Sesi scan ---
+    // --- Header scan (konsep stock_movements: DRAFT → POSTED/CANCELED) ---
     const locA01 = locJkt1[0].id;
     const locA02 = locJkt1[1].id;
     const sesAct = {
-      id: nextSerial("ses", hoursAgo(3)),
-      projectId: projActive.id,
-      locationId: locA01,
+      id: nextId("ops", hoursAgo(3)),
+      opnameId: parent2.id,
       scannedBy: staff1.id,
+      status: "DRAFT" as const,
       startedAt: hoursAgo(3),
-      status: "ACTIVE" as const,
+      createdAt: hoursAgo(3),
+      updatedAt: hoursAgo(3),
     };
     const sesCls = {
-      id: nextSerial("ses", hoursAgo(26)),
-      projectId: projActive.id,
-      locationId: locA02,
+      id: nextId("ops", hoursAgo(26)),
+      opnameId: parent2.id,
       scannedBy: admin2.id,
+      status: "POSTED" as const,
       startedAt: hoursAgo(26),
-      endedAt: hoursAgo(24),
-      status: "CLOSED" as const,
+      completedAt: hoursAgo(24),
+      createdAt: hoursAgo(26),
+      updatedAt: hoursAgo(24),
     };
     const sesFinal = {
-      id: nextSerial("ses", daysAgo(100)),
-      projectId: projFinal.id,
-      locationId: locA01,
+      id: nextId("ops", daysAgo(100)),
+      opnameId: parent1.id,
       scannedBy: staff1.id,
+      status: "POSTED" as const,
       startedAt: daysAgo(100),
-      endedAt: daysAgo(99),
-      status: "CLOSED" as const,
+      completedAt: daysAgo(99),
+      createdAt: daysAgo(100),
+      updatedAt: daysAgo(99),
     };
-    await tx.insert(scanSessions).values([sesAct, sesCls, sesFinal]);
+    await tx.insert(opnameScans).values([sesAct, sesCls, sesFinal]);
 
-    // --- Scan records ---
+    // --- Scan details per barcode ---
     const igOf = (code: string) =>
       itemDefs.find((x) => x.code === code)?.itemGroupId ?? "";
     const igCode = (itemGroupId: string) =>
       itemGroupId === igRaw.id ? "01" : itemGroupId === igPack.id ? "02" : itemGroupId === igFin.id ? "03" : "04";
 
     const scans: {
-      sessionId: string;
-      projectId: string;
+      scanId: string;
+      opnameId: string;
+      warehouseId: string;
       locationId: string;
       itemCode: string;
       qty: number;
       minutesAgo: number;
       source: "SCANNER" | "CAMERA" | "MANUAL";
     }[] = [
-      // sesi aktif A01 — progress berjalan
-      { sessionId: sesAct.id, projectId: projActive.id, locationId: locA01, itemCode: "00001", qty: 1, minutesAgo: 170, source: "SCANNER" },
-      { sessionId: sesAct.id, projectId: projActive.id, locationId: locA01, itemCode: "00002", qty: 1, minutesAgo: 165, source: "SCANNER" },
-      { sessionId: sesAct.id, projectId: projActive.id, locationId: locA01, itemCode: "00003", qty: 2, minutesAgo: 160, source: "SCANNER" },
-      { sessionId: sesAct.id, projectId: projActive.id, locationId: locA01, itemCode: "00004", qty: 1, minutesAgo: 150, source: "CAMERA" },
-      { sessionId: sesAct.id, projectId: projActive.id, locationId: locA01, itemCode: "00008", qty: 1, minutesAgo: 130, source: "SCANNER" },
-      { sessionId: sesAct.id, projectId: projActive.id, locationId: locA01, itemCode: "00009", qty: 1, minutesAgo: 90, source: "SCANNER" },
-      { sessionId: sesAct.id, projectId: projActive.id, locationId: locA01, itemCode: "00011", qty: 3, minutesAgo: 45, source: "MANUAL" },
-      { sessionId: sesAct.id, projectId: projActive.id, locationId: locA01, itemCode: "00012", qty: 1, minutesAgo: 20, source: "SCANNER" },
-      // sesi tutup A02
-      { sessionId: sesCls.id, projectId: projActive.id, locationId: locA02, itemCode: "00005", qty: 1, minutesAgo: 1560, source: "SCANNER" },
-      { sessionId: sesCls.id, projectId: projActive.id, locationId: locA02, itemCode: "00006", qty: 1, minutesAgo: 1550, source: "SCANNER" },
-      { sessionId: sesCls.id, projectId: projActive.id, locationId: locA02, itemCode: "00007", qty: 2, minutesAgo: 1530, source: "CAMERA" },
-      { sessionId: sesCls.id, projectId: projActive.id, locationId: locA02, itemCode: "00010", qty: 1, minutesAgo: 1490, source: "SCANNER" },
-      // sesi project final
-      { sessionId: sesFinal.id, projectId: projFinal.id, locationId: locA01, itemCode: "00001", qty: 1, minutesAgo: 144000, source: "SCANNER" },
-      { sessionId: sesFinal.id, projectId: projFinal.id, locationId: locA01, itemCode: "00002", qty: 1, minutesAgo: 143900, source: "SCANNER" },
-      { sessionId: sesFinal.id, projectId: projFinal.id, locationId: locA01, itemCode: "00003", qty: 1, minutesAgo: 143800, source: "SCANNER" },
+      // scan aktif A01 — progress berjalan
+      { scanId: sesAct.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00001", qty: 1, minutesAgo: 170, source: "SCANNER" },
+      { scanId: sesAct.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00002", qty: 1, minutesAgo: 165, source: "SCANNER" },
+      { scanId: sesAct.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00003", qty: 2, minutesAgo: 160, source: "SCANNER" },
+      { scanId: sesAct.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00004", qty: 1, minutesAgo: 150, source: "CAMERA" },
+      { scanId: sesAct.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00008", qty: 1, minutesAgo: 130, source: "SCANNER" },
+      { scanId: sesAct.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00009", qty: 1, minutesAgo: 90, source: "SCANNER" },
+      { scanId: sesAct.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00011", qty: 3, minutesAgo: 45, source: "MANUAL" },
+      { scanId: sesAct.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00012", qty: 1, minutesAgo: 20, source: "SCANNER" },
+      // scan ter-post A02
+      { scanId: sesCls.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA02, itemCode: "00005", qty: 1, minutesAgo: 1560, source: "SCANNER" },
+      { scanId: sesCls.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA02, itemCode: "00006", qty: 1, minutesAgo: 1550, source: "SCANNER" },
+      { scanId: sesCls.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA02, itemCode: "00007", qty: 2, minutesAgo: 1530, source: "CAMERA" },
+      { scanId: sesCls.id, opnameId: parent2.id, warehouseId: whJkt1.id, locationId: locA02, itemCode: "00010", qty: 1, minutesAgo: 1490, source: "SCANNER" },
+      // scan project final
+      { scanId: sesFinal.id, opnameId: parent1.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00001", qty: 1, minutesAgo: 144000, source: "SCANNER" },
+      { scanId: sesFinal.id, opnameId: parent1.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00002", qty: 1, minutesAgo: 143900, source: "SCANNER" },
+      { scanId: sesFinal.id, opnameId: parent1.id, warehouseId: whJkt1.id, locationId: locA01, itemCode: "00003", qty: 1, minutesAgo: 143800, source: "SCANNER" },
     ];
 
-    await tx.insert(scanRecords).values(
+    await tx.insert(opnameScanDetails).values(
       scans.map((s) => {
         const scannedAt = new Date(Date.now() - s.minutesAgo * 60_000);
         const cCode = igCode(igOf(s.itemCode));
         const serial = String(s.minutesAgo).padStart(4, "0");
         const raw = barcode(cCode, s.itemCode, serial);
         return {
-          id: nextSerial("rec", scannedAt),
-          sessionId: s.sessionId,
-          projectId: s.projectId,
-          barcode: raw,
+          id: nextId("osd", scannedAt),
+          scanId: s.scanId,
+          opnameId: s.opnameId,
+          warehouseId: s.warehouseId,
+          locationId: s.locationId,
           itemId: itemIdOf(s.itemCode),
+          barcode: raw,
           parsed: parsedFor(cCode, s.itemCode, serial),
           quantity: s.qty,
           qtyMode: "AUTO" as const,
           source: s.source,
-          locationId: s.locationId,
           scannedAt,
         };
       })
-    );
-
-    // --- Opname entries (bulan dibuat = bulan createdAt project) ---
-    const stock = (itemCode: string, wh: string) => {
-      const d = itemDefs.find((x) => x.code === itemCode);
-      return d?.stock.find(([wid]) => wid === wh)?.[1] ?? 0;
-    };
-    await tx.insert(opnameEntries).values(
-      seededItems.map((itm, i) => ({
-        id: nextSerial("ope", projFinal.createdAt),
-        projectId: projFinal.id,
-        itemId: itm.id,
-        locationId: locA01,
-        systemQty: stock(itm.code, whJkt1.id),
-        countedQty: stock(itm.code, whJkt1.id) - (i % 3 === 0 ? 2 : 0),
-      }))
     );
   });
 

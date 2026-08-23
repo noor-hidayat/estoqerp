@@ -103,10 +103,13 @@ export default function UsersPage() {
     <RoleGuard roles={["role_sys_admin"]} menus={["settings.users"]}>
       <PageHeader
         title="User &amp; Role"
-
         actions={
-          <Button onClick={() => navigate("/app/settings/users/new")}>
-            <Plus size={15} strokeWidth={2} /> Add User
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
+            onClick={() => navigate("/app/settings/users/new")}
+          >
+            <Plus size={14} strokeWidth={2} /> Add User
           </Button>
         }
       />

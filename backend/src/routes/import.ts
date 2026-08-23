@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db/pool";
 import * as schema from "../db/schema";
+import { nextRowId } from "../lib/id";
 import { checkPermission } from "../middleware/rbac";
 
 export interface ImportPayload {
@@ -92,14 +93,8 @@ async function importBranches(
       continue;
     }
 
-    // id: br_001, br_002, ...
-    const all = await db.select({ id: schema.branches.id }).from(schema.branches);
-    let max = 0;
-    for (const row of all) {
-      const n = Number(String(row.id).replace(/^br_/, ""));
-      if (Number.isFinite(n) && n > max) max = n;
-    }
-    const newId = `br_${String(max + 1).padStart(3, "0")}`;
+    // id: br-YYMM-0001, ...
+    const newId = await nextRowId(db, schema.branches, "br");
     await db.insert(schema.branches).values({ id: newId, code, name, city });
     inserted += 1;
     affected.push({ id: newId, row: { code, name, city } });
@@ -124,11 +119,6 @@ async function importWarehouses(
   for (const b of branchRows) branchByCode.set(b.code.toLowerCase(), { id: b.id });
 
   const allWh = await db.select({ id: schema.warehouses.id }).from(schema.warehouses);
-  let max = 0;
-  for (const w of allWh) {
-    const n = Number(String(w.id).replace(/^wh_/, ""));
-    if (Number.isFinite(n) && n > max) max = n;
-  }
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -162,8 +152,7 @@ async function importWarehouses(
       continue;
     }
 
-    max += 1;
-    const newId = `wh_${String(max).padStart(3, "0")}`;
+    const newId = await nextRowId(db, schema.warehouses, "wh");
     await db.insert(schema.warehouses).values({ id: newId, code, name, branchId: branch.id });
     inserted += 1;
     affected.push({ id: newId, row: { code, name, branchId: branch.id } });
@@ -190,13 +179,6 @@ async function importLocations(
 
   const whByCode = new Map<string, { id: string; branchId: string; code: string }>();
   for (const w of whRows) whByCode.set(w.code.toLowerCase(), { id: w.id, branchId: w.branchId, code: w.code });
-
-  const allLoc = await db.select({ id: schema.locations.id }).from(schema.locations);
-  let max = 0;
-  for (const l of allLoc) {
-    const n = Number(String(l.id).replace(/^loc_/, ""));
-    if (Number.isFinite(n) && n > max) max = n;
-  }
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -240,8 +222,7 @@ async function importLocations(
       continue;
     }
 
-    max += 1;
-    const newId = `loc_${String(max).padStart(3, "0")}`;
+    const newId = await nextRowId(db, schema.locations, "loc");
     await db.insert(schema.locations).values({ id: newId, code, name, warehouseId: wh.id });
     inserted += 1;
     affected.push({ id: newId, row: { code, name, warehouseId: wh.id } });
@@ -259,13 +240,6 @@ async function importItemGroups(
   let updated = 0;
   let skipped = 0;
   const affected: Array<{ id: string; row: Record<string, unknown> }> = [];
-
-  const all = await db.select({ id: schema.itemGroups.id }).from(schema.itemGroups);
-  let max = 0;
-  for (const row of all) {
-    const n = Number(String(row.id).replace(/^igr_/, ""));
-    if (Number.isFinite(n) && n > max) max = n;
-  }
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -291,8 +265,7 @@ async function importItemGroups(
       continue;
     }
 
-    max += 1;
-    const newId = `igr_${String(max).padStart(3, "0")}`;
+    const newId = await nextRowId(db, schema.itemGroups, "igr");
     await db.insert(schema.itemGroups).values({ id: newId, code, name });
     inserted += 1;
     affected.push({ id: newId, row: { code, name } });
@@ -315,24 +288,21 @@ async function importItems(
   const igByCode = new Map<string, string>();
   for (const c of igRows) igByCode.set(c.code.toLowerCase(), c.id);
 
-  const all = await db.select({ id: schema.items.id }).from(schema.items);
-  let max = 0;
-  for (const row of all) {
-    const n = Number(String(row.id).replace(/^itm_/, ""));
-    if (Number.isFinite(n) && n > max) max = n;
+  const uomRows = await db.select().from(schema.uom);
+  const uomByCode = new Map<string, string>();
+  for (const u of uomRows) {
+    uomByCode.set(u.code.toLowerCase(), u.id);
+    uomByCode.set(u.name.toLowerCase(), u.id);
   }
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const code = asString(r.code);
     const name = asString(r.name);
-    const unit = asString(r.unit) ?? "pcs";
     const itemGroupCode = asString(r.itemGroupCode) ?? asString(r.item_group_code);
-    const price = asInt(r.price, 0);
     const hue = asInt(r.hue, 200);
-    const barcodeId = asString(r.barcodeId) ?? asString(r.barcode_id) ?? null;
-    const rawQty = r.qty;
-    const qty = rawQty === undefined || rawQty === null || rawQty === "" ? null : asInt(rawQty, 0);
+    const uomCode = asString(r.uomCode) ?? asString(r.uom_code) ?? asString(r.unit) ?? null;
+    const uomId = uomCode ? uomByCode.get(uomCode.toLowerCase()) ?? null : null;
 
     if (!code) { errors.push({ row: i + 1, message: "Kolom 'code' wajib diisi." }); continue; }
     if (!name) { errors.push({ row: i + 1, message: "Kolom 'name' wajib diisi." }); continue; }
@@ -341,6 +311,10 @@ async function importItems(
     const itemGroupId = igByCode.get(itemGroupCode.toLowerCase());
     if (!itemGroupId) {
       errors.push({ row: i + 1, message: `Grup item '${itemGroupCode}' tidak ditemukan. Impor grup item terlebih dahulu.` });
+      continue;
+    }
+    if (uomCode && !uomId) {
+      errors.push({ row: i + 1, message: `UOM '${uomCode}' tidak ditemukan. Impor UOM terlebih dahulu.` });
       continue;
     }
 
@@ -354,21 +328,20 @@ async function importItems(
       if (mode === "update") {
         await db
           .update(schema.items)
-          .set({ code, name, unit, itemGroupId, price, hue, barcodeId, qty })
+          .set({ code, name, itemGroupId, hue, uomId })
           .where(eq(schema.items.id, existing.id));
         updated += 1;
-        affected.push({ id: existing.id, row: { code, name, unit, itemGroupId, price, hue, barcodeId, qty } });
+        affected.push({ id: existing.id, row: { code, name, itemGroupId, hue, uomId } });
       } else {
         skipped += 1;
       }
       continue;
     }
 
-    max += 1;
-    const newId = `itm_${String(max).padStart(3, "0")}`;
-    await db.insert(schema.items).values({ id: newId, code, name, unit, itemGroupId, price, hue, barcodeId, qty });
+    const newId = await nextRowId(db, schema.items, "itm");
+    await db.insert(schema.items).values({ id: newId, code, name, itemGroupId, hue, uomId });
     inserted += 1;
-    affected.push({ id: newId, row: { code, name, unit, itemGroupId, price, hue, barcodeId, qty } });
+    affected.push({ id: newId, row: { code, name, itemGroupId, hue, uomId } });
   }
 
   return { result: { inserted, updated, skipped, errors }, affected };
@@ -394,13 +367,6 @@ async function importStockBalances(
   const itemRows = await db.select({ id: schema.items.id, code: schema.items.code }).from(schema.items);
   const itemByCode = new Map<string, { id: string }>();
   for (const it of itemRows) itemByCode.set(it.code.toLowerCase(), { id: it.id });
-
-  const allSb = await db.select({ id: schema.stockBalances.id }).from(schema.stockBalances);
-  let max = 0;
-  for (const row of allSb) {
-    const n = Number(String(row.id).replace(/^sb_/, ""));
-    if (Number.isFinite(n) && n > max) max = n;
-  }
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -461,8 +427,7 @@ async function importStockBalances(
       continue;
     }
 
-    max += 1;
-    const newId = `sb_${String(max).padStart(3, "0")}`;
+    const newId = await nextRowId(db, schema.stockBalances, "sb");
     await db.insert(schema.stockBalances).values({
       id: newId,
       balanceDate,

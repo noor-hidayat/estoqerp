@@ -75,6 +75,8 @@ const STATUS_LABELS: Record<string, string> = {
   IN_PROGRESS: "In Progress",
   APPROVED: "Completed",
   CANCELLED: "Cancelled",
+  PENDING: "Pending",
+  COMPLETED: "Completed",
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -82,6 +84,8 @@ const STATUS_TONE: Record<string, string> = {
   IN_PROGRESS: "blue",
   APPROVED: "violet",
   CANCELLED: "neutral",
+  PENDING: "neutral",
+  COMPLETED: "emerald",
 };
 
 function StatusBadge({ status, tone, className, ...props }: StatusBadgeProps) {
