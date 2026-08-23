@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, MoreHorizontal, Pencil, Plus, UserCheck, UserX, Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import {
   useUsers,
   useRoles,
@@ -17,13 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Toggle } from "@/components/ui/toggle";
 import { Avatar } from "@/components/ui/avatar";
 import { ShellLoader } from "@/components/ui/loader";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { timeAgo } from "@/lib/utils";
 import { ROLE_LABELS } from "@/lib/session";
 
 const ROLE_TONES: Record<string, "emerald" | "violet" | "blue"> = {
@@ -98,48 +92,10 @@ export default function UsersPage() {
       ),
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (u) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              aria-label={`Actions for ${u.name}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem
-              onClick={() => navigate(`/app/settings/users/${u.id}`)}
-            >
-              <Eye className="mr-2 h-3.5 w-3.5" />
-              View
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => navigate(`/app/settings/users/${u.id}`)}
-            >
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => toggleActive(u, !u.active)}
-            >
-              {u.active ? (
-                <UserX className="mr-2 h-3.5 w-3.5" />
-              ) : (
-                <UserCheck className="mr-2 h-3.5 w-3.5" />
-              )}
-              {u.active ? "Deactivate" : "Activate"}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      id: "created",
+      header: "Created",
+      sortValue: (u) => u.createdAt ?? "",
+      cell: (u) => <span className="text-xs text-muted-foreground">{timeAgo(u.createdAt)}</span>,
     },
   ];
 

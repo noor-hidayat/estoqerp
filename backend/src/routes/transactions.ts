@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import {
   and,
+  asc,
   count,
   desc,
   eq,
@@ -16,6 +17,7 @@ import type { ExtractTablesWithRelations } from "drizzle-orm/relations";
 import type { NodePgTransaction } from "drizzle-orm/node-postgres/session";
 import { db } from "../db/pool";
 import * as schema from "../db/schema";
+import { parseBatchNumber, type BatchFormatLike } from "../lib/batch-parse";
 import {
   canAccessEntity,
   checkPermission,
@@ -37,6 +39,8 @@ interface DetailInput {
   qty: number;
   uomId?: string | null;
   batchNumber?: string | null;
+  barcode?: string | null;
+  serialNumber?: string | null;
 }
 
 interface EffectDetail {
@@ -125,6 +129,14 @@ function parseBody(body: unknown): { ok: true; value: MovementInput } | { ok: fa
         typeof d.batchNumber === "string" && d.batchNumber.trim()
           ? d.batchNumber.trim()
           : null,
+      barcode:
+        typeof d.barcode === "string" && d.barcode.trim()
+          ? d.barcode.trim()
+          : null,
+      serialNumber:
+        typeof d.serialNumber === "string" && d.serialNumber.trim()
+          ? d.serialNumber.trim()
+          : null,
     });
   }
   if (details.length === 0) return { ok: false, error: "Minimal 1 baris detail diperlukan." };
@@ -159,7 +171,7 @@ async function nextMovementNumber(tx: Tx, series: string, date: Date): Promise<s
   const expanded = expandSeriesDate(series, date);
   const safeSeries = /^[A-Za-z0-9_-]{1,20}$/.test(expanded) ? expanded : "SMV";
   await tx.execute(sql`LOCK TABLE stock_movements IN EXCLUSIVE MODE`);
-  const rows = await tx.select({ n: schema.stockMovements.movementNumber }).from(schema.stockMovements);
+  const rows = await tx.select({ n: schema.stockMovements.id }).from(schema.stockMovements);
   const prefix = `${safeSeries}-`;
   const max = rows.reduce((m, r) => {
     const id = String(r.n);
@@ -167,7 +179,7 @@ async function nextMovementNumber(tx: Tx, series: string, date: Date): Promise<s
     const n = Number(id.slice(prefix.length));
     return Number.isFinite(n) && n > m ? n : m;
   }, 0);
-  return `${prefix}${String(max + 1).padStart(3, "0")}`;
+  return `${prefix}${String(max + 1).padStart(4, "0")}`;
 }
 
 async function validateWarehouseAccess(req: Request, res: Response, details: DetailInput[]): Promise<boolean> {
@@ -183,13 +195,124 @@ async function validateWarehouseAccess(req: Request, res: Response, details: Det
   return true;
 }
 
-/** Cari atau buat batch (item, batch_number) — id batch dikembalikan. */
+/** Cek apakah string barcode cocok dengan format barcode aktif ber-flag
+ *  uniqueBarcode (kriteria panjang segmen sama dengan lookup item). */
+async function isUniqueBarcode(barcode: string): Promise<boolean> {
+  const formats = await db
+    .select({
+      uniqueBarcode: schema.barcodeFormats.uniqueBarcode,
+      segments: schema.barcodeFormats.segments,
+    })
+    .from(schema.barcodeFormats)
+    .where(eq(schema.barcodeFormats.isActive, true));
+  return formats.some((f) => {
+    if (!f.uniqueBarcode) return false;
+    const segs = (f.segments ?? []) as { end?: number }[];
+    const maxEnd = segs.reduce((m, s) => Math.max(m, s.end ?? 0), 0);
+    return maxEnd > 0 && barcode.length >= maxEnd;
+  });
+}
+
+/** Validasi barcode unik terhadap statusnya di sistem (hanya transaksi
+ *  POSTED yang menentukan lokasi barcode):
+ *  - RECEIPT: barcode baru boleh; barcode masih aktif di gudang → tolak;
+ *    barcode sudah keluar (issue) → boleh re-receipt.
+ *  - ISSUE/TRANSFER/OTHER: barcode wajib pernah dibuat & berada di gudang
+ *    asal. excludeMovementId untuk edit draft sendiri. */
+async function assertUniqueBarcodes(
+  details: DetailInput[],
+  typeId: string,
+  excludeMovementId?: string
+): Promise<void> {
+  const [type] = await db
+    .select({ kind: schema.movementTypes.kind })
+    .from(schema.movementTypes)
+    .where(eq(schema.movementTypes.id, typeId))
+    .limit(1);
+  const kind = type?.kind ?? "OTHER";
+  for (const d of details) {
+    if (!d.barcode) continue;
+    if (!(await isUniqueBarcode(d.barcode))) continue;
+    const conds: ReturnType<typeof sql>[] = [
+      eq(schema.stockMovementDetails.barcode, d.barcode),
+    ];
+    if (excludeMovementId) {
+      conds.push(
+        sql`${schema.stockMovementDetails.movementId} != ${excludeMovementId}`
+      );
+    }
+    const [row] = await db
+      .select({
+        toWarehouseId: schema.stockMovementDetails.toWarehouseId,
+        warehouseCode: schema.warehouses.code,
+        warehouseName: schema.warehouses.name,
+      })
+      .from(schema.stockMovementDetails)
+      .innerJoin(
+        schema.stockMovements,
+        eq(schema.stockMovements.id, schema.stockMovementDetails.movementId)
+      )
+      .leftJoin(
+        schema.warehouses,
+        eq(schema.warehouses.id, schema.stockMovementDetails.toWarehouseId)
+      )
+      .where(and(...conds, eq(schema.stockMovements.status, "POSTED")))
+      .orderBy(desc(schema.stockMovementDetails.createdAt))
+      .limit(1);
+
+    const loc =
+      row && row.toWarehouseId
+        ? row.warehouseCode ?? row.warehouseName ?? row.toWarehouseId
+        : null;
+
+    if (kind === "RECEIPT") {
+      if (row?.toWarehouseId) {
+        throw new StockError(
+          `Barcode "${d.barcode}" sudah pernah dibuat dan masih ada di gudang ${loc} — tidak bisa di-receipt lagi.`
+        );
+      }
+      continue;
+    }
+    if (!row) {
+      throw new StockError(
+        `Barcode "${d.barcode}" belum pernah dibuat (receipt) — tidak ada di sistem.`
+      );
+    }
+    if (row.toWarehouseId && row.toWarehouseId !== d.fromWarehouseId) {
+      throw new StockError(
+        `Barcode "${d.barcode}" ada di gudang ${loc} — bukan gudang asal yang dipilih.`
+      );
+    }
+    if (!row.toWarehouseId) {
+      throw new StockError(
+        `Barcode "${d.barcode}" sudah keluar dari sistem — tidak bisa di-issue/ditransfer.`
+      );
+    }
+  }
+}
+
+/** Cari atau buat batch (item, batch_number) — id batch dikembalikan.
+ *  Metadata (tanggal produksi/shift/custom) diisi otomatis dari parse format
+ *  batch bila batch baru dan field-nya masih kosong. Bila batch number
+ *  meng-encode kode alternatif item (segmen ALTERNATIVE_CODE), kode itu wajib
+ *  cocok dengan item — kalau beda, posting ditolak (StockError). */
 async function resolveBatch(
   tx: Tx,
   itemId: string,
   batchNumber: string | null
 ): Promise<string | null> {
   if (!batchNumber) return null;
+  const [item] = await tx
+    .select({ alternativeCode: schema.items.alternativeCode })
+    .from(schema.items)
+    .where(eq(schema.items.id, itemId))
+    .limit(1);
+  const formats = (await db
+    .select()
+    .from(schema.batchFormats)
+    .where(eq(schema.batchFormats.isActive, true))) as unknown as BatchFormatLike[];
+  const parsed = parseBatchNumber(batchNumber, formats);
+  assertBatchItemMatch(parsed, item?.alternativeCode ?? null, batchNumber);
   const [existing] = await tx
     .select({ id: schema.batches.id })
     .from(schema.batches)
@@ -200,15 +323,78 @@ async function resolveBatch(
       )
     )
     .limit(1);
-  if (existing) return existing.id;
+  if (existing) {
+    await maybeFillBatchMeta(tx, existing.id);
+    return existing.id;
+  }
   const id = `bat_${crypto.randomUUID()}`;
-  await tx.insert(schema.batches).values({
+  const values: typeof schema.batches.$inferInsert = {
     id,
     itemId,
     batchNumber,
     status: "ACTIVE",
-  });
+  };
+  if (parsed) {
+    if (parsed.productionDate) values.productionDate = parsed.productionDate;
+    if (parsed.shift) values.shift = parsed.shift;
+    if (Object.keys(parsed.meta).length > 0) values.meta = parsed.meta;
+  }
+  await tx.insert(schema.batches).values(values);
   return id;
+}
+
+/** Validasi kode alternatif item yang ter-encode di batch number. */
+function assertBatchItemMatch(
+  parsed: ReturnType<typeof parseBatchNumber>,
+  itemAltCode: string | null,
+  batchNumber: string
+): void {
+  const alt = parsed?.alternativeCode;
+  if (!alt) return;
+  if (!itemAltCode) return; // item belum punya kode alternatif — tidak bisa diverifikasi
+  if (alt.trim().toLowerCase() !== itemAltCode.trim().toLowerCase()) {
+    throw new StockError(
+      `Batch "${batchNumber}" meng-encode kode alternatif "${alt}" tetapi item ini punya kode alternatif "${itemAltCode}" — batch tidak cocok dengan item.`
+    );
+  }
+}
+
+/** Isi metadata batch yang kosong dari parse batch number — hanya field yang
+ *  belum terisi, agar edit manual tidak ditimpa. */
+async function maybeFillBatchMeta(tx: Tx, batchId: string) {
+  const [row] = await tx
+    .select({
+      batchNumber: schema.batches.batchNumber,
+      productionDate: schema.batches.productionDate,
+      expiryDate: schema.batches.expiryDate,
+      shift: schema.batches.shift,
+      meta: schema.batches.meta,
+    })
+    .from(schema.batches)
+    .where(eq(schema.batches.id, batchId))
+    .limit(1);
+  if (!row) return;
+  const formats = (await db
+    .select()
+    .from(schema.batchFormats)
+    .where(eq(schema.batchFormats.isActive, true))) as unknown as BatchFormatLike[];
+  const parsed = parseBatchNumber(row.batchNumber, formats);
+  if (!parsed) return;
+  const patch: Record<string, unknown> = {};
+  if (!row.productionDate && parsed.productionDate) {
+    patch.productionDate = parsed.productionDate;
+  }
+  if (!row.shift && parsed.shift) patch.shift = parsed.shift;
+  if (parsed.meta && Object.keys(parsed.meta).length > 0) {
+    const merged = { ...((row.meta ?? {}) as Record<string, string>), ...parsed.meta };
+    patch.meta = merged;
+  }
+  if (Object.keys(patch).length > 0) {
+    await tx
+      .update(schema.batches)
+      .set(patch)
+      .where(eq(schema.batches.id, batchId));
+  }
 }
 
 /**
@@ -220,7 +406,7 @@ async function resolveBatch(
  */
 async function applyMovementEffect(
   tx: Tx,
-  movement: { id: string; typeId: string; movementNumber: string; referenceType: string | null; referenceId: string | null },
+  movement: { id: string; typeId: string; movementDate: Date; referenceType: string | null; referenceId: string | null },
   typeCode: string,
   details: EffectDetail[],
   actorId: string
@@ -278,7 +464,6 @@ async function applyMovementEffect(
       aggSeen.set(k, (aggSeen.get(k) ?? 0) + d.qty);
     }
   }
-  const aggClosing = new Map<string, number>();
   for (const [k, delta] of aggSeen.entries()) {
     if (delta === 0) continue;
     const [warehouseId, itemId] = k.split("|");
@@ -320,7 +505,6 @@ async function applyMovementEffect(
         updatedAt: now,
       });
     }
-    aggClosing.set(k, newClosing);
   }
 
   // --- 2. Update stock_batches per (batch, warehouse) ---
@@ -340,7 +524,6 @@ async function applyMovementEffect(
       else batchSeen.set(bk, { batchId: d.batchId, warehouseId: d.toWarehouseId, delta: d.qty });
     }
   }
-  const batchBalance = new Map<string, number>();
   for (const { batchId, warehouseId, delta } of batchSeen.values()) {
     if (delta === 0) continue;
     const [row] = await tx
@@ -375,41 +558,104 @@ async function applyMovementEffect(
         updatedAt: now,
       });
     }
-    batchBalance.set(`${batchId}|${warehouseId}`, next);
     await tx
       .update(schema.batches)
       .set({ status: next === 0 ? "EMPTY" : "ACTIVE", updatedAt: now })
       .where(eq(schema.batches.id, batchId));
   }
 
-  // --- 3. Ledger — per baris efek (out & in) ---
+  // --- 3. Ledger — satu baris per (transaksi, item, gudang), qty dijumlahkan ---
+  const ledAgg = new Map<
+    string,
+    { itemId: string; warehouseId: string; qtyIn: number; qtyOut: number; batchId: string | null }
+  >();
   for (const d of details) {
-    const sides: { warehouseId: string; sign: -1 | 1 }[] = [];
-    if (d.fromWarehouseId) sides.push({ warehouseId: d.fromWarehouseId, sign: -1 });
-    if (d.toWarehouseId) sides.push({ warehouseId: d.toWarehouseId, sign: 1 });
-    for (const side of sides) {
-      const inDelta = side.sign > 0 ? d.qty : 0;
-      const outDelta = side.sign < 0 ? d.qty : 0;
-      const balance = d.batchId
-        ? (batchBalance.get(`${d.batchId}|${side.warehouseId}`) ?? 0)
-        : (aggClosing.get(keyOf(side.warehouseId, d.itemId)) ?? 0);
-      await tx.insert(schema.stockLedger).values({
-        id: `sld_${crypto.randomUUID()}`,
-        transactionId: movement.id,
-        transactionType: typeCode,
-        transactionDate: now,
-        itemId: d.itemId,
-        warehouseId: side.warehouseId,
-        qtyIn: String(inDelta),
-        qtyOut: String(outDelta),
-        qtyBalance: String(balance),
-        referenceType: movement.referenceType ?? "STOCK_MOVEMENT",
-        referenceId: movement.referenceId ?? movement.movementNumber,
-        batchId: d.batchId,
-        createdBy: actorId,
-      });
+    if (d.fromWarehouseId) {
+      const k = keyOf(d.fromWarehouseId, d.itemId);
+      const cur = ledAgg.get(k) ?? { itemId: d.itemId, warehouseId: d.fromWarehouseId, qtyIn: 0, qtyOut: 0, batchId: null };
+      cur.qtyOut += d.qty;
+      if (!cur.batchId && d.batchId) cur.batchId = d.batchId;
+      ledAgg.set(k, cur);
+    }
+    if (d.toWarehouseId) {
+      const k = keyOf(d.toWarehouseId, d.itemId);
+      const cur = ledAgg.get(k) ?? { itemId: d.itemId, warehouseId: d.toWarehouseId, qtyIn: 0, qtyOut: 0, batchId: null };
+      cur.qtyIn += d.qty;
+      if (!cur.batchId && d.batchId) cur.batchId = d.batchId;
+      ledAgg.set(k, cur);
     }
   }
+  for (const { itemId, warehouseId, qtyIn, qtyOut, batchId } of ledAgg.values()) {
+    if (qtyIn === 0 && qtyOut === 0) continue;
+    await tx.insert(schema.stockLedger).values({
+      id: `sld_${crypto.randomUUID()}`,
+      transactionId: movement.id,
+      transactionType: typeCode,
+      transactionDate: movement.movementDate,
+      itemId,
+      warehouseId,
+      qtyIn: String(qtyIn),
+      qtyOut: String(qtyOut),
+      qtyBalance: "0",
+      referenceType: movement.referenceType ?? "STOCK_MOVEMENT",
+      referenceId: movement.referenceId ?? movement.id,
+      batchId,
+      createdBy: actorId,
+    });
+  }
+
+  // --- 4. Hitung ulang saldo berjalan semua (gudang, item) yang terpengaruh ---
+  // Menjamin konsistensi walau transaksi backdated (tanggal lama) diposting
+  // setelah ada baris yang lebih baru.
+  await recomputeLedgerBalances(
+    tx,
+    [...ledAgg.values()].map(({ warehouseId, itemId }) => ({ warehouseId, itemId }))
+  );
+}
+
+/** Hitung ulang stock_ledger.qty_balance menjadi saldo berjalan agregat yang
+ *  konsisten dengan stock_balances, untuk (warehouse_id, item_id) tertentu:
+ *    base = stock_balances.closing_qty - SUM(qty_in - qty_out) seluruh ledger
+ *    balance baris = base + kumulatif (qty_in - qty_out) urut
+ *                   (transaction_date, created_at, id)
+ *  Dipanggil setelah insert (posting) maupun delete (unpost) baris ledger. */
+async function recomputeLedgerBalances(
+  tx: Tx,
+  keys: { warehouseId: string; itemId: string }[]
+) {
+  if (keys.length === 0) return;
+  const values = sql.join(
+    keys.map((k) => sql`(${k.warehouseId}, ${k.itemId})`),
+    sql`, `
+  );
+  await tx.execute(sql`
+    WITH calc AS (
+      SELECT
+        l.id,
+        (
+          COALESCE(b.closing_qty, 0)
+          - COALESCE(t.total, 0)
+          + SUM(l.qty_in - l.qty_out) OVER (
+              PARTITION BY l.warehouse_id, l.item_id
+              ORDER BY l.transaction_date, l.created_at, l.id
+            )::numeric
+        )::numeric(15,3) AS new_balance
+      FROM stock_ledger l
+      JOIN (VALUES ${values}) AS k(warehouse_id, item_id)
+        ON k.warehouse_id = l.warehouse_id AND k.item_id = l.item_id
+      LEFT JOIN (
+        SELECT warehouse_id, item_id, SUM(qty_in - qty_out)::numeric AS total
+        FROM stock_ledger
+        GROUP BY warehouse_id, item_id
+      ) t ON t.warehouse_id = l.warehouse_id AND t.item_id = l.item_id
+      LEFT JOIN stock_balances b
+        ON b.warehouse_id = l.warehouse_id AND b.item_id = l.item_id
+    )
+    UPDATE stock_ledger l
+    SET qty_balance = c.new_balance
+    FROM calc c
+    WHERE l.id = c.id
+  `);
 }
 
 async function insertMovementWithDetails(
@@ -417,8 +663,6 @@ async function insertMovementWithDetails(
   input: MovementInput,
   actorId: string
 ): Promise<string> {
-  const movementId = `smv_${crypto.randomUUID()}`;
-
   const [type] = await tx
     .select({ code: schema.movementTypes.code, kind: schema.movementTypes.kind, series: schema.movementTypes.series })
     .from(schema.movementTypes)
@@ -430,10 +674,10 @@ async function insertMovementWithDetails(
 
   const movementDate = input.movementDate ? new Date(input.movementDate) : new Date();
   const movementNumber = await nextMovementNumber(tx, type.series, movementDate);
+  const movementId = movementNumber;
 
   await tx.insert(schema.stockMovements).values({
     id: movementId,
-    movementNumber,
     typeId: input.typeId,
     movementDate,
     status: input.status,
@@ -455,6 +699,8 @@ async function insertMovementWithDetails(
       qty: String(d.qty),
       uomId: d.uomId,
       batchId,
+      barcode: d.barcode,
+      serialNumber: d.serialNumber,
     });
     effectDetails.push({
       itemId: d.itemId,
@@ -468,7 +714,7 @@ async function insertMovementWithDetails(
   if (input.status === "POSTED") {
     await applyMovementEffect(
       tx,
-      { id: movementId, typeId: input.typeId, movementNumber, referenceType: input.referenceType, referenceId: input.referenceId },
+      { id: movementId, typeId: input.typeId, movementDate, referenceType: input.referenceType, referenceId: input.referenceId },
       type.code,
       effectDetails,
       actorId
@@ -516,7 +762,7 @@ transactionsRouter.get("/", async (req: Request, res: Response) => {
   if (q) {
     const p = `%${q}%`;
     const s = schema;
-    conditions.push(sql`${s.stockMovements.movementNumber}::text ILIKE ${p}`);
+    conditions.push(sql`${s.stockMovements.id}::text ILIKE ${p}`);
   }
   const status = typeof req.query.status === "string" && req.query.status ? req.query.status : null;
   if (status) conditions.push(sql`${schema.stockMovements.status} = ${status}`);
@@ -553,6 +799,22 @@ transactionsRouter.get("/", async (req: Request, res: Response) => {
     .groupBy(s.stockMovementDetails.movementId)
     .as("agg");
 
+  const SORT_COLUMNS: Record<string, unknown> = {
+    id: s.stockMovements.id,
+    typeCode: s.movementTypes.code,
+    typeName: s.movementTypes.name,
+    movementDate: s.stockMovements.movementDate,
+    status: s.stockMovements.status,
+    referenceId: s.stockMovements.referenceId,
+    detailCount: agg.detailCount,
+    totalQty: agg.totalQty,
+    createdByName: s.users.name,
+    createdAt: s.stockMovements.createdAt,
+  };
+  const sortKey = typeof req.query.sort === "string" ? req.query.sort : "createdAt";
+  const sortCol = (SORT_COLUMNS[sortKey] ?? s.stockMovements.createdAt) as never;
+  const sortDir = req.query.dir === "asc" ? asc : desc;
+
   const [{ total }] = await db
     .select({ total: count() })
     .from(s.stockMovements)
@@ -561,7 +823,6 @@ transactionsRouter.get("/", async (req: Request, res: Response) => {
   const rows = await db
     .select({
       id: s.stockMovements.id,
-      movementNumber: s.stockMovements.movementNumber,
       typeId: s.stockMovements.typeId,
       typeCode: s.movementTypes.code,
       typeName: s.movementTypes.name,
@@ -581,7 +842,7 @@ transactionsRouter.get("/", async (req: Request, res: Response) => {
     .leftJoin(s.users, eq(s.users.id, s.stockMovements.createdBy))
     .leftJoin(agg, eq(agg.movementId, s.stockMovements.id))
     .where(where)
-    .orderBy(desc(s.stockMovements.movementDate), desc(s.stockMovements.createdAt))
+    .orderBy(sortDir(sortCol))
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 
@@ -599,6 +860,146 @@ transactionsRouter.get("/", async (req: Request, res: Response) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* GET  /api/transactions/scan-history                                */
+/* Riwayat baris transaksi yang berasal dari scan barcode — kolom      */
+/* barcode, batch, item code, serial number.                           */
+/* ------------------------------------------------------------------ */
+transactionsRouter.get("/scan-history", async (req: Request, res: Response) => {
+  if (!(await checkPermission(req, res, "inventory.transactions", "view"))) return;
+
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const pageSize = Math.min(Math.max(Number(req.query.pageSize) || 20, 1), 100);
+  const s = schema;
+
+  const conditions: ReturnType<typeof sql>[] = [
+    sql`${s.stockMovementDetails.barcode} IS NOT NULL`,
+  ];
+  const scope = await movementScope(req);
+  if (scope) conditions.push(scope);
+
+  const q = typeof req.query.query === "string" ? req.query.query.trim() : "";
+  if (q) {
+    const p = `%${q}%`;
+    conditions.push(
+      sql`(
+        ${s.stockMovementDetails.barcode}::text ILIKE ${p}
+        OR ${s.stockMovementDetails.serialNumber}::text ILIKE ${p}
+        OR ${s.batches.batchNumber}::text ILIKE ${p}
+        OR ${s.items.code}::text ILIKE ${p}
+        OR ${s.items.name}::text ILIKE ${p}
+        OR ${s.stockMovements.id}::text ILIKE ${p}
+      )`
+    );
+  }
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [{ count: total }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(s.stockMovementDetails)
+    .leftJoin(s.stockMovements, eq(s.stockMovements.id, s.stockMovementDetails.movementId))
+    .leftJoin(s.items, eq(s.items.id, s.stockMovementDetails.itemId))
+    .leftJoin(s.batches, eq(s.batches.id, s.stockMovementDetails.batchId))
+    .where(where);
+
+  const rows = await db
+    .select({
+      id: s.stockMovementDetails.id,
+      movementId: s.stockMovementDetails.movementId,
+      movementDate: s.stockMovements.movementDate,
+      movementType: s.movementTypes.name,
+      movementStatus: s.stockMovements.status,
+      barcode: s.stockMovementDetails.barcode,
+      batchNumber: s.batches.batchNumber,
+      itemCode: s.items.code,
+      itemName: s.items.name,
+      unit: s.items.unit,
+      serialNumber: s.stockMovementDetails.serialNumber,
+      qty: s.stockMovementDetails.qty,
+      createdAt: s.stockMovementDetails.createdAt,
+    })
+    .from(s.stockMovementDetails)
+    .leftJoin(s.stockMovements, eq(s.stockMovements.id, s.stockMovementDetails.movementId))
+    .leftJoin(s.movementTypes, eq(s.movementTypes.id, s.stockMovements.typeId))
+    .leftJoin(s.items, eq(s.items.id, s.stockMovementDetails.itemId))
+    .leftJoin(s.batches, eq(s.batches.id, s.stockMovementDetails.batchId))
+    .where(where)
+    .orderBy(desc(s.stockMovementDetails.createdAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+
+  res.json({
+    rows: rows.map((r) => ({
+      ...r,
+      qty: Number(r.qty),
+      batchNumber: r.batchNumber ?? null,
+      serialNumber: r.serialNumber ?? null,
+    })),
+    total: Number(total),
+    page,
+    pageSize,
+    totalPages: Math.max(Math.ceil(Number(total) / pageSize), 1),
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* GET  /api/transactions/barcode-check?barcode=&excludeMovementId=   */
+/* Cek cepat apakah barcode sudah dipakai transaksi lain (pas scan).   */
+/* Mengembalikan lokasi gudang terakhir barcode (toWarehouse dari      */
+/* detail terakhir) — untuk pesan "barcode ada di gudang X".           */
+/* ------------------------------------------------------------------ */
+transactionsRouter.get("/barcode-check", async (req: Request, res: Response) => {
+  if (!(await checkPermission(req, res, "inventory.transactions", "view"))) return;
+  try {
+    const barcode =
+      typeof req.query.barcode === "string" ? req.query.barcode.trim() : "";
+    const excludeMovementId =
+      typeof req.query.excludeMovementId === "string"
+        ? req.query.excludeMovementId
+        : "";
+    if (!barcode) {
+      res.json({ exists: false });
+      return;
+    }
+    const conds: ReturnType<typeof sql>[] = [
+      eq(schema.stockMovementDetails.barcode, barcode),
+    ];
+    if (excludeMovementId) {
+      conds.push(sql`${schema.stockMovementDetails.movementId} != ${excludeMovementId}`);
+    }
+    const [row] = await db
+      .select({
+        movementId: schema.stockMovementDetails.movementId,
+        toWarehouseId: schema.stockMovementDetails.toWarehouseId,
+        warehouseCode: schema.warehouses.code,
+        warehouseName: schema.warehouses.name,
+      })
+      .from(schema.stockMovementDetails)
+      .innerJoin(
+        schema.stockMovements,
+        eq(schema.stockMovements.id, schema.stockMovementDetails.movementId)
+      )
+      .leftJoin(
+        schema.warehouses,
+        eq(schema.warehouses.id, schema.stockMovementDetails.toWarehouseId)
+      )
+      .where(and(...conds, eq(schema.stockMovements.status, "POSTED")))
+      .orderBy(desc(schema.stockMovementDetails.createdAt))
+      .limit(1);
+    res.json({
+      exists: !!row,
+      movementId: row?.movementId ?? null,
+      warehouseId: row?.toWarehouseId ?? null,
+      warehouseCode: row?.warehouseCode ?? null,
+      warehouseName: row?.warehouseName ?? null,
+    });
+  } catch (e) {
+    console.error("GET /transactions/barcode-check", e);
+    res.status(500).json({ error: "Gagal memeriksa barcode." });
+  }
+});
+
+/* ------------------------------------------------------------------ */
 /* GET  /api/transactions/:id                                         */
 /* ------------------------------------------------------------------ */
 transactionsRouter.get("/:id", async (req: Request, res: Response) => {
@@ -608,7 +1009,6 @@ transactionsRouter.get("/:id", async (req: Request, res: Response) => {
   const [movement] = await db
     .select({
       id: s.stockMovements.id,
-      movementNumber: s.stockMovements.movementNumber,
       typeId: s.stockMovements.typeId,
       typeCode: s.movementTypes.code,
       typeName: s.movementTypes.name,
@@ -656,6 +1056,8 @@ transactionsRouter.get("/:id", async (req: Request, res: Response) => {
       uomName: s.uom.name,
       batchId: s.stockMovementDetails.batchId,
       batchNumber: s.batches.batchNumber,
+      barcode: s.stockMovementDetails.barcode,
+      serialNumber: s.stockMovementDetails.serialNumber,
       createdAt: s.stockMovementDetails.createdAt,
     })
     .from(s.stockMovementDetails)
@@ -696,6 +1098,7 @@ transactionsRouter.post("/", async (req: Request, res: Response) => {
   if (!(await validateWarehouseAccess(req, res, input.details))) return;
 
   try {
+    await assertUniqueBarcodes(input.details, input.typeId);
     const id = await db.transaction((tx) => insertMovementWithDetails(tx, input, req.user!.id));
     res.status(201).json({ id });
   } catch (e) {
@@ -715,7 +1118,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "inventory.transactions", "update"))) return;
 
   const [existing] = await db
-    .select({ status: schema.stockMovements.status, movementNumber: schema.stockMovements.movementNumber })
+    .select({ status: schema.stockMovements.status })
     .from(schema.stockMovements)
     .where(eq(schema.stockMovements.id, param(req, "id")))
     .limit(1);
@@ -737,6 +1140,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
   if (!(await validateWarehouseAccess(req, res, input.details))) return;
 
   try {
+    await assertUniqueBarcodes(input.details, input.typeId, param(req, "id"));
     const [type] = await db
       .select({ code: schema.movementTypes.code, kind: schema.movementTypes.kind })
       .from(schema.movementTypes)
@@ -778,6 +1182,8 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
           qty: String(d.qty),
           uomId: d.uomId,
           batchId,
+          barcode: d.barcode,
+          serialNumber: d.serialNumber,
         });
         effectDetails.push({
           itemId: d.itemId,
@@ -790,7 +1196,13 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
       if (input.status === "POSTED") {
         await applyMovementEffect(
           tx,
-          { id: param(req, "id"), typeId: input.typeId, movementNumber: existing.movementNumber, referenceType: input.referenceType, referenceId: input.referenceId },
+          {
+            id: param(req, "id"),
+            typeId: input.typeId,
+            movementDate: input.movementDate ? new Date(input.movementDate) : new Date(),
+            referenceType: input.referenceType,
+            referenceId: input.referenceId,
+          },
           type.code,
           effectDetails,
           req.user!.id
@@ -817,8 +1229,8 @@ transactionsRouter.post("/:id/post", async (req: Request, res: Response) => {
   const [movement] = await db
     .select({
       id: schema.stockMovements.id,
-      movementNumber: schema.stockMovements.movementNumber,
       typeId: schema.stockMovements.typeId,
+      movementDate: schema.stockMovements.movementDate,
       status: schema.stockMovements.status,
       referenceType: schema.stockMovements.referenceType,
       referenceId: schema.stockMovements.referenceId,
@@ -1007,6 +1419,15 @@ transactionsRouter.post("/:id/unpost", async (req: Request, res: Response) => {
         .delete(schema.stockLedger)
         .where(eq(schema.stockLedger.transactionId, movement.id));
 
+      // --- 3b. Hitung ulang saldo berjalan (gudang, item) yang terpengaruh ---
+      await recomputeLedgerBalances(
+        tx,
+        [...aggSeen.keys()].map((k) => {
+          const [warehouseId, itemId] = k.split("|");
+          return { warehouseId, itemId };
+        })
+      );
+
       // --- 4. Ubah status menjadi CANCELED ---
       await tx
         .update(schema.stockMovements)
@@ -1106,14 +1527,9 @@ stockLedgerRouter.get("/", async (req: Request, res: Response) => {
   const q = typeof req.query.query === "string" ? req.query.query.trim() : "";
   if (q) {
     const p = `%${q}%`;
-    conditions.push(sql`(
-      ${s.stockLedger.transactionId}::text ILIKE ${p}
-      OR ${s.stockLedger.transactionType}::text ILIKE ${p}
-      OR ${s.stockLedger.referenceId}::text ILIKE ${p}
-      OR EXISTS (
-        SELECT 1 FROM ${s.items} WHERE ${s.items.id} = ${s.stockLedger.itemId}
-          AND (${s.items.code}::text ILIKE ${p} OR ${s.items.name}::text ILIKE ${p})
-      )
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM ${s.items} WHERE ${s.items.id} = ${s.stockLedger.itemId}
+        AND (${s.items.code}::text ILIKE ${p} OR ${s.items.name}::text ILIKE ${p})
     )`);
   }
   const where = conditions.length > 0 ? and(...conditions) : undefined;

@@ -16,6 +16,7 @@ import {
   FormGrid,
   FormActions,
 } from "@/components/ui/form-page";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 const KINDS = [
   { value: "RECEIPT", label: "Receipt (barang masuk)" },
@@ -27,6 +28,7 @@ export default function NewTransactionTypePage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", kind: "RECEIPT", series: "SMV" });
   const [error, setError] = useState("");
+  useErrorToast(error);
 
   const insertType = useInsert("movementTypes");
 
@@ -92,11 +94,6 @@ export default function NewTransactionTypePage() {
               />
             </div>
           </FormGrid>
-          {error && (
-            <p className="mt-5 rounded-lg bg-muted px-3 py-2 text-[12.5px] text-destructive">
-              {error}
-            </p>
-          )}
         </FormSection>
 
         <FormActions>

@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, Pencil, Plus, Tags, Trash2 } from "lucide-react";
-import { useMovementTypes, useRemove } from "@/lib/api/query";
+import { Plus, Tags } from "lucide-react";
+import { useMovementTypes } from "@/lib/api/query";
 import type { MovementType } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
@@ -11,14 +11,8 @@ import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ShellLoader } from "@/components/ui/loader";
+import { timeAgo } from "@/lib/utils";
 
 const KIND_LABELS: Record<string, string> = {
   RECEIPT: "Receipt",
@@ -29,25 +23,11 @@ const KIND_LABELS: Record<string, string> = {
 export default function TransactionTypesPage() {
   const navigate = useNavigate();
   const { data: typesRaw = [], isLoading } = useMovementTypes();
-  const removeType = useRemove("movementTypes");
 
   const types = useMemo(
     () => [...typesRaw].sort((a, b) => a.code.localeCompare(b.code)),
     [typesRaw]
   );
-
-  const handleRemove = async (t: MovementType) => {
-    if (t.builtin) {
-      alert("Tipe transaksi bawaan (Receipt/Issue/Transfer) tidak dapat dihapus.");
-      return;
-    }
-    if (!confirm(`Delete transaction type "${t.code}"?`)) return;
-    try {
-      await removeType.mutateAsync(t.id);
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Failed to delete");
-    }
-  };
 
   if (isLoading) return <ShellLoader />;
 
@@ -91,37 +71,10 @@ export default function TransactionTypesPage() {
       className: "min-w-[220px]",
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (t) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              aria-label={`Actions for ${t.code}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={() => navigate(`/app/data-library/transaction-types/${t.id}`)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => handleRemove(t)}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      id: "created",
+      header: "Created",
+      sortValue: (t) => t.createdAt ?? "",
+      cell: (t) => <span className="text-xs text-muted-foreground">{timeAgo(t.createdAt)}</span>,
     },
   ];
 

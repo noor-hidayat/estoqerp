@@ -142,7 +142,7 @@ async function ensureSystemRoles() {
   ]);
 
   // Permission dasar untuk role non-administrator (isSystem bypass).
-  const allMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","settings.columnWidth","master","master.items","master.itemGroups","master.uom","master.barcodeFormats","master.barcodeFormats.new","master.barcodeFormats.edit","inventory","inventory.stockBalance","inventory.branches","inventory.warehouses","inventory.locations","reports","reports.project","reports.summary","reports.history","reports.variance","settings","settings.users","settings.roles","settings.roles.new","settings.roles.edit","ai"];
+  const allMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","settings.columnWidth","master","master.items","master.itemGroups","master.uom","master.barcodeFormats","master.barcodeFormats.new","master.barcodeFormats.edit","master.batchFormats","master.batchFormats.new","master.batchFormats.edit","inventory","inventory.stockBalance","inventory.branches","inventory.warehouses","inventory.locations","reports","reports.project","reports.summary","reports.history","reports.variance","settings","settings.users","settings.roles","settings.roles.new","settings.roles.edit","ai"];
   // Menu yang punya tombol Export (Export/Import hanya untuk menu ini).
   const exportMenus = new Set(["inventory.stockBalance","reports.project","reports.summary","reports.history","reports.variance"]);
   const baseActions = ["view","create","update","delete"];

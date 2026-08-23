@@ -15,11 +15,13 @@ import {
   FormGrid,
   FormActions,
 } from "@/components/ui/form-page";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 export default function NewBranchPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ code: "", name: "", city: "" });
   const [error, setError] = useState("");
+  useErrorToast(error);
 
   const { data: branches = [] } = useBranches();
   const insertBranch = useInsert("branches");
@@ -74,11 +76,6 @@ export default function NewBranchPage() {
               />
             </div>
           </FormGrid>
-          {error && (
-            <p className="mt-5 rounded-lg bg-muted px-3 py-2 text-[12.5px] text-destructive">
-              {error}
-            </p>
-          )}
         </FormSection>
 
         <FormActions>

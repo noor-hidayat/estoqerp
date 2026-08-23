@@ -2,15 +2,16 @@
 // offline tanpa hit server. Database ini diisi otomatis saat halaman scan
 // memuat data dari React Query, dan dibaca saat tiap scan.
 
-import type { BarcodeFormat, ItemGroup, Item } from "@/types";
+import type { BarcodeFormat, BatchFormat, ItemGroup, Item } from "@/types";
 
 const DB_NAME = "estoq-master";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORES = {
   items: "items",
   itemGroups: "itemGroups",
   barcodeFormats: "barcodeFormats",
+  batchFormats: "batchFormats",
   meta: "meta",
 } as const;
 
@@ -38,6 +39,9 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORES.barcodeFormats)) {
         db.createObjectStore(STORES.barcodeFormats, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(STORES.batchFormats)) {
+        db.createObjectStore(STORES.batchFormats, { keyPath: "id" });
       }
       if (!db.objectStoreNames.contains(STORES.meta)) {
         db.createObjectStore(STORES.meta, { keyPath: "key" });
@@ -80,6 +84,7 @@ export async function syncMasterCache(opts: {
   items: Item[];
   itemGroups: ItemGroup[];
   barcodeFormats: BarcodeFormat[];
+  batchFormats?: BatchFormat[];
 }) {
   const db = await openDb();
   try {
@@ -87,6 +92,7 @@ export async function syncMasterCache(opts: {
       clearStore(db, STORES.items).then(() => putAll(db, STORES.items, opts.items)),
       clearStore(db, STORES.itemGroups).then(() => putAll(db, STORES.itemGroups, opts.itemGroups)),
       clearStore(db, STORES.barcodeFormats).then(() => putAll(db, STORES.barcodeFormats, opts.barcodeFormats)),
+      clearStore(db, STORES.batchFormats).then(() => putAll(db, STORES.batchFormats, opts.batchFormats ?? [])),
     ]);
     await setMeta("lastSync", Date.now());
   } finally {

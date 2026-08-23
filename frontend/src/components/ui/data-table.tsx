@@ -9,11 +9,11 @@ import {
 import {
   ArrowDown,
   ArrowUp,
+  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  ChevronsUpDown,
   Columns3,
   ListFilter,
   Search,
@@ -104,6 +104,10 @@ interface DataTableProps<T> {
 
   // Sorting ----------------------------------------------------------------
   initialSort?: SortState;
+  /** Called when sort changes — required for server-side sorting. */
+  onSortChange?: (sort: SortState) => void;
+  /** Column id used by the toolbar Sort button (defaults to the first date/created column). */
+  sortColumnId?: string;
 
   // Pagination -------------------------------------------------------------
   pagination?: "client" | "server" | "none";
@@ -129,6 +133,10 @@ interface DataTableProps<T> {
   minWidth?: number;
   className?: string;
   rowClassName?: (row: T) => string | undefined;
+  /** Layout kolom fixed (table-fixed) — kolom memakai lebar yang ditentukan. */
+  fixedLayout?: boolean;
+  /** Class tambahan untuk elemen <table> (mis. border-separate utk sticky). */
+  tableClassName?: string;
 
   // Column visibility --------------------------------------------------------
   /** localStorage key for column visibility. Defaults to a key derived from column ids. */
@@ -136,6 +144,12 @@ interface DataTableProps<T> {
 }
 
 const DEFAULT_PAGE_SIZES = [10, 20, 50, 100];
+
+/* Spasi kolom & cell tabel — permanen, dipakai di semua DataTable. */
+const CELL_PADDING = "px-4 py-2.5";
+const HEADER_PADDING = "h-auto px-4 py-2.5";
+const TOOLBAR_PADDING = "px-3 py-2.5";
+const FOOTER_PADDING = "px-3 py-2";
 
 function matchesFilter(rawValue: unknown, filter: Filter): boolean {
   const value = rawValue ?? null;
@@ -192,6 +206,8 @@ export function DataTable<T>({
   onSelectionChange,
 
   initialSort = null,
+  onSortChange,
+  sortColumnId,
 
   pagination = "client",
   page: pageProp,
@@ -214,6 +230,8 @@ export function DataTable<T>({
   className,
   rowClassName,
   columnVisibilityKey,
+  fixedLayout = false,
+  tableClassName,
 }: DataTableProps<T>) {
   const isClient = pagination === "client";
 
@@ -222,7 +240,33 @@ export function DataTable<T>({
   const [internalPage, setInternalPage] = useState(1);
   const [internalPageSize, setInternalPageSize] = useState(pageSizes[0] ?? 10);
   const [internalSelected, setInternalSelected] = useState<Set<string>>(new Set());
-  const [sort, setSort] = useState<SortState>(initialSort);
+
+  const defaultSort = useMemo<SortState>(() => {
+    if (initialSort) return initialSort;
+    const dateCol = columns.find(
+      (c) =>
+        c.sortValue !== undefined &&
+        /date|time|created|updated|Date|Time|Created|Updated/i.test(c.id)
+    );
+    return dateCol ? { id: dateCol.id, dir: "desc" } : null;
+  }, [columns, initialSort]);
+  const [sort, setSort] = useState<SortState>(defaultSort);
+
+  const sortColId = useMemo(
+    () =>
+      sortColumnId ??
+      columns.find(
+        (c) =>
+          c.sortValue !== undefined &&
+          /date|time|created|updated/i.test(c.id)
+      )?.id ??
+      null,
+    [columns, sortColumnId]
+  );
+  const applySort = (id: string, dir: "asc" | "desc") => {
+    setSort({ id, dir });
+    onSortChange?.({ id, dir });
+  };
 
   const storageKey = columnVisibilityKey ?? `data-table:cols:${columns.map((c) => c.id).join("|")}`;
   const [hidden, setHidden] = useState<Set<string>>(() => {
@@ -382,16 +426,6 @@ export function DataTable<T>({
     setSelected(next);
   };
 
-  const toggleSort = (col: DataTableColumn<T>) => {
-    setSort((prev) => {
-      if (!prev || prev.id !== col.id) return { id: col.id, dir: "asc" };
-      if (prev.dir === "asc") return { id: col.id, dir: "desc" };
-      return null;
-    });
-  };
-
-  const sortDir = (id: string) => (sort?.id === id ? sort.dir : null);
-
   const changePage = (p: number) => {
     const next = Math.min(Math.max(1, p), maxPage);
     if (isClient) setInternalPage(next);
@@ -408,7 +442,7 @@ export function DataTable<T>({
   };
 
   const hasToolbar = Boolean(
-    toolbar || searchPlaceholder || searchValue !== undefined || filters || toolbarRight || toggleableColumns.length > 1 || hasBuiltInFilter
+    toolbar || searchPlaceholder || searchValue !== undefined || filters || toolbarRight || toggleableColumns.length > 1 || hasBuiltInFilter || (sortColId && (isClient || Boolean(onSortChange)))
   );
 
   const handleResetFilters = () => {
@@ -425,7 +459,7 @@ export function DataTable<T>({
       {toolbar ? (
         toolbar
       ) : hasToolbar ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5">
+        <div className={`flex flex-wrap items-center justify-between gap-2 border-b border-border ${TOOLBAR_PADDING}`}>
           <div className="flex flex-wrap items-center gap-2">
             {(searchPlaceholder || searchValue !== undefined) && (
               <div className="relative">
@@ -473,9 +507,32 @@ export function DataTable<T>({
             )}
             {filters}
           </div>
-          {(toolbarRight || toggleableColumns.length > 1) && (
+          {(toolbarRight || toggleableColumns.length > 1 || (sortColId && (isClient || Boolean(onSortChange)))) && (
             <div className="flex items-center gap-2">
               {toolbarRight}
+              {sortColId && (isClient || Boolean(onSortChange)) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 px-0 shadow-none"
+                  onClick={() => {
+                    const nextDir =
+                      sort?.id === sortColId && sort.dir === "asc" ? "desc" : "asc";
+                    applySort(sortColId, nextDir);
+                  }}
+                  aria-label="Toggle sort by created date"
+                >
+                  {sort?.id === sortColId ? (
+                    sort.dir === "asc" ? (
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              )}
               {toggleableColumns.length > 1 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -517,7 +574,11 @@ export function DataTable<T>({
 
       <Table
         style={minWidth ? { minWidth } : undefined}
-        className="border-collapse text-left text-[13px]"
+        className={cn(
+          "border-collapse text-left text-[13px]",
+          fixedLayout && "table-fixed",
+          tableClassName
+        )}
       >
         <TableHeader className="bg-muted/40 [&_tr]:border-border">
           <TableRow className="border-border hover:bg-transparent">
@@ -532,41 +593,19 @@ export function DataTable<T>({
               </TableHead>
             )}
             {visibleColumns.map((col) => {
-              const active = sortDir(col.id);
-              const sortable = Boolean(col.sortValue);
               const align = col.align ?? "left";
               return (
                 <TableHead
                   key={col.id}
                   className={cn(
-                    "h-auto px-4 py-2.5 text-xs font-medium text-muted-foreground last:pr-5",
+                    `${HEADER_PADDING} text-xs font-medium text-muted-foreground last:pr-5`,
                     align === "right" && "text-right",
                     align === "center" && "text-center",
                     col.headerClassName
                   )}
                   style={col.minWidth ? { minWidth: col.minWidth } : undefined}
                 >
-                  {sortable ? (
-                    <button
-                      type="button"
-                      onClick={() => toggleSort(col)}
-                      className={cn(
-                        "group inline-flex items-center gap-1 rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                        align === "right" && "flex-row-reverse"
-                      )}
-                    >
-                      <span className={cn(active && "text-foreground")}>{col.header}</span>
-                      {active === "asc" ? (
-                        <ArrowUp className="h-3 w-3" />
-                      ) : active === "desc" ? (
-                        <ArrowDown className="h-3 w-3" />
-                      ) : (
-                        <ChevronsUpDown className="h-3 w-3 opacity-40 transition-opacity group-hover:opacity-80" />
-                      )}
-                    </button>
-                  ) : (
-                    col.header
-                  )}
+                  {col.header}
                 </TableHead>
               );
             })}
@@ -583,7 +622,7 @@ export function DataTable<T>({
                   </TableCell>
                 )}
                 {visibleColumns.map((col, j) => (
-                  <TableCell key={col.id} className="px-4 py-2.5">
+                  <TableCell key={col.id} className={CELL_PADDING}>
                     <Skeleton
                       className={cn(
                         "h-3.5",
@@ -668,7 +707,7 @@ export function DataTable<T>({
                       <TableCell
                         key={col.id}
                         className={cn(
-                          "whitespace-normal px-4 py-2.5 align-middle last:pr-5",
+                          `whitespace-normal ${CELL_PADDING} align-middle last:pr-5`,
                           align === "right" && "text-right",
                           align === "center" && "text-center",
                           col.className
@@ -687,7 +726,7 @@ export function DataTable<T>({
       </Table>
 
       {!loading && hasFooter && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2">
+        <div className={`flex flex-wrap items-center justify-between gap-2 border-t border-border ${FOOTER_PADDING}`}>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {footerLeft}
             {selectable ? (

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, Pencil, Plus, SquareAsterisk, Trash2 } from "lucide-react";
+import { Plus, SquareAsterisk, Trash2 } from "lucide-react";
 import {
   useRoles,
   useRolePermissions,
@@ -17,13 +17,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Toggle } from "@/components/ui/toggle";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { timeAgo } from "@/lib/utils";
 import type { Role } from "@/types";
 
 export default function RolesPage() {
@@ -38,21 +32,6 @@ export default function RolesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const sorted = useMemo(() => (roles ?? []).slice().sort((a, b) => a.name.localeCompare(b.name)), [roles]);
-
-  const handleDelete = async (r: Role) => {
-    if (!confirm(`Delete role "${r.name}"?`)) return;
-    if (rolePermissions) {
-      for (const p of rolePermissions.filter((x) => x.roleId === r.id)) {
-        await removePerm.mutateAsync(p.id);
-      }
-    }
-    if (branchAccesses) {
-      for (const a of branchAccesses.filter((x) => x.roleId === r.id)) {
-        await removeAccess.mutateAsync(a.id);
-      }
-    }
-    await removeRole.mutateAsync(r.id);
-  };
 
   const handleBulkDelete = async () => {
     const deletableIds = new Set(sorted.filter((r) => !r.isSystem).map((r) => r.id));
@@ -138,41 +117,10 @@ export default function RolesPage() {
       ),
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (r) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              aria-label={`Actions for ${r.name}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={() => navigate(`/app/settings/roles/${r.id}`)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            {!r.isSystem && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => handleDelete(r)}
-                >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Delete
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      id: "created",
+      header: "Created",
+      sortValue: (r) => r.createdAt ?? "",
+      cell: (r) => <span className="text-xs text-muted-foreground">{timeAgo(r.createdAt)}</span>,
     },
   ];
 

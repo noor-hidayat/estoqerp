@@ -13,6 +13,7 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:seed-dummy": "tsx src/db/seed-dummy.ts",
     "db:backfill-ids": "tsx src/db/backfill-ids.ts",
+    "db:backfill-movement-ids": "tsx src/db/backfill-movement-ids.ts",
     "db:migrate-rbac": "tsx src/db/migrate-rbac.ts"
   },
   "dependencies": {

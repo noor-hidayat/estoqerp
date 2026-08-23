@@ -163,15 +163,24 @@ function optionsFromChildren(children: React.ReactNode): ParsedOptions {
     const props = child.props as React.OptionHTMLAttributes<HTMLOptionElement>;
     if (typeof (props as { value?: unknown }).value !== "string") return;
     const value = props.value as string;
-    const text = props.children;
-    const label = typeof text === "string" || typeof text === "number" ? String(text) : "";
-    if (value === "" && label.trim() !== "") {
-      placeholder = label.trim();
+    const label = childText(props.children).trim();
+    if (value === "" && label !== "") {
+      placeholder = label;
     } else {
       options.push({ value, label });
     }
   });
   return { options, placeholder };
+}
+
+/** Flatten children JSX menjadi teks (handle array & nested element). */
+function childText(node: React.ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(childText).join("");
+  if (React.isValidElement(node)) {
+    return childText((node.props as { children?: React.ReactNode }).children);
+  }
+  return "";
 }
 
 export const LegacySelect = React.forwardRef<HTMLSelectElement, LegacySelectProps>(

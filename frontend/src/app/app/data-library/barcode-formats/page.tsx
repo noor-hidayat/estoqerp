@@ -2,14 +2,9 @@
 
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Barcode,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-} from "lucide-react";
+import { Barcode, Plus } from "lucide-react";
 import { useBarcodeFormats, useUpdate } from "@/lib/api/query";
-import { formatDate } from "@/lib/utils";
+import { formatDate, timeAgo } from "@/lib/utils";
 import { sortSegments } from "@/lib/barcode/parser";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -21,12 +16,6 @@ import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { fieldColor, fieldLabelShort } from "@/components/barcode/segment-visualizer";
 import { cx } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import type { BarcodeFormat, BarcodeSegment } from "@/types";
 
 function SegmentChips({ segments }: { segments: BarcodeSegment[] }) {
@@ -60,7 +49,7 @@ export default function BarcodeFormatsPage() {
   const update = useUpdate("barcodeFormats");
 
   const sorted = useMemo(
-    () => [...formats].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    () => [...formats].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")),
     [formats]
   );
 
@@ -90,7 +79,13 @@ export default function BarcodeFormatsPage() {
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
             <Barcode size={15} strokeWidth={2} />
           </span>
-          <span className="truncate font-medium text-foreground">{f.name}</span>
+          <button
+            onClick={() => navigate(`/app/data-library/barcode-formats/${f.id}`)}
+            className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
+            title="Buka format"
+          >
+            {f.name}
+          </button>
         </div>
       ),
       className: "min-w-[180px]",
@@ -125,7 +120,7 @@ export default function BarcodeFormatsPage() {
     {
       id: "updated",
       header: "Updated",
-      sortValue: (f) => f.updatedAt,
+      sortValue: (f) => f.updatedAt ?? "",
       cell: (f) => (
         <span className="whitespace-nowrap text-xs text-muted-foreground">
           {formatDate(f.updatedAt)}
@@ -133,28 +128,13 @@ export default function BarcodeFormatsPage() {
       ),
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
+      id: "created",
+      header: "Created",
+      sortValue: (f) => f.createdAt ?? "",
       cell: (f) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              aria-label={`Actions for ${f.name}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={() => navigate(`/app/data-library/barcode-formats/${f.id}`)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
+          {timeAgo(f.createdAt)}
+        </span>
       ),
     },
   ];

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, Pencil, Plus, Tag, Trash2 } from "lucide-react";
+import { Plus, Tag, Trash2 } from "lucide-react";
 import { useItemGroups, useItemGroupCounts, useRemove } from "@/lib/api/query";
 import type { ItemGroup } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -10,14 +10,8 @@ import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ShellLoader } from "@/components/ui/loader";
+import { timeAgo } from "@/lib/utils";
 
 export default function ItemGroupsPage() {
   const navigate = useNavigate();
@@ -30,15 +24,6 @@ export default function ItemGroupsPage() {
     () => [...itemGroupsRaw].sort((a, b) => a.code.localeCompare(b.code)),
     [itemGroupsRaw]
   );
-
-  const handleRemove = async (ig: ItemGroup) => {
-    if (!confirm(`Delete item group "${ig.code}"?`)) return;
-    try {
-      await removeItemGroup.mutateAsync(ig.id);
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Failed to delete");
-    }
-  };
 
   const handleBulkRemove = async () => {
     const n = selected.size;
@@ -77,37 +62,10 @@ export default function ItemGroupsPage() {
       cell: (c) => <span className="text-muted-foreground">{itemCount(c.id)} items</span>,
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (c) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              aria-label={`Actions for ${c.name}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={() => navigate(`/app/data-library/item-groups/${c.id}`)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => handleRemove(c)}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      id: "created",
+      header: "Created",
+      sortValue: (c) => c.createdAt ?? "",
+      cell: (c) => <span className="text-xs text-muted-foreground">{timeAgo(c.createdAt)}</span>,
     },
   ];
 

@@ -56,6 +56,9 @@ export const roles = pgTable("roles", {
   name: text("name").notNull(),
   isSystem: boolean("is_system").notNull().default(false),
   active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const rolePermissions = pgTable(
@@ -133,6 +136,9 @@ export const branches = pgTable("branches", {
   city: text("city").notNull(),
   address: text("address"),
   isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const warehouses = pgTable("warehouses", {
@@ -144,6 +150,9 @@ export const warehouses = pgTable("warehouses", {
   name: text("name").notNull(),
   description: text("description"),
   isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const locations = pgTable("locations", {
@@ -155,6 +164,9 @@ export const locations = pgTable("locations", {
   name: text("name").notNull(),
   description: text("description"),
   isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const itemGroups = pgTable("item_groups", {
@@ -228,6 +240,9 @@ export const items = pgTable("items", {
   uomQty: numeric("uom_qty", { precision: 15, scale: 3 }),
   description: text("description"),
   isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
 
 export const barcodeFormats = pgTable("barcode_formats", {
@@ -238,6 +253,26 @@ export const barcodeFormats = pgTable("barcode_formats", {
   qtyPerFormat: boolean("qty_per_format").notNull().default(true),
   uniqueBarcode: boolean("unique_barcode").notNull().default(false),
   segments: jsonb("segments").notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Format batch number: definisi bagaimana nomor batch dipecah menjadi
+// tanggal produksi, shift, dsb. Dipakai oleh format barcode (segmen BATCH
+// wajib menunjuk format batch) maupun input manual batch di transaksi stok.
+export const batchFormats = pgTable("batch_formats", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  segments: jsonb("segments").notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -318,6 +353,9 @@ export const scanRecords = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     barcode: text("barcode").notNull(),
     itemId: text("item_id").references(() => items.id, { onDelete: "set null" }),
+    batchId: text("batch_id").references(() => batches.id, {
+      onDelete: "set null",
+    }),
     parsed: jsonb("parsed").notNull().default({}),
     quantity: integer("quantity").notNull().default(1),
     qtyMode: text("qty_mode", { enum: qtyModes }).notNull().default("AUTO"),
@@ -365,6 +403,10 @@ export const batches = pgTable(
       .references(() => items.id),
     batchNumber: text("batch_number").notNull(),
     status: text("status", { enum: batchStatuses }).notNull().default("ACTIVE"),
+    productionDate: date("production_date"),
+    expiryDate: date("expiry_date"),
+    shift: text("shift"),
+    meta: jsonb("meta").notNull().default({}),
     notes: text("notes"),
     createdBy: text("created_by").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -423,7 +465,6 @@ export const movementTypes = pgTable("movement_types", {
 
 export const stockMovements = pgTable("stock_movements", {
   id: text("id").primaryKey(),
-  movementNumber: text("movement_number").notNull().unique(),
   typeId: text("type_id")
     .notNull()
     .references(() => movementTypes.id),
@@ -458,6 +499,8 @@ export const stockMovementDetails = pgTable(
     qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
     uomId: text("uom_id").references(() => uom.id),
     batchId: text("batch_id").references(() => batches.id),
+    barcode: text("barcode"),
+    serialNumber: text("serial_number"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

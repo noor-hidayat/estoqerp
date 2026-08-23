@@ -184,6 +184,12 @@ export const NAV: NavGroup[] = [
             menu: "master.barcodeFormats",
           },
           {
+            label: "Batch Format",
+            href: "/app/data-library/batch-formats",
+            icon: "Layers",
+            menu: "master.batchFormats",
+          },
+          {
             label: "Transaction Types",
             href: "/app/data-library/transaction-types",
             icon: "ArrowRightLeft",

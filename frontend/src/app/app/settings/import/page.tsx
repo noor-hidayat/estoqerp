@@ -32,6 +32,7 @@ import {
 import { RoleGuard } from "@/components/ui/role-guard";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { cx } from "@/lib/utils";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 type Step = "choose" | "preview" | "done";
 
@@ -40,6 +41,7 @@ export default function ImportDataPage() {
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [fileName, setFileName] = useState<string>("");
   const [parseError, setParseError] = useState<string>("");
+  useErrorToast(parseError);
   const [mode, setMode] = useState<ImportMode>("skip");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -120,7 +122,6 @@ export default function ImportDataPage() {
           dataset={dataset}
           rows={rows}
           fileName={fileName}
-          parseError={parseError}
           mode={mode}
           submitting={submitting}
           onModeChange={setMode}
@@ -174,7 +175,6 @@ function PreviewStep({
   dataset,
   rows,
   fileName,
-  parseError,
   mode,
   submitting,
   onModeChange,
@@ -186,7 +186,6 @@ function PreviewStep({
   dataset: DatasetDescriptor;
   rows: Record<string, unknown>[];
   fileName: string;
-  parseError: string;
   mode: ImportMode;
   submitting: boolean;
   onModeChange: (m: ImportMode) => void;
@@ -244,11 +243,6 @@ function PreviewStep({
         {fileName && (
           <p className="mt-3 text-[12.5px] text-muted-foreground">
             File: <span className="font-medium text-foreground">{fileName}</span> — {rows.length} rows
-          </p>
-        )}
-        {parseError && (
-          <p className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">
-            {parseError}
           </p>
         )}
       </div>

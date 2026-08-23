@@ -5,6 +5,7 @@ export interface User {
   role: string;
   active: boolean;
   avatarHue: number;
+  createdAt?: string;
 }
 
 export interface Role {
@@ -12,6 +13,7 @@ export interface Role {
   name: string;
   isSystem: boolean;
   active: boolean;
+  createdAt?: string;
 }
 
 export interface RolePermission {
@@ -40,6 +42,7 @@ export interface Branch {
   code: string;
   name: string;
   city: string;
+  createdAt?: string;
 }
 
 export interface Warehouse {
@@ -47,6 +50,7 @@ export interface Warehouse {
   branchId: string;
   code: string;
   name: string;
+  createdAt?: string;
 }
 
 export interface Location {
@@ -54,12 +58,14 @@ export interface Location {
   warehouseId: string;
   code: string;
   name: string;
+  createdAt?: string;
 }
 
 export interface ItemGroup {
   id: string;
   code: string;
   name: string;
+  createdAt?: string;
 }
 
 export interface Item {
@@ -77,6 +83,7 @@ export interface Item {
   uomQty?: number;
   description?: string;
   isActive?: boolean;
+  createdAt?: string;
 }
 
 export interface StockBalance {
@@ -105,6 +112,8 @@ export interface BarcodeSegment {
   start: number;
   end: number;
   label?: string;
+  /** Wajib untuk field BATCH — menunjuk format batch yang dipakai memparse nomor batch. */
+  batchFormatId?: string;
 }
 
 export interface BarcodeFormat {
@@ -115,7 +124,50 @@ export interface BarcodeFormat {
   qtyPerFormat: boolean;
   uniqueBarcode?: boolean;
   segments: BarcodeSegment[];
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type BatchSegmentField =
+  | "DATE"
+  | "SHIFT"
+  | "SEQUENCE"
+  | "ALTERNATIVE_CODE"
+  | "CUSTOM";
+export type BatchSegmentMode = "POSITION" | "DELIMITER";
+export type BatchDateFormat = "YYMMDD" | "DDMMYY" | "YYYYMMDD" | "YYYY-MM-DD";
+
+export interface BatchSegment {
+  id: string;
+  field: BatchSegmentField;
+  mode: BatchSegmentMode;
+  start?: number;
+  end?: number;
+  delimiter?: string;
+  index?: number;
+  dateFormat?: BatchDateFormat;
+  label?: string;
+}
+
+export interface BatchFormat {
+  id: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  segments: BatchSegment[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BatchParseResult {
+  formatId: string;
+  formatName: string;
+  values: Record<string, string>;
+  productionDate: string | null;
+  shift: string | null;
+  alternativeCode: string | null;
+  meta: Record<string, string>;
+  matched: boolean;
 }
 
 export type OpnameMode = "COMPARE" | "SCRATCH";
@@ -192,6 +244,7 @@ export interface ScanRecord {
   projectId: string;
   barcode: string;
   itemId?: string;
+  batchId?: string;
   parsed: Record<string, string>;
   quantity: number;
   qtyMode: "AUTO" | "MANUAL";
@@ -234,7 +287,6 @@ export type MovementStatus = "DRAFT" | "POSTED" | "CANCELED";
 
 export interface StockMovement {
   id: string;
-  movementNumber: string;
   typeId: string;
   movementDate: string;
   status: MovementStatus;
@@ -273,6 +325,24 @@ export interface StockMovementDetailRow {
   uomName?: string;
   batchId?: string;
   batchNumber?: string;
+  barcode?: string | null;
+  serialNumber?: string | null;
+  createdAt: string;
+}
+
+export interface ScanHistoryRow {
+  id: string;
+  movementId: string;
+  movementDate: string;
+  movementType?: string;
+  movementStatus?: string;
+  barcode: string;
+  batchNumber?: string | null;
+  itemCode?: string;
+  itemName?: string;
+  unit?: string;
+  serialNumber?: string | null;
+  qty: number;
   createdAt: string;
 }
 
@@ -313,6 +383,10 @@ export interface Batch {
   itemId: string;
   batchNumber: string;
   status: BatchStatus;
+  productionDate?: string | null;
+  expiryDate?: string | null;
+  shift?: string | null;
+  meta?: Record<string, string>;
   notes?: string;
   createdBy?: string;
   createdAt: string;

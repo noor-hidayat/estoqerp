@@ -16,7 +16,7 @@ import { api } from "@/lib/api/client";
 import { useProjects, useAllWarehouses } from "@/lib/api/query";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { formatDate, relativeTime, cx } from "@/lib/utils";
+import { formatDate, timeAgo, cx } from "@/lib/utils";
 import { STATUS_LABELS } from "@/lib/compute";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -234,7 +234,7 @@ export default function OpnameProjectsPage() {
       sortValue: (r) => r.createdAt,
       cell: (r) => (
         <span className="whitespace-nowrap text-xs text-muted-foreground" title={formatDate(r.createdAt)}>
-          {relativeTime(r.createdAt)}
+          {timeAgo(r.createdAt)}
         </span>
       ),
     },

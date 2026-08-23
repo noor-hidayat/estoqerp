@@ -3,6 +3,7 @@ import { SessionProvider, useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { navForPermissions } from "@/components/app-shell/nav";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 
 import LoginPage from "@/app/login/page";
 import AppLayout from "@/app/app/layout";
@@ -55,6 +56,9 @@ import SetupPage from "@/app/app/data-library/page";
 import BarcodeFormatsPage from "@/app/app/data-library/barcode-formats/page";
 import BarcodeFormatNewPage from "@/app/app/data-library/barcode-formats/new/page";
 import BarcodeFormatDetailPage from "@/app/app/data-library/barcode-formats/[id]/page";
+import BatchFormatsPage from "@/app/app/data-library/batch-formats/page";
+import BatchFormatNewPage from "@/app/app/data-library/batch-formats/new/page";
+import BatchFormatDetailPage from "@/app/app/data-library/batch-formats/[id]/page";
 import UsersPage from "@/app/app/settings/users/page";
 import NewUserPage from "@/app/app/settings/users/new/page";
 import EditUserPage from "@/app/app/settings/users/[id]/page";
@@ -146,6 +150,9 @@ export default function App() {
           <Route path="data-library/barcode-formats" element={<BarcodeFormatsPage />} />
           <Route path="data-library/barcode-formats/new" element={<BarcodeFormatNewPage />} />
           <Route path="data-library/barcode-formats/:id" element={<BarcodeFormatDetailPage />} />
+          <Route path="data-library/batch-formats" element={<BatchFormatsPage />} />
+          <Route path="data-library/batch-formats/new" element={<BatchFormatNewPage />} />
+          <Route path="data-library/batch-formats/:id" element={<BatchFormatDetailPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="settings/users" element={<UsersPage />} />
           <Route path="settings/users/new" element={<NewUserPage />} />
@@ -161,6 +168,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </TooltipProvider>
+      <Toaster />
     </SessionProvider>
   );
 }

@@ -1,5 +1,6 @@
 import type {
   BarcodeFormat,
+  BatchFormat,
   Branch,
   ItemGroup,
   Item,
@@ -30,6 +31,7 @@ export interface DB {
   items: Item[];
   stockBalances: StockBalance[];
   barcodeFormats: BarcodeFormat[];
+  batchFormats: BatchFormat[];
   projects: Project[];
   scanSessions: ScanSession[];
   scanRecords: ScanRecord[];

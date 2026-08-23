@@ -99,8 +99,8 @@ export function Topbar() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 flex h-[60px] items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur-md lg:px-8">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="sticky top-0 z-50 flex h-[60px] items-center justify-between gap-4 border-b border-border bg-background/80 px-4 backdrop-blur-md lg:px-8">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <SidebarTrigger className="-ml-1 size-9 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent" />
         <Breadcrumb
           crumbs={[{ label: "Home", href: "/app" }, ...crumbs]}
@@ -108,12 +108,12 @@ export function Topbar() {
         />
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="group flex cursor-pointer items-center gap-2.5 rounded-lg py-1.5 pl-1.5 pr-2.5 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring data-[state=open]:bg-accent">
               <span
-                className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-sm ring-2 ring-background transition-shadow group-hover:ring-primary/20"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-sm ring-2 ring-background transition-shadow group-hover:ring-primary/20"
                 style={{ background: hueBg(user.avatarHue) }}
               >
                 {user.name
@@ -122,18 +122,18 @@ export function Topbar() {
                   .slice(0, 2)
                   .join("")}
               </span>
-              <span className="hidden text-left leading-tight md:block">
-                <span className="block text-[12.5px] font-semibold text-foreground">
+              <span className="hidden min-w-0 max-w-[150px] text-left leading-tight md:block">
+                <span className="block truncate text-[12.5px] font-semibold text-foreground">
                   {user.name}
                 </span>
-                <span className="block text-[10.5px] text-muted-foreground">
+                <span className="block truncate text-[10.5px] text-muted-foreground">
                   {ROLE_LABELS[user.role] ?? user.role}
                 </span>
               </span>
               <ChevronsUpDown
                 size={14}
                 strokeWidth={2.5}
-                className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
+                className="shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
               />
             </button>
           </DropdownMenuTrigger>

@@ -2,13 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  MapPin,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { MapPin, Plus, Trash2 } from "lucide-react";
 import { useLocations, useAllWarehouses, useBranches, useRemove } from "@/lib/api/query";
 import type { Location } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -18,14 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ShellLoader } from "@/components/ui/loader";
+import { timeAgo } from "@/lib/utils";
 
 export default function LocationsPage() {
   const navigate = useNavigate();
@@ -45,15 +33,6 @@ export default function LocationsPage() {
 
   const warehouseOf = (id: string) => warehouses.find((w) => w.id === id);
   const branchOf = (branchId: string) => branches.find((b) => b.id === branchId);
-
-  const handleRemove = async (loc: Location) => {
-    if (!confirm(`Delete location "${loc.code}"?`)) return;
-    try {
-      await removeLocation.mutateAsync(loc.id);
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Failed to delete");
-    }
-  };
 
   const handleBulkRemove = async () => {
     const n = selected.size;
@@ -99,37 +78,10 @@ export default function LocationsPage() {
       ),
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (l) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              aria-label={`Actions for ${l.code}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={() => navigate(`/app/data-library/locations/${l.id}`)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => handleRemove(l)}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      id: "created",
+      header: "Created",
+      sortValue: (l) => l.createdAt ?? "",
+      cell: (l) => <span className="text-xs text-muted-foreground">{timeAgo(l.createdAt)}</span>,
     },
   ];
 

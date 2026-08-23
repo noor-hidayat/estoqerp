@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import {
   Camera,
   Check,
-  CheckCircle2,
   Columns3,
   Plus,
   ScanBarcode,
@@ -17,25 +16,31 @@ import {
   useItemsList,
   useAllWarehouses,
   useBarcodeFormats,
+  useBatchFormats,
   useItemGroups,
 } from "@/lib/api/query";
 import { api } from "@/lib/api/client";
 import { parseBarcode } from "@/lib/barcode/parser";
+import { parseBatchNumber } from "@/lib/batch/parser";
 import { getAll, syncMasterCache } from "@/lib/local-cache";
+import { useErrorToast } from "@/hooks/use-error-toast";
 import { CameraScanner } from "@/components/barcode/camera-scanner";
 import { QtyCalculator } from "@/components/transactions/qty-calculator";
 import type {
   BarcodeFormat,
+  BatchFormat,
   ItemGroup,
   Item,
   MovementInput,
   StockMovementDetailFull,
 } from "@/types";
-import { cn } from "@/lib/utils";
+import { cn, cx } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -58,6 +63,12 @@ import {
   FormGrid,
 } from "@/components/ui/form-page";
 
+interface DetailUnit {
+  barcode?: string;
+  serialNumber?: string;
+  qty: number;
+}
+
 interface DetailDraft {
   key: string;
   itemId: string;
@@ -66,12 +77,61 @@ interface DetailDraft {
   toWarehouseId: string;
   qty: string;
   uomId: string;
+  barcode?: string;
+  serialNumber?: string;
+  /** Barcode/serial per unit saat baris hasil gabungan beberapa scan. */
+  units?: DetailUnit[];
 }
 
 let rowKey = 0;
 function nextKey() {
   rowKey += 1;
   return `row_${rowKey}_${Date.now()}`;
+}
+
+const detailKeyOf = (d: {
+  itemId: string;
+  batchNumber?: string | null;
+  fromWarehouseId?: string | null;
+  toWarehouseId?: string | null;
+}) =>
+  [d.itemId, d.batchNumber ?? "", d.fromWarehouseId ?? "", d.toWarehouseId ?? ""].join("|");
+
+/** Gabung detail yang item + batch + gudang asal/tujuan sama menjadi satu baris,
+ *  dengan qty dijumlahkan dan barcode/serial tiap unit tetap disimpan. */
+function mergeDetails(
+  details: { itemId: string; batchNumber?: string | null; fromWarehouseId?: string | null; toWarehouseId?: string | null; qty: number; uomId?: string | null; barcode?: string | null; serialNumber?: string | null }[]
+): DetailDraft[] {
+  const out: DetailDraft[] = [];
+  const map = new Map<string, DetailDraft>();
+  for (const d of details) {
+    const k = detailKeyOf(d);
+    const qty = Number(d.qty) || 0;
+    let row = map.get(k);
+    if (!row) {
+      row = {
+        key: nextKey(),
+        itemId: d.itemId,
+        batchNumber: d.batchNumber ?? "",
+        fromWarehouseId: d.fromWarehouseId ?? "",
+        toWarehouseId: d.toWarehouseId ?? "",
+        qty: "0",
+        uomId: d.uomId ?? "",
+        barcode: d.barcode ?? undefined,
+        serialNumber: d.serialNumber ?? undefined,
+        units: [],
+      };
+      map.set(k, row);
+      out.push(row);
+    }
+    row.units!.push({
+      barcode: d.barcode ?? undefined,
+      serialNumber: d.serialNumber ?? undefined,
+      qty,
+    });
+    row.qty = String(Number(row.qty) + qty);
+  }
+  return out;
 }
 
 const SCAN_TABLE_COLUMNS = [
@@ -107,6 +167,7 @@ interface LookupResponse {
   found: boolean;
   item?: Item;
   values?: Record<string, string>;
+  formatId?: string;
 }
 
 function TableSearchSelect({
@@ -301,6 +362,8 @@ export function MovementForm({
   onCancel,
   onAmend,
   statusBadge,
+  tabs,
+  className,
 }: {
   title: string;
   initial?: StockMovementDetailFull | null;
@@ -313,11 +376,16 @@ export function MovementForm({
   onCancel?: () => Promise<void>;
   onAmend?: () => Promise<void>;
   statusBadge?: ReactNode;
+  tabs?: ReactNode;
+  className?: string;
 }) {
   const [form, setForm] = useState({
     typeId: initial?.typeId ?? "",
     movementDate: initial?.movementDate ? initial.movementDate.slice(0, 10) : todayISO(),
-    movementTime: initial?.movementDate ? toTimeInput(initial.movementDate) : nowTime(),
+    movementTime: (initial?.movementDate ? toTimeInput(initial.movementDate) : nowTime()).replace(
+      /^(\d{2}:\d{2})$/,
+      "$1:00"
+    ),
   });
   const [editPostingDate, setEditPostingDate] = useState(
     Boolean(initial?.movementDate)
@@ -329,22 +397,18 @@ export function MovementForm({
     initial?.details?.[0]?.toWarehouseId ?? ""
   );
   const [rows, setRows] = useState<DetailDraft[]>(
-    initial?.details?.length
-      ? initial.details.map((d) => ({
-          key: nextKey(),
-          itemId: d.itemId,
-          batchNumber: d.batchNumber ?? "",
-          fromWarehouseId: d.fromWarehouseId ?? "",
-          toWarehouseId: d.toWarehouseId ?? "",
-          qty: String(d.qty),
-          uomId: d.uomId ?? "",
-        }))
-      : []
+    initial?.details?.length ? mergeDetails(initial.details) : []
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  useErrorToast(error);
+
+  const serialize = () =>
+    JSON.stringify({ form, editPostingDate, rows });
+  const [snapshot, setSnapshot] = useState<string>(() => serialize());
+  const dirty = serialize() !== snapshot;
 
   const handleCancel = async () => {
     if ((!onCancel && !onAmend) || cancelling) return;
@@ -433,23 +497,34 @@ export function MovementForm({
   const [scanBusy, setScanBusy] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [scanError, setScanError] = useState("");
-  const [lastScan, setLastScan] = useState<{
-    code: string;
-    name: string;
-    batch: string;
-  } | null>(null);
+  useErrorToast(scanError);
+  const [scanHistory, setScanHistory] = useState<
+    {
+      key: string;
+      barcode: string;
+      batch: string;
+      itemCode: string;
+      serial: string;
+    }[]
+  >([]);
   const lastBarcodeRef = useRef<{ barcode: string; at: number } | null>(null);
 
   const { data: types = [], isLoading: typesLoading } = useMovementTypes();
   const { data: items = [] } = useItemsList();
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: formats = [] } = useBarcodeFormats();
+  const { data: batchFormats = [] } = useBatchFormats();
   const { data: itemGroups = [] } = useItemGroups();
 
   // Isi cache lokal supaya scan bisa resolve item offline.
   useEffect(() => {
     if (formats.length && items.length && itemGroups.length) {
-      void syncMasterCache({ items, itemGroups, barcodeFormats: formats });
+      void syncMasterCache({
+        items,
+        itemGroups,
+        barcodeFormats: formats,
+        batchFormats,
+      });
     }
   }, [formats, items, itemGroups]);
 
@@ -464,20 +539,27 @@ export function MovementForm({
   /** Resolve barcode → item + batch (segmen BATCH bila ada). */
   const resolveBarcode = async (
     barcode: string
-  ): Promise<{ item: Item; batchNumber: string } | null> => {
+  ): Promise<
+    | { item: Item; batchNumber: string; formatId?: string; values?: Record<string, string> }
+    | null
+  > => {
     try {
       const cachedItems = await getAll<Item>("items");
       const cachedItemGroups = await getAll<ItemGroup>("itemGroups");
       const cachedFormats = await getAll<BarcodeFormat>("barcodeFormats");
+      const cachedBatchFormats = await getAll<BatchFormat>("batchFormats");
       if (cachedItems.length > 0 && cachedFormats.length > 0) {
         const parsed = parseBarcode(barcode, cachedFormats, {
           items: cachedItems,
           itemGroups: cachedItemGroups,
+          batchFormats: cachedBatchFormats,
         });
         if (parsed?.item) {
           return {
             item: parsed.item,
             batchNumber: (parsed.values.BATCH ?? "").trim(),
+            formatId: parsed.formatId || undefined,
+            values: parsed.values,
           };
         }
       }
@@ -491,6 +573,8 @@ export function MovementForm({
       return {
         item: res.item,
         batchNumber: ((res.values ?? {}).BATCH ?? "").trim(),
+        formatId: res.formatId,
+        values: res.values,
       };
     }
     return null;
@@ -516,8 +600,74 @@ export function MovementForm({
         setScanError(`Barcode tidak dikenali: ${barcode}`);
         return;
       }
+      // Format barcode unik — barcode yang sama tidak boleh discan dua kali.
       const from = kind === "RECEIPT" ? "" : fromDefault;
+      const format = formats.find((f) => f.id === resolved.formatId);
+      if (format?.uniqueBarcode && scanHistory.some((h) => h.barcode === barcode)) {
+        setScanError(`Barcode sudah discan (format unik): ${barcode}`);
+        return;
+      }
+      if (format?.uniqueBarcode) {
+        const check = await api.get<{
+          exists: boolean;
+          movementId?: string | null;
+          warehouseId?: string | null;
+          warehouseCode?: string | null;
+          warehouseName?: string | null;
+        }>(
+          `/transactions/barcode-check?barcode=${encodeURIComponent(barcode)}${
+            initial?.id
+              ? `&excludeMovementId=${encodeURIComponent(initial.id)}`
+              : ""
+          }`
+        );
+        if (kind === "RECEIPT") {
+          // Barcode masih aktif di sistem → tolak. Sudah keluar (issue) → boleh re-receipt.
+          if (check.exists && check.warehouseId) {
+            setScanError(
+              `Barcode "${barcode}" sudah pernah dibuat dan masih ada di gudang ${check.warehouseCode ?? check.warehouseName ?? check.warehouseId} — barcode has been created.`
+            );
+            return;
+          }
+        } else {
+          // ISSUE / TRANSFER / OTHER — barcode wajib sudah pernah di-receipt
+          // dan berada di gudang asal.
+          if (!check.exists) {
+            setScanError(
+              `Barcode "${barcode}" belum pernah dibuat (receipt) — tidak ada di sistem.`
+            );
+            return;
+          }
+          if (!from) {
+            setScanError(
+              "Pilih gudang asal (Default warehouse) terlebih dahulu sebelum scan."
+            );
+            return;
+          }
+          if (check.warehouseId && check.warehouseId !== from) {
+            setScanError(
+              `Barcode "${barcode}" ada di gudang ${check.warehouseCode ?? check.warehouseName ?? check.warehouseId} — bukan gudang asal yang dipilih.`
+            );
+            return;
+          }
+          if (!check.warehouseId) {
+            setScanError(
+              `Barcode "${barcode}" sudah keluar dari sistem (tidak ada di gudang asal).`
+            );
+            return;
+          }
+        }
+      }
       const to = kind === "ISSUE" ? "" : toDefault;
+      const masterQty =
+        resolved.item.qty && resolved.item.qty > 0
+          ? resolved.item.qty
+          : resolved.item.uomQty && Number(resolved.item.uomQty) > 0
+            ? Number(resolved.item.uomQty)
+            : 1;
+      // Gabung baris item+batch+gudang yang sama — barcode tiap unit tetap
+      // dicatat di row (units) supaya data per barcode tidak hilang saat save.
+      const serial = (resolved.values?.SEQUENCE ?? "").trim() || undefined;
       const existing = rows.find(
         (r) =>
           r.itemId === resolved.item.id &&
@@ -526,22 +676,44 @@ export function MovementForm({
           r.toWarehouseId === to
       );
       if (existing) {
-        setRow(existing.key, { qty: String(Number(existing.qty || 0) + 1) });
+        setRow(existing.key, {
+          qty: String(Number(existing.qty || 0) + masterQty),
+          barcode: existing.barcode || barcode,
+          serialNumber: existing.serialNumber || serial,
+          units: [
+            ...(existing.units ?? [
+              {
+                barcode: existing.barcode,
+                serialNumber: existing.serialNumber,
+                qty: Number(existing.qty || 0),
+              },
+            ]),
+            { barcode, serialNumber: serial, qty: masterQty },
+          ],
+        });
       } else {
         addRow({
           itemId: resolved.item.id,
           batchNumber: resolved.batchNumber,
           fromWarehouseId: from,
           toWarehouseId: to,
-          qty: "1",
+          qty: String(masterQty),
           uomId: resolved.item.uomId ?? "",
+          barcode,
+          serialNumber: serial,
+          units: [{ barcode, serialNumber: serial, qty: masterQty }],
         });
       }
-      setLastScan({
-        code: resolved.item.code,
-        name: resolved.item.name,
-        batch: resolved.batchNumber,
-      });
+      setScanHistory((prev) => [
+        ...prev,
+        {
+          key: `${barcode}-${Date.now()}`,
+          barcode,
+          batch: resolved.batchNumber,
+          itemCode: resolved.item.code,
+          serial: (resolved.values?.SEQUENCE ?? "").trim(),
+        },
+      ]);
     } catch {
       setScanError("Gagal memproses barcode.");
     } finally {
@@ -553,7 +725,7 @@ export function MovementForm({
   const save = async () => {
     if (readOnly) return;
     setError("");
-    if (saved && onPost) {
+    if (saved && onPost && !dirty) {
       setSaving(true);
       try {
         await onPost();
@@ -573,14 +745,42 @@ export function MovementForm({
       return;
     }
     const details = rows
-      .map((r) => ({
-        itemId: r.itemId,
-        fromWarehouseId: r.fromWarehouseId || null,
-        toWarehouseId: r.toWarehouseId || null,
-        qty: Number(r.qty),
-        uomId: r.uomId || null,
-        batchNumber: r.batchNumber.trim() || null,
-      }))
+      .flatMap((r): {
+        itemId: string;
+        fromWarehouseId: string | null;
+        toWarehouseId: string | null;
+        qty: number;
+        uomId: string | null;
+        batchNumber: string | null;
+        barcode: string | null;
+        serialNumber: string | null;
+      }[] => {
+        const base = {
+          itemId: r.itemId,
+          fromWarehouseId: r.fromWarehouseId || null,
+          toWarehouseId: r.toWarehouseId || null,
+          uomId: r.uomId || null,
+          batchNumber: r.batchNumber.trim() || null,
+        };
+        const units = r.units ?? [];
+        const unitSum = units.reduce((a, u) => a + u.qty, 0);
+        if (units.length > 1 && unitSum === Number(r.qty)) {
+          return units.map((u) => ({
+            ...base,
+            qty: u.qty,
+            barcode: u.barcode || null,
+            serialNumber: u.serialNumber || null,
+          }));
+        }
+        return [
+          {
+            ...base,
+            qty: Number(r.qty),
+            barcode: r.barcode || null,
+            serialNumber: r.serialNumber || null,
+          },
+        ];
+      })
       .filter((d) => d.itemId);
     if (details.length === 0) {
       setError("Scan atau tambahkan minimal 1 baris item.");
@@ -615,6 +815,7 @@ export function MovementForm({
       });
       onSaved?.(selectedType?.name ?? form.typeId);
       setSaved(true);
+      setSnapshot(serialize());
       setSaving(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
@@ -642,6 +843,8 @@ export function MovementForm({
     <FormPage
       title={title}
       titleBadge={statusBadge}
+      className={className}
+      tabs={tabs}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {actions}
@@ -656,7 +859,7 @@ export function MovementForm({
           )}
           {!readOnly && (
             <Button variant="primary" onClick={save} disabled={saving}>
-              {saving ? "Saving..." : saved && onPost ? "Post" : submitLabel}
+              {saving ? "Saving..." : saved && onPost && !dirty ? "Post" : submitLabel}
             </Button>
           )}
         </div>
@@ -666,30 +869,21 @@ export function MovementForm({
       <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
         <FormSection className="pb-0">
           <FormGrid>
-            <Select
-              label="Transaction type"
-              value={form.typeId}
-              onChange={(e) => handleTypeChange(e.target.value)}
-              disabled={typesLoading || readOnly}
-            >
-              <option value="">Select type...</option>
-              {types.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
-            <div className="sm:col-start-2">
-              <Input
-                label="Date"
-                type="date"
-                value={form.movementDate}
-                disabled={!editPostingDate || readOnly}
-                onChange={(e) => setForm({ ...form, movementDate: e.target.value })}
-              />
-            </div>
-            {!readOnly && (
-              <div className="flex items-end pb-0.5">
+            <div className="flex flex-col gap-5">
+              <Select
+                label="Transaction type"
+                value={form.typeId}
+                onChange={(e) => handleTypeChange(e.target.value)}
+                disabled={typesLoading || readOnly}
+              >
+                <option value="">Select type...</option>
+                {types.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+              {!readOnly && (
                 <label className="flex cursor-pointer items-center gap-2 text-[13px] font-medium text-foreground">
                   <Checkbox
                     checked={editPostingDate}
@@ -697,15 +891,20 @@ export function MovementForm({
                   />
                   Edit posting date
                 </label>
-              </div>
-            )}
-            <div className="sm:col-start-2">
-              <Input
+              )}
+            </div>
+            <div className="flex flex-col gap-5">
+              <DatePicker
+                label="Date"
+                value={form.movementDate}
+                disabled={!editPostingDate || readOnly}
+                onChange={(v) => setForm({ ...form, movementDate: v })}
+              />
+              <TimePicker
                 label="Time"
-                type="time"
                 value={form.movementTime}
                 disabled={!editPostingDate || readOnly}
-                onChange={(e) => setForm({ ...form, movementTime: e.target.value })}
+                onChange={(v) => setForm({ ...form, movementTime: v })}
               />
             </div>
             <div className={cn(kind === "RECEIPT" && "hidden")}>
@@ -774,25 +973,47 @@ export function MovementForm({
               )}
             </div>
           </div>
-        </div>
 
-        {!readOnly && scanError && (
-          <p className="mb-3 rounded-md bg-muted px-3 py-2 text-[12.5px] text-destructive">
-            {scanError}
-          </p>
-        )}
-        {!readOnly && lastScan && (
-          <div className="mb-4 flex items-center gap-2.5 rounded-md border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12.5px] text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300">
-            <CheckCircle2 size={15} strokeWidth={2} className="shrink-0" />
-            <span className="font-mono text-xs">{lastScan.code}</span>
-            <span className="min-w-0 flex-1 truncate font-medium">{lastScan.name}</span>
-            {lastScan.batch && (
-              <span className="shrink-0 rounded bg-white/60 px-1.5 py-0.5 font-mono text-[11px] dark:bg-black/30">
-                batch {lastScan.batch}
-              </span>
-            )}
-          </div>
-        )}
+          {!readOnly && scanHistory.length > 0 && (
+            <div className="overflow-hidden rounded-md border border-border">
+              <div className="border-b border-border bg-muted/40 px-3 py-1.5">
+                <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Scan History
+                </span>
+              </div>
+              <div className="max-h-56 overflow-y-auto">
+                <table className="w-full text-left text-[12px]">
+                  <thead className="sticky top-0 bg-card">
+                    <tr className="border-b border-border text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                      <th className="px-3 py-1.5 font-semibold">Barcode</th>
+                      <th className="px-2 py-1.5 font-semibold">Batch</th>
+                      <th className="px-2 py-1.5 font-semibold">Item Code</th>
+                      <th className="px-3 py-1.5 font-semibold">Serial Number</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {scanHistory.slice(-10).reverse().map((h) => (
+                      <tr key={h.key} className="hover:bg-muted/30">
+                        <td className="break-all px-3 py-1.5 font-mono text-[11.5px] text-foreground">
+                          {h.barcode}
+                        </td>
+                        <td className="break-all px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+                          {h.batch || "—"}
+                        </td>
+                        <td className="px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+                          {h.itemCode}
+                        </td>
+                        <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+                          {h.serial || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="overflow-hidden rounded-lg border border-border">
           <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border bg-muted/40 px-3 py-2">
@@ -962,6 +1183,13 @@ export function MovementForm({
                             }}
                             className="h-8 w-full min-w-[90px] border-none bg-transparent px-1 font-mono text-sm text-foreground focus:outline-none focus:ring-0 disabled:opacity-100"
                           />
+                          {!readOnly && r.batchNumber.trim() && (
+                            <BatchHint
+                              number={r.batchNumber}
+                              formats={batchFormats}
+                              item={r.itemId ? itemOf(r.itemId) ?? null : null}
+                            />
+                          )}
                         </TableCell>
                       )}
                     </TableRow>
@@ -1007,11 +1235,6 @@ export function MovementForm({
           </div>
         )}
 
-        {error && (
-          <p className="mt-5 rounded-lg bg-muted px-3 py-2 text-[12.5px] text-destructive">
-            {error}
-          </p>
-        )}
         </FormSection>
       </div>
       </div>
@@ -1044,5 +1267,42 @@ export function MovementForm({
       )}
 
       </FormPage>
+  );
+}
+
+/** Hint live hasil parse batch number — dipakai di kolom Batch. */
+function BatchHint({
+  number,
+  formats,
+  item,
+}: {
+  number: string;
+  formats: BatchFormat[];
+  item: Item | null;
+}) {
+  const parsed = parseBatchNumber(number, formats);
+  if (!parsed) return null;
+  const parts: string[] = [];
+  if (parsed.productionDate) parts.push(parsed.productionDate);
+  if (parsed.shift) parts.push(`shift ${parsed.shift}`);
+  for (const [k, v] of Object.entries(parsed.meta)) parts.push(`${k} ${v}`);
+
+  const mismatch =
+    parsed.alternativeCode &&
+    item?.alternativeCode &&
+    parsed.alternativeCode.trim().toLowerCase() !==
+      item.alternativeCode.trim().toLowerCase();
+
+  return (
+    <p
+      className={cx(
+        "mt-0.5 truncate text-[10px]",
+        mismatch ? "font-medium text-red-600" : "text-sky-600"
+      )}
+      title={mismatch ? `Kode alternatif batch (${parsed.alternativeCode}) tidak cocok dengan item (${item?.alternativeCode}).` : undefined}
+    >
+      {parts.join(" · ")}
+      {mismatch && ` · alt ${parsed.alternativeCode} ≠ ${item?.alternativeCode}`}
+    </p>
   );
 }

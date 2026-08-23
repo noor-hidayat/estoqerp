@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useErrorToast } from "@/hooks/use-error-toast";
 import {
   useRoles,
   useRolePermissions,
@@ -78,6 +79,9 @@ const MENU_GROUPS: MenuGroup[] = [
       { key: "master.barcodeFormats", label: "Barcode Formats" },
       { key: "master.barcodeFormats.new", label: "New Barcode Format" },
       { key: "master.barcodeFormats.edit", label: "Edit Barcode Format" },
+      { key: "master.batchFormats", label: "Batch Formats" },
+      { key: "master.batchFormats.new", label: "New Batch Format" },
+      { key: "master.batchFormats.edit", label: "Edit Batch Format" },
       { key: "master.movementTypes", label: "Transaction Types" },
     ],
   },
@@ -203,6 +207,7 @@ export function RoleForm({ role }: { role?: Role }) {
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  useErrorToast(error);
 
   // Muat permission & akses entitas role saat data selesai di-fetch.
   // (Dipakai di mode edit — state diisi dari database, bukan inisialisasi awal.)
@@ -565,8 +570,6 @@ export function RoleForm({ role }: { role?: Role }) {
             )}
           </div>
         </FormSection>
-
-        {error && <p className="mb-5 rounded-lg bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">{error}</p>}
 
         <FormActions>
           <Button variant="ghost" onClick={() => router.push("/app/settings/roles")}>Cancel</Button>

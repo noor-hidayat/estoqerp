@@ -8,6 +8,7 @@ import { BrandMark } from "@/components/app-shell/sidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 export function LoginForm() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  useErrorToast(error);
 
   const next = searchParams.get("next");
 
@@ -127,11 +129,6 @@ export function LoginForm() {
                 </div>
               </div>
 
-              {error && (
-                <p className="rounded-md bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">
-                  {error}
-                </p>
-              )}
 
               <Button
                 type="submit"

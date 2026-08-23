@@ -66,6 +66,24 @@ export function relativeTime(iso: string) {
   return `${days} days ago`;
 }
 
+/** Waktu relatif ringkas: just now, 1m, 5h, 3d, 2w, 4M, 1y */
+export function timeAgo(iso?: string): string {
+  if (!iso) return "—";
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return "just now";
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}M`;
+  return `${Math.floor(days / 365)}y`;
+}
+
 export function hueBg(hue: number) {
   return `hsl(${hue} 60% 45%)`;
 }

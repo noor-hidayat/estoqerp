@@ -18,6 +18,7 @@ import {
   FormActions,
 } from "@/components/ui/form-page";
 import Link from "next/link";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 export default function EditUserPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +35,7 @@ export default function EditUserPage() {
     active: true,
   });
   const [error, setError] = useState("");
+  useErrorToast(error);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -152,11 +154,6 @@ export default function EditUserPage() {
             </div>
           </FormGrid>
 
-          {error && (
-            <p className="mt-5 rounded-lg bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">
-              {error}
-            </p>
-          )}
         </FormSection>
 
         <FormActions>

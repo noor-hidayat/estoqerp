@@ -1,10 +1,13 @@
 import type {
   BarcodeFormat,
   BarcodeSegment,
+  BatchFormat,
+  BatchParseResult,
   ItemGroup,
   Item,
   SegmentField,
 } from "@/types";
+import { parseBatchNumber } from "@/lib/batch/parser";
 
 export const SEGMENT_FIELD_LABELS: Record<SegmentField, string> = {
   ITEM_CODE: "Kode Item",
@@ -71,12 +74,17 @@ export interface ParsedResult {
   itemId?: string;
   item?: Item;
   itemGroupCode?: string;
+  /** Nomor batch hasil ekstraksi segmen BATCH (jika format punya segmen BATCH). */
+  batchNumber?: string;
+  /** Hasil parse nomor batch via format batch yang ditunjuk segmen BATCH. */
+  batch?: BatchParseResult | null;
   matched: boolean;
 }
 
 export interface ParseContext {
   items: Item[];
   itemGroups: ItemGroup[];
+  batchFormats: BatchFormat[];
 }
 
 function extractSegment(raw: string, seg: BarcodeSegment): string {
@@ -104,6 +112,22 @@ export function parseWithFormat(
 
   for (const seg of sortSegments(format.segments)) {
     values[seg.field] = extractSegment(raw, seg);
+  }
+
+  // Segmen BATCH wajib menunjuk format batch (batasan desain) — format tanpa
+  // ikatan dianggap tidak valid dan dilewati.
+  const batchSeg = sortSegments(format.segments).find((s) => s.field === "BATCH");
+  let batchNumber: string | undefined;
+  let batch: BatchParseResult | null = null;
+  if (batchSeg) {
+    if (!batchSeg.batchFormatId) return null;
+    batchNumber = values.BATCH;
+    const batchFormat = ctx.batchFormats.find(
+      (f) => f.id === batchSeg.batchFormatId
+    );
+    if (batchFormat) {
+      batch = parseBatchNumber(batchNumber, [batchFormat]);
+    }
   }
 
   let itemId: string | undefined;
@@ -143,6 +167,16 @@ export function parseWithFormat(
     }
   }
 
+  // Fallback terakhir: item terkode lewat alternative code di batch number.
+  if (!item && batch?.alternativeCode) {
+    item = ctx.items.find(
+      (i) =>
+        i.alternativeCode &&
+        i.alternativeCode.toLowerCase() === batch.alternativeCode!.toLowerCase()
+    );
+    if (item) itemId = item.id;
+  }
+
   return {
     formatId: format.id,
     formatName: format.name,
@@ -151,6 +185,8 @@ export function parseWithFormat(
     itemId,
     item,
     itemGroupCode,
+    batchNumber,
+    batch,
     matched: true,
   };
 }
@@ -176,6 +212,8 @@ export function parseBarcode(
     formatName: "",
     values: { ITEM_CODE: "", ITEM_GROUP: "", DATE: "", SEQUENCE: "", BARCODE_ID: "", BATCH: "", CUSTOM: "" },
     raw: trimmed,
+    batchNumber: undefined,
+    batch: null,
     matched: false,
   };
 }

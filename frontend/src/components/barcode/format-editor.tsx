@@ -6,9 +6,10 @@ import { Plus, Trash2 } from "lucide-react";
 import {
   useInsert,
   useUpdate,
+  useBatchFormats,
 } from "@/lib/api/query";
 import { useSaveShortcut } from "@/lib/use-save-shortcut";
-import type { BarcodeFormat, BarcodeSegment, SegmentField } from "@/types";
+import type { BarcodeFormat, BarcodeSegment, BatchFormat, SegmentField } from "@/types";
 import {
   SEGMENT_FIELD_LABELS,
   sortSegments,
@@ -26,6 +27,7 @@ import {
 import { SegmentBar, fieldColor, fieldLabelShort } from "./segment-visualizer";
 import { cx } from "@/lib/utils";
 import { nextSegId } from "@/lib/mock/store";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 const FIELD_OPTIONS: SegmentField[] = [
   "ITEM_CODE",
@@ -51,6 +53,9 @@ function segmentIssues(
   if (seg.end > barcodeLength) {
     issues.push("End position exceeds barcode length.");
   }
+  if (seg.field === "BATCH" && !seg.batchFormatId) {
+    issues.push("Batch segment must select a batch format.");
+  }
   const overlaps = segments.filter(
     (o) =>
       o.id !== seg.id && !(o.end < seg.start || o.start > seg.end)
@@ -67,12 +72,20 @@ function SegmentRow({
   segment,
   segments,
   barcodeLength,
+  batchFormats,
+  batchFormatsLoading,
+  batchFormatsError,
+  onCreateBatchFormat,
   onChange,
   onRemove,
 }: {
   segment: BarcodeSegment;
   segments: BarcodeSegment[];
   barcodeLength: number;
+  batchFormats: BatchFormat[];
+  batchFormatsLoading: boolean;
+  batchFormatsError: boolean;
+  onCreateBatchFormat: () => void;
   onChange: (next: BarcodeSegment) => void;
   onRemove: () => void;
 }) {
@@ -108,6 +121,49 @@ function SegmentRow({
             </option>
           ))}
         </Select>
+
+        {segment.field === "BATCH" && (
+          <div className="flex w-full flex-col gap-1 sm:w-auto sm:flex-1">
+            <Select
+              value={segment.batchFormatId ?? ""}
+              onChange={(e) =>
+                onChange({ ...segment, batchFormatId: e.target.value || undefined })
+              }
+              className="h-9 w-full text-[13px]"
+              aria-label="batch format"
+            >
+              <option value="">
+                {batchFormatsLoading
+                  ? "Memuat batch format…"
+                  : "Select batch format…"}
+              </option>
+              {batchFormats.map((bf) => (
+                <option key={bf.id} value={bf.id}>
+                  {bf.name}
+                  {!bf.isActive ? " (inactive)" : ""}
+                </option>
+              ))}
+            </Select>
+            {batchFormatsError && (
+              <p className="text-[10.5px] font-medium text-destructive">
+                Gagal memuat batch format — cek koneksi/backend.
+              </p>
+            )}
+            {!batchFormatsLoading && !batchFormatsError && batchFormats.length === 0 && (
+              <p className="text-[10.5px] text-muted-foreground">
+                Belum ada batch format. Buat dulu di{" "}
+                <button
+                  type="button"
+                  onClick={onCreateBatchFormat}
+                  className="font-medium text-primary hover:underline"
+                >
+                  Batch Formats
+                </button>
+                .
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground sm:ml-auto">
           <span className="shrink-0">Posisi</span>
@@ -170,6 +226,11 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
   const router = useRouter();
   const insert = useInsert("barcodeFormats");
   const update = useUpdate("barcodeFormats");
+  const {
+    data: batchFormats = [],
+    isLoading: batchFormatsLoading,
+    isError: batchFormatsError,
+  } = useBatchFormats();
   const isNew = !format.name;
 
   const [name, setName] = useState(format.name);
@@ -186,6 +247,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
     sortSegments(format.segments)
   );
   const [saveError, setSaveError] = useState("");
+  useErrorToast(saveError);
   const [saving, setSaving] = useState(false);
   const [focusSegmentId, setFocusSegmentId] = useState<string | null>(null);
 
@@ -358,6 +420,12 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
               segment={seg}
               segments={segments}
               barcodeLength={length}
+              batchFormats={batchFormats}
+              batchFormatsLoading={batchFormatsLoading}
+              batchFormatsError={batchFormatsError}
+              onCreateBatchFormat={() =>
+                router.push("/app/data-library/batch-formats")
+              }
               onChange={(next) => updateSegment(seg.id, next)}
               onRemove={() => removeSegment(seg.id)}
             />
@@ -383,12 +451,6 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
           </div>
         )}
       </FormSection>
-
-      {saveError && (
-        <p className="mb-5 rounded-lg bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">
-          Gagal menyimpan: {saveError}
-        </p>
-      )}
 
       {/* ACTION FOOTER */}
       <FormActions>

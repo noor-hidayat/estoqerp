@@ -134,20 +134,41 @@ export default function StockBalancePage() {
       id: "name",
       header: "Item Name",
       sortValue: (r) => r.name,
-      cell: (r) => <span className="font-medium text-foreground">{r.name}</span>,
+      cell: (r) => (
+        <span
+          className="block max-w-[300px] truncate font-medium text-foreground"
+          title={r.name}
+        >
+          {r.name}
+        </span>
+      ),
       className: "min-w-[200px]",
     },
     {
       id: "itemGroup",
       header: "Item Group",
       sortValue: (r) => r.itemGroup ?? "—",
-      cell: (r) => <span className="text-xs text-muted-foreground">{r.itemGroup ?? "—"}</span>,
+      cell: (r) => (
+        <span
+          className="block max-w-[160px] truncate text-xs text-muted-foreground"
+          title={r.itemGroup ?? undefined}
+        >
+          {r.itemGroup ?? "—"}
+        </span>
+      ),
     },
     {
       id: "warehouse",
       header: "Warehouse",
       sortValue: (r) => r.warehouse,
-      cell: (r) => <span className="text-xs text-muted-foreground">{r.warehouse}</span>,
+      cell: (r) => (
+        <span
+          className="block max-w-[220px] truncate text-xs text-muted-foreground"
+          title={r.warehouse}
+        >
+          {r.warehouse}
+        </span>
+      ),
       className: "min-w-[140px]",
     },
     {

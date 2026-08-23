@@ -10,7 +10,7 @@ import {
 import { useProject, useProjectStats, useProjectSessions } from "@/lib/api/query";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { formatId, formatNumber, relativeTime } from "@/lib/utils";
+import { formatId, formatNumber, timeAgo } from "@/lib/utils";
 import { Stat } from "@/components/ui/stat";
 import { ShellLoader } from "@/components/ui/loader";
 import { AccessDenied } from "@/components/ui/role-guard";
@@ -125,7 +125,7 @@ export default function ProjectOverviewPage() {
                       {s.userName}
                     </span>
                     <span className="truncate text-right text-[11px] text-muted-foreground">
-                      {relativeTime(s.startedAt)}
+                      {timeAgo(s.startedAt)}
                     </span>
                   </Link>
                 ))}

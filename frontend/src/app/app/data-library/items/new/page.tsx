@@ -17,6 +17,7 @@ import {
   FormGrid,
   FormActions,
 } from "@/components/ui/form-page";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 const EMPTY = {
   code: "",
@@ -33,6 +34,7 @@ export default function NewItemPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState("");
+  useErrorToast(error);
 
   const { data: itemGroups, isLoading: itemGroupsLoading } = useItemGroups();
   const { data: uoms = [], isLoading: uomsLoading } = useUoms();
@@ -142,11 +144,6 @@ export default function NewItemPage() {
             </div>
           </FormGrid>
 
-          {error && (
-            <p className="mt-5 rounded-lg bg-muted px-3 py-2 text-[12.5px] text-destructive">
-              {error}
-            </p>
-          )}
         </FormSection>
 
         <FormActions>

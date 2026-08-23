@@ -9,6 +9,9 @@ export const MENU_CHILDREN: Record<string, string[]> = {
     "master.barcodeFormats",
     "master.barcodeFormats.new",
     "master.barcodeFormats.edit",
+    "master.batchFormats",
+    "master.batchFormats.new",
+    "master.batchFormats.edit",
   ],
   inventory: [
     "inventory.stockBalance",

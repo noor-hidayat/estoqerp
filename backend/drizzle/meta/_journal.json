@@ -120,6 +120,34 @@
       "when": 1787039143022,
       "tag": "0017_empty_mordo",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787393005574,
+      "tag": "0018_smooth_scorpion",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787400287459,
+      "tag": "0019_sparkling_stellaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787406654416,
+      "tag": "0020_faulty_cassandra_nova",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787411928756,
+      "tag": "0021_awesome_hydra",
+      "breakpoints": true
     }
   ]
 }

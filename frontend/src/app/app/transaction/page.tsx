@@ -2,24 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeftRight,
-  BadgeCheck,
-  MoreHorizontal,
-  Plus,
-  Search,
-  Send,
-  Trash2,
-} from "lucide-react";
+import { BadgeCheck, Plus, RefreshCw, Search } from "lucide-react";
 import {
   useStockMovements,
   useMovementTypes,
   useAllWarehouses,
-  usePostMovement,
-  useDeleteMovement,
 } from "@/lib/api/query";
 import type { StockMovementListRow } from "@/types";
-import { formatDate, formatNumber } from "@/lib/utils";
+import { formatDate, timeAgo } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { MenuGate } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -28,13 +18,6 @@ import { Select } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 const STATUS_TONE: Record<string, string> = {
   DRAFT: "neutral",
@@ -50,6 +33,8 @@ export default function TransactionsPage() {
   const [toWarehouseId, setToWarehouseId] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [sortId, setSortId] = useState("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
@@ -58,49 +43,31 @@ export default function TransactionsPage() {
 
   const { data: types = [] } = useMovementTypes();
   const { data: warehouses = [] } = useAllWarehouses();
-  const { data: result, isLoading } = useStockMovements({
+  const { data: result, isLoading, refetch } = useStockMovements({
     query: debouncedQuery || undefined,
     typeId: typeId === "all" ? undefined : typeId,
     fromWarehouseId: fromWarehouseId || undefined,
     toWarehouseId: toWarehouseId || undefined,
+    sort: sortId,
+    dir: sortDir,
     page,
     pageSize,
   });
-  const postMovement = usePostMovement();
-  const deleteMovement = useDeleteMovement();
 
   const rows = result?.rows ?? [];
   const total = result?.total ?? 0;
-
-  const handlePost = async (m: StockMovementListRow) => {
-    if (!confirm(`Post transaction "${m.movementNumber}"? Stock will be applied.`)) return;
-    try {
-      await postMovement.mutateAsync(m.id);
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Failed to post");
-    }
-  };
-
-  const handleDelete = async (m: StockMovementListRow) => {
-    if (!confirm(`Delete transaction "${m.movementNumber}"?`)) return;
-    try {
-      await deleteMovement.mutateAsync(m.id);
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Failed to delete");
-    }
-  };
 
   const columns: DataTableColumn<StockMovementListRow>[] = [
     {
       id: "number",
       header: "Movement No",
-      sortValue: (m) => m.movementNumber,
+      sortValue: (m) => m.id,
       cell: (m) => (
         <button
           className="font-mono text-xs font-medium text-primary hover:underline"
           onClick={() => navigate(`/app/transaction/${m.id}`)}
         >
-          {m.movementNumber}
+          {m.id}
         </button>
       ),
       className: "whitespace-nowrap",
@@ -116,7 +83,7 @@ export default function TransactionsPage() {
     },
     {
       id: "date",
-      header: "Date",
+      header: "Posting Date",
       sortValue: (m) => m.movementDate,
       cell: (m) => (
         <span className="text-xs text-muted-foreground">{formatDate(m.movementDate)}</span>
@@ -133,37 +100,6 @@ export default function TransactionsPage() {
       className: "whitespace-nowrap",
     },
     {
-      id: "reference",
-      header: "Reference",
-      sortValue: (m) => m.referenceId ?? "",
-      cell: (m) => (
-        <span className="font-mono text-xs text-muted-foreground">{m.referenceId ?? "—"}</span>
-      ),
-      className: "whitespace-nowrap",
-    },
-    {
-      id: "details",
-      header: "Items",
-      align: "right",
-      sortValue: (m) => m.detailCount,
-      cell: (m) => (
-        <span className="text-xs text-muted-foreground">
-          {m.detailCount} row{m.detailCount === 1 ? "" : "s"}
-        </span>
-      ),
-    },
-    {
-      id: "qty",
-      header: "Total Qty",
-      align: "right",
-      sortValue: (m) => m.totalQty,
-      cell: (m) => (
-        <span className="font-mono text-xs font-medium tabular-nums">
-          {formatNumber(m.totalQty)}
-        </span>
-      ),
-    },
-    {
       id: "by",
       header: "By",
       sortValue: (m) => m.createdByName ?? "",
@@ -172,45 +108,13 @@ export default function TransactionsPage() {
       ),
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
+      id: "created",
+      header: "Created",
+      sortValue: (m) => m.createdAt,
       cell: (m) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              aria-label={`Actions for ${m.movementNumber}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuItem onClick={() => navigate(`/app/transaction/${m.id}`)}>
-              <ArrowLeftRight className="mr-2 h-3.5 w-3.5" />
-              View
-            </DropdownMenuItem>
-            {m.status === "DRAFT" && (
-              <>
-                <DropdownMenuItem onClick={() => handlePost(m)}>
-                  <Send className="mr-2 h-3.5 w-3.5" />
-                  Post
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => handleDelete(m)}
-                >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Delete
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <span className="text-xs text-muted-foreground">{timeAgo(m.createdAt)}</span>
       ),
+      className: "whitespace-nowrap",
     },
   ];
 
@@ -219,14 +123,25 @@ export default function TransactionsPage() {
       <PageHeader
         title="Transaction"
         actions={
-          <Button onClick={() => navigate("/app/transaction/new")}>
-            <Plus size={15} strokeWidth={2} />
-            New Transaction
-          </Button>
+          <div className="flex items-center gap-2.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-7 w-7 px-0"
+              onClick={() => void refetch()}
+              aria-label="Reload transactions"
+            >
+              <RefreshCw size={14} strokeWidth={2} className="text-muted-foreground" />
+            </Button>
+            <Button size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/transaction/new")}>
+              <Plus size={14} strokeWidth={2} />
+              New Transaction
+            </Button>
+          </div>
         }
       />
 
-      <DataTable
+        <DataTable
         columns={columns}
         data={rows}
         getRowId={(m) => m.id}
@@ -258,6 +173,7 @@ export default function TransactionsPage() {
               }}
               options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
               placeholder="Source warehouse..."
+              emptyLabel="Semua"
               className="w-52"
             />
             <SearchableSelect
@@ -269,6 +185,7 @@ export default function TransactionsPage() {
               }}
               options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
               placeholder="Target warehouse..."
+              emptyLabel="Semua"
               className="w-52"
             />
             <Select
@@ -289,6 +206,13 @@ export default function TransactionsPage() {
           </>
         }
         pagination="server"
+        initialSort={{ id: "createdAt", dir: "desc" }}
+        sortColumnId="createdAt"
+        onSortChange={(s) => {
+          setSortId(s?.id ?? "");
+          setSortDir(s?.dir ?? "asc");
+          setPage(1);
+        }}
         page={page}
         pageSize={pageSize}
         total={total}

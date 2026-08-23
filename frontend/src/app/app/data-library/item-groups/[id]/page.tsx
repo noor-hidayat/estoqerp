@@ -17,6 +17,7 @@ import {
   FormActions,
 } from "@/components/ui/form-page";
 import Link from "next/link";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 export default function EditItemGroupPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +28,7 @@ export default function EditItemGroupPage() {
 
   const [form, setForm] = useState({ code: "", name: "" });
   const [error, setError] = useState("");
+  useErrorToast(error);
 
   useEffect(() => {
     if (itemGroup) {
@@ -101,11 +103,6 @@ export default function EditItemGroupPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </FormGrid>
-          {error && (
-            <p className="mt-5 rounded-lg bg-muted px-3 py-2 text-[12.5px] text-destructive">
-              {error}
-            </p>
-          )}
         </FormSection>
 
         <FormActions>

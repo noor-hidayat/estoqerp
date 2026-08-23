@@ -17,7 +17,7 @@ export function PageHeader({
   const hasTitle = title || description || eyebrow;
 
   return (
-    <div className={cn("mb-6 flex items-start justify-between gap-4", className)}>
+    <div className={cn("-mt-2 sm:-mt-4 mb-4 flex items-start justify-between gap-4", className)}>
       {hasTitle && (
         <div className="min-w-0">
           {eyebrow && (
@@ -26,7 +26,7 @@ export function PageHeader({
             </p>
           )}
           {title && (
-            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-[28px]">
+            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
               {title}
             </h1>
           )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { cx } from "@/lib/utils";
 
 export interface SearchableOption {
@@ -23,6 +23,7 @@ export function SearchableSelect({
   inputId,
   inputRef,
   onBlur,
+  emptyLabel,
   className,
 }: {
   label?: string;
@@ -38,6 +39,7 @@ export function SearchableSelect({
   inputId?: string;
   inputRef?: React.Ref<HTMLInputElement>;
   onBlur?: () => void;
+  emptyLabel?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -63,8 +65,11 @@ export function SearchableSelect({
     const base = q
       ? available.filter((o) => o.label.toLowerCase().includes(q))
       : available;
-    return base.slice(0, maxSuggestions);
-  }, [available, query, maxSuggestions]);
+    const list = emptyLabel
+      ? [{ value: "", label: emptyLabel }, ...base]
+      : base;
+    return list.slice(0, maxSuggestions);
+  }, [available, query, maxSuggestions, emptyLabel]);
 
   const totalMatches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -113,8 +118,7 @@ export function SearchableSelect({
       const opt = visible[highlight];
       if (opt) pick(opt);
     } else if (e.key === "Tab") {
-      const opt = visible[highlight];
-      if (opt) pick(opt);
+      setOpen(false);
     } else if (e.key === "Escape") {
       setOpen(false);
     }
@@ -130,7 +134,7 @@ export function SearchableSelect({
           <input
             id={inputId}
             ref={innerRef}
-            value={query || selected?.label || ""}
+            value={open ? query : selected?.label ?? (value === "" && emptyLabel ? emptyLabel : "")}
             onFocus={() => {
               if (disabled) return;
               setOpen(true);
@@ -138,8 +142,10 @@ export function SearchableSelect({
               if (selected && query === selected.label) setQuery("");
             }}
             onChange={(e) => {
-              setQuery(e.target.value);
+              const v = e.target.value;
+              setQuery(v);
               setOpen(true);
+              if (v !== selected?.label) onChange("");
             }}
             onKeyDown={onKeyDown}
             onBlur={() => onBlur?.()}
@@ -152,19 +158,6 @@ export function SearchableSelect({
             )}
           />
           <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-            {selected && !disabled && (
-              <button
-                type="button"
-                aria-label="Clear selection"
-                onClick={() => {
-                  onChange("");
-                  setQuery("");
-                }}
-                className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <X size={14} strokeWidth={2} />
-              </button>
-            )}
             <ChevronDown
               size={14}
               strokeWidth={2}

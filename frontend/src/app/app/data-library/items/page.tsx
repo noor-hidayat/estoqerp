@@ -2,19 +2,13 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  MoreHorizontal,
-  Package,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Package, Plus, Trash2 } from "lucide-react";
 import {
   useItems,
   useItemGroups,
   useRemove,
 } from "@/lib/api/query";
-import { formatNumber } from "@/lib/utils";
+import { formatNumber, timeAgo } from "@/lib/utils";
 import type { Item } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
@@ -23,13 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 export default function ItemsPage() {
   const navigate = useNavigate();
@@ -53,20 +40,6 @@ export default function ItemsPage() {
 
   const items = result?.rows ?? [];
   const total = result?.total ?? 0;
-
-  const handleRemove = async (item: Item) => {
-    if (
-      !confirm(
-        `Delete item "${item.name}"? Related stock balance will also be deleted; scan history remains preserved.`
-      )
-    )
-      return;
-    try {
-      await removeItem.mutateAsync(item.id);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to delete item.");
-    }
-  };
 
   const handleBulkRemove = async () => {
     const n = selected.size;
@@ -132,37 +105,9 @@ export default function ItemsPage() {
       ),
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (item) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              aria-label={`Actions for ${item.name}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={() => navigate(`/app/data-library/items/${item.id}`)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => handleRemove(item)}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      id: "created",
+      header: "Created",
+      cell: (item) => <span className="whitespace-nowrap text-xs text-muted-foreground">{timeAgo(item.createdAt)}</span>,
     },
   ];
 

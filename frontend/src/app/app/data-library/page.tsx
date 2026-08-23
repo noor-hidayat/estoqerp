@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   Barcode,
   Building2,
+  Layers,
   MapPin,
   Package,
   Ruler,
@@ -40,6 +41,12 @@ export default function DataLibraryPage() {
       href: "/app/data-library/barcode-formats",
       icon: <Barcode size={24} strokeWidth={2} />,
       show: canView("master.barcodeFormats"),
+    },
+    {
+      label: "Batch Formats",
+      href: "/app/data-library/batch-formats",
+      icon: <Layers size={24} strokeWidth={2} />,
+      show: canView("master.batchFormats"),
     },
     {
       label: "UOM",

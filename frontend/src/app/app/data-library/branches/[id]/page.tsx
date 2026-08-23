@@ -17,6 +17,7 @@ import {
   FormActions,
 } from "@/components/ui/form-page";
 import Link from "next/link";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 export default function EditBranchPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +28,7 @@ export default function EditBranchPage() {
 
   const [form, setForm] = useState({ code: "", name: "", city: "" });
   const [error, setError] = useState("");
+  useErrorToast(error);
 
   useEffect(() => {
     if (branch) {
@@ -108,11 +110,6 @@ export default function EditBranchPage() {
               />
             </div>
           </FormGrid>
-          {error && (
-            <p className="mt-5 rounded-lg bg-muted px-3 py-2 text-[12.5px] text-destructive">
-              {error}
-            </p>
-          )}
         </FormSection>
 
         <FormActions>

@@ -33,7 +33,7 @@
 
   --color-border: #e4e4e7;
   --color-input: #e4e4e7;
-  --color-ring: #18181b;
+  --color-ring: #d4d4d8;
 
   --color-success: #10b981;
   --color-success-foreground: #ffffff;
@@ -88,6 +88,7 @@
 
   html {
     scroll-behavior: smooth;
+    font-size: 17px;
   }
 }
 
@@ -181,8 +182,23 @@ input[type="number"] {
   animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes pop-in {
+  0% { opacity: 0; transform: translateY(18px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-pop-in {
+  opacity: 0;
+  transform-origin: top;
+  animation: pop-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up {
+    opacity: 1;
+    animation: none;
+  }
+  .animate-pop-in {
     opacity: 1;
     animation: none;
   }

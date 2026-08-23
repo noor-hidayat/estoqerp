@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, Pencil, Plus, Trash2, Warehouse as WarehouseIcon } from "lucide-react";
+import { Plus, Trash2, Warehouse as WarehouseIcon } from "lucide-react";
 import { useAllWarehouses, useBranches, useLocations, useRemove } from "@/lib/api/query";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
@@ -10,14 +10,8 @@ import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ShellLoader } from "@/components/ui/loader";
+import { timeAgo } from "@/lib/utils";
 import type { Warehouse } from "@/types";
 
 export default function WarehousesPage() {
@@ -27,15 +21,6 @@ export default function WarehousesPage() {
   const { data: locations = [] } = useLocations();
   const removeWarehouse = useRemove("warehouses");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-
-  const handleRemove = async (w: Warehouse) => {
-    if (!confirm(`Delete warehouse "${w.name}"?`)) return;
-    try {
-      await removeWarehouse.mutateAsync(w.id);
-    } catch {
-      alert("Cannot delete this warehouse because it is still used by locations or projects.");
-    }
-  };
 
   const handleBulkRemove = async () => {
     const n = selected.size;
@@ -80,37 +65,10 @@ export default function WarehousesPage() {
       cell: (w) => <span className="text-muted-foreground">{locations.filter((l) => l.warehouseId === w.id).length} locations</span>,
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (w) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              aria-label={`Actions for ${w.name}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={() => navigate(`/app/data-library/warehouses/${w.id}`)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => handleRemove(w)}
-            >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      id: "created",
+      header: "Created",
+      sortValue: (w) => w.createdAt ?? "",
+      cell: (w) => <span className="text-xs text-muted-foreground">{timeAgo(w.createdAt)}</span>,
     },
   ];
 

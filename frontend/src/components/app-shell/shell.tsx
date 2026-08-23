@@ -31,7 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Topbar />
         <main
           className={cn(
-            "min-w-0 flex-1 min-h-0 overflow-y-auto px-4 pt-8 sm:px-8 sm:pt-10",
+            "min-w-0 flex-1 min-h-0 overflow-y-auto px-4 pt-6 sm:px-8 sm:pt-8",
             isAiChat ? "pb-0" : "pb-10"
           )}
         >

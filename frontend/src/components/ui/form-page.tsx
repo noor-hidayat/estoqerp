@@ -9,6 +9,8 @@ export function FormPage({
   description,
   actions,
   titleBadge,
+  tabs,
+  className,
   children,
 }: {
   breadcrumb?: ReactNode;
@@ -17,12 +19,14 @@ export function FormPage({
   description?: string;
   actions?: ReactNode;
   titleBadge?: ReactNode;
+  tabs?: ReactNode;
+  className?: string;
   children: ReactNode;
 }) {
   return (
     <div className="w-full">
       {breadcrumb}
-      <div className="mb-9 mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+      <div className={cn("-mt-2 sm:-mt-4 mb-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-4", className)}>
         <div className="min-w-0">
           {eyebrow && (
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
@@ -43,6 +47,7 @@ export function FormPage({
         </div>
         {actions && <div className="shrink-0">{actions}</div>}
       </div>
+      {tabs && <div className="mb-5 -mt-1">{tabs}</div>}
       <div className="w-full">{children}</div>
     </div>
   );

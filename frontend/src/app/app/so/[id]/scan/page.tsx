@@ -20,6 +20,7 @@ import {
   useScanSessions,
   useScanRecords,
   useBarcodeFormats,
+  useBatchFormats,
   useItemsList,
   useItemGroups,
   useInsert,
@@ -27,7 +28,7 @@ import {
 } from "@/lib/api/query";
 import { syncMasterCache, getAll } from "@/lib/local-cache";
 import { parseBarcode } from "@/lib/barcode/parser";
-import type { BarcodeFormat, ItemGroup, Item, ScanRecord, ScanSession } from "@/types";
+import type { BarcodeFormat, BatchFormat, ItemGroup, Item, ScanRecord, ScanSession } from "@/types";
 import { formatNumber, formatTime, cx } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +50,17 @@ interface ScanParsed {
   formatId?: string;
   formatName?: string;
   values?: Record<string, string>;
+  batchNumber?: string;
+  batch?: {
+    formatId: string;
+    formatName: string;
+    values: Record<string, string>;
+    productionDate: string | null;
+    shift: string | null;
+    alternativeCode: string | null;
+    meta: Record<string, string>;
+    matched: boolean;
+  } | null;
 }
 
 interface BufferEntry {
@@ -57,6 +69,14 @@ interface BufferEntry {
   format: BarcodeFormat;
   count: number;
   source: ScanRecord["source"];
+}
+
+/** Qty master per barcode — kolom qty, fallback uomQty. */
+function masterQtyOf(item?: Item): number {
+  if (!item) return 0;
+  if (item.qty && item.qty > 0) return item.qty;
+  if (item.uomQty && Number(item.uomQty) > 0) return Number(item.uomQty);
+  return 0;
 }
 
 export default function ScanSessionPage() {
@@ -78,15 +98,21 @@ export default function ScanSessionPage() {
   );
   const sessionRecords = scanRecordsData?.rows ?? [];
   const { data: formats = [] } = useBarcodeFormats();
+  const { data: batchFormats = [] } = useBatchFormats();
   const { data: allItems = [] } = useItemsList();
   const { data: itemGroups = [] } = useItemGroups();
 
   // Sync master data to IndexedDB so scan can lookup offline
   useEffect(() => {
     if (formats.length && allItems.length && itemGroups.length) {
-      void syncMasterCache({ items: allItems, itemGroups, barcodeFormats: formats });
+      void syncMasterCache({
+        items: allItems,
+        itemGroups,
+        barcodeFormats: formats,
+        batchFormats,
+      });
     }
-  }, [formats, allItems, itemGroups]);
+  }, [formats, allItems, itemGroups, batchFormats]);
 
   const insertScanSession = useInsert("scanSessions");
   const insertScanRecord = useInsert("scanRecords");
@@ -112,6 +138,7 @@ export default function ScanSessionPage() {
   const [manualQty, setManualQty] = useState("1");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [lastScanned, setLastScanned] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const lastScanRef = useRef<{ barcode: string; at: number } | null>(null);
   const lookupCacheRef = useRef(new Map<string, {
@@ -123,6 +150,8 @@ export default function ScanSessionPage() {
     formatId?: string;
     formatName?: string;
     values?: Record<string, string>;
+    batchNumber?: string;
+    batch?: ScanParsed["batch"];
   }>());
 
   useEffect(() => {
@@ -235,11 +264,17 @@ export default function ScanSessionPage() {
       formatId?: string;
       formatName?: string;
       values?: Record<string, string>;
+      batchNumber?: string;
+      batch?: ScanParsed["batch"];
     };
 
     // 1. In-memory parse (online — fastest)
     if (formats.length && allItems.length && itemGroups.length) {
-      const parsed = parseBarcode(barcode, formats, { items: allItems, itemGroups });
+      const parsed = parseBarcode(barcode, formats, {
+        items: allItems,
+        itemGroups,
+        batchFormats,
+      });
       if (parsed && parsed.matched) {
         if (parsed.item) {
           const itemGroup = itemGroups.find((c) => c.id === parsed.item!.itemGroupId) ?? null;
@@ -247,6 +282,7 @@ export default function ScanSessionPage() {
             found: true, matched: true,
             item: parsed.item, itemGroup,
             formatId: parsed.formatId, formatName: parsed.formatName, values: parsed.values,
+            batchNumber: parsed.batchNumber, batch: parsed.batch,
           } as LookupResponse;
         }
         return { found: false, matched: true, detail: "no match" } as LookupResponse;
@@ -255,13 +291,18 @@ export default function ScanSessionPage() {
 
     // 2. IndexedDB parse (offline fallback)
     try {
-      const [dbFormats, dbItems, dbItemGroups] = await Promise.all([
+      const [dbFormats, dbItems, dbItemGroups, dbBatchFormats] = await Promise.all([
         getAll<BarcodeFormat>("barcodeFormats"),
         getAll<Item>("items"),
         getAll<ItemGroup>("itemGroups"),
+        getAll<BatchFormat>("batchFormats"),
       ]);
       if (dbFormats.length && dbItems.length) {
-        const parsed = parseBarcode(barcode, dbFormats, { items: dbItems, itemGroups: dbItemGroups });
+        const parsed = parseBarcode(barcode, dbFormats, {
+          items: dbItems,
+          itemGroups: dbItemGroups,
+          batchFormats: dbBatchFormats,
+        });
         if (parsed && parsed.matched) {
           if (parsed.item) {
             const itemGroup = dbItemGroups.find((c) => c.id === parsed.item!.itemGroupId) ?? null;
@@ -269,6 +310,7 @@ export default function ScanSessionPage() {
               found: true, matched: true,
               item: parsed.item, itemGroup,
               formatId: parsed.formatId, formatName: parsed.formatName, values: parsed.values,
+              batchNumber: parsed.batchNumber, batch: parsed.batch,
             } as LookupResponse;
           }
           return { found: false, matched: true, detail: "no match" } as LookupResponse;
@@ -327,6 +369,23 @@ export default function ScanSessionPage() {
     }
     const lookupItem = lookup.item;
 
+    // Kode alternatif yang ter-encode di batch wajib cocok dengan item.
+    if (
+      lookup.batch?.matched &&
+      lookup.batch.alternativeCode &&
+      lookupItem.alternativeCode &&
+      lookup.batch.alternativeCode.trim().toLowerCase() !==
+        lookupItem.alternativeCode.trim().toLowerCase()
+    ) {
+      setFeed({
+        ok: false,
+        title: "Batch Tidak Cocok",
+        detail: `Batch meng-encode kode alternatif "${lookup.batch.alternativeCode}" tetapi item "${lookupItem.name}" punya kode alternatif "${lookupItem.alternativeCode}".`,
+      });
+      setInput("");
+      return;
+    }
+
     const format = formats.find((f) => f.id === lookup.formatId);
     if (!format) {
       setFeed({
@@ -346,6 +405,8 @@ export default function ScanSessionPage() {
         formatId: lookup.formatId,
         formatName: lookup.formatName,
         values: lookup.values,
+        batchNumber: lookup.batchNumber,
+        batch: lookup.batch,
       },
       format,
       count: 1,
@@ -405,6 +466,7 @@ export default function ScanSessionPage() {
     }
     setInput("");
     if (!cameraOpen) inputRef.current?.focus();
+    setLastScanned(barcode);
   };
 
   const openSave = () => {
@@ -438,7 +500,7 @@ export default function ScanSessionPage() {
       return;
     }
     for (const e of buffer) {
-      const masterQty = e.parsed.item?.qty;
+      const masterQty = masterQtyOf(e.parsed.item);
       const autoQty =
         e.format.qtyPerFormat && masterQty && masterQty > 0
           ? masterQty * e.count
@@ -580,6 +642,17 @@ export default function ScanSessionPage() {
             )}
           </div>
 
+          {lastScanned && (
+            <div className="mt-4 rounded-lg border border-border bg-muted/50 px-4 py-3">
+              <p className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Last barcode
+              </p>
+              <p className="mt-1 break-all font-mono text-[13px] tracking-wider text-card-foreground">
+                {lastScanned}
+              </p>
+            </div>
+          )}
+
           {cameraOpen ? (
             <div className="mt-5">
               <CameraScanner
@@ -640,16 +713,19 @@ export default function ScanSessionPage() {
         <div className="rounded-lg border border-border bg-card">
           <div className="border-b border-border px-5 py-3.5">
             <h3 className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Barcode History
+              Latest 10 Barcodes
             </h3>
           </div>
           {history.length === 0 ? (
             <div className="h-[308px]" />
           ) : (
-            <div className="h-[308px] overflow-y-auto">
-                  {history.map((h) => (
-                    <div key={h.key} className="flex h-11 items-center px-5">
-                      <p className="min-w-0 flex-1 truncate font-mono text-[13px] tracking-wider text-card-foreground">
+            <div className="max-h-[308px] overflow-y-auto">
+                  {history.slice(-10).reverse().map((h) => (
+                    <div
+                      key={h.key}
+                      className="border-b border-border px-5 py-1.5 last:border-0"
+                    >
+                      <p className="break-all font-mono text-[12.5px] leading-relaxed tracking-wider text-card-foreground">
                         {h.barcode}
                       </p>
                     </div>
@@ -689,6 +765,16 @@ export default function ScanSessionPage() {
                       <p className="truncate font-mono text-[10.5px] text-muted-foreground">
                         {e.barcode}
                       </p>
+                      {e.parsed.batch && e.parsed.batch.matched && (
+                        <p className="truncate text-[10.5px] text-sky-600">
+                          batch {e.parsed.batchNumber}
+                          {e.parsed.batch.productionDate &&
+                            ` · ${e.parsed.batch.productionDate}`}
+                          {e.parsed.batch.shift && ` · shift ${e.parsed.batch.shift}`}
+                          {e.parsed.batch.alternativeCode &&
+                            ` · alt ${e.parsed.batch.alternativeCode}`}
+                        </p>
+                      )}
                     </div>
                     <div className="text-right">
                       <p className="font-mono text-[12.5px] font-semibold text-card-foreground">
@@ -756,7 +842,7 @@ export default function ScanSessionPage() {
 
                 <div className="max-h-[52vh] divide-y divide-border overflow-y-auto">
                   {buffer.map((e) => {
-                    const masterQty = e.parsed.item?.qty;
+                    const masterQty = masterQtyOf(e.parsed.item);
                     const autoQty =
                       e.format.qtyPerFormat && masterQty && masterQty > 0
                         ? masterQty * e.count

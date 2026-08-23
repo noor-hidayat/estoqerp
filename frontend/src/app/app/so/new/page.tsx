@@ -19,6 +19,7 @@ import {
 import { MANAGER_ROLES } from "@/lib/roles";
 import { cx } from "@/lib/utils";
 import type { OpnameMode } from "@/types";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 const MODES: {
   id: OpnameMode;
@@ -68,6 +69,7 @@ export default function NewProjectPage() {
   const [mode, setMode] = useState<OpnameMode>("COMPARE");
   const [deadline, setDeadline] = useState("");
   const [error, setError] = useState("");
+  useErrorToast(error);
   const [saving, setSaving] = useState(false);
 
   const { data: warehouseData = [] } = useWarehouses(
@@ -224,11 +226,6 @@ export default function NewProjectPage() {
           </div>
         </FormSection>
 
-        {error && (
-          <p className="mb-5 rounded-lg bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">
-            {error}
-          </p>
-        )}
 
         <FormActions>
           <Button

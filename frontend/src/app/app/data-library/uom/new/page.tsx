@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus } from "lucide-react";
 import { useUoms, useInsert } from "@/lib/api/query";
 import { useSaveShortcut } from "@/lib/use-save-shortcut";
+import { useErrorToast } from "@/hooks/use-error-toast";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export default function NewUomPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ code: "", name: "" });
   const [error, setError] = useState("");
+  useErrorToast(error);
 
   const { data: uomsRaw = [] } = useUoms();
   const insertUom = useInsert("uom");
@@ -61,11 +63,6 @@ export default function NewUomPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </FormGrid>
-          {error && (
-            <p className="mt-5 rounded-lg bg-muted px-3 py-2 text-[12.5px] text-destructive">
-              {error}
-            </p>
-          )}
         </FormSection>
 
         <FormActions>

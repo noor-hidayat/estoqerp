@@ -22,6 +22,7 @@ import {
   FormGrid,
 } from "@/components/ui/form-page";
 import { MANAGER_ROLES } from "@/lib/roles";
+import { useErrorToast } from "@/hooks/use-error-toast";
 
 const formSchema = z.object({
   name: z.string().min(1, "Project name is required"),
@@ -45,6 +46,13 @@ function Page() {
   const navigate = useNavigate();
   const { data: branches } = useBranches();
   const create = useCreateOpnameProject();
+  useErrorToast(
+    create.isError
+      ? create.error instanceof Error
+        ? create.error.message
+        : "Failed to create project."
+      : null
+  );
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -281,15 +289,7 @@ return (
             />
           </FormGrid>
         </FormSection>
-
-        {create.isError && (
-          <p className="mb-5 rounded-lg bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">
-            {create.error instanceof Error
-              ? create.error.message
-              : "Failed to create project."}
-          </p>
-        )}
-      </form>
-    </FormPage>
+        </form>
+      </FormPage>
   );
 }

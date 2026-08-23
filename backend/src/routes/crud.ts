@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { AnyPgColumn, AnyPgTable } from "drizzle-orm/pg-core";
 import { db } from "../db/pool";
 import * as schema from "../db/schema";
+import { parseBatchNumber, type BatchFormatLike } from "../lib/batch-parse";
 import { canAccessEntity, canViewOpnameContext, checkAnyPermission, checkPermission, systemRoleId } from "../middleware/rbac";
 
 // Tabel relasi yang disinkronisasi frontend dengan pola "hapus dulu, insert
@@ -28,6 +29,7 @@ const ID_PREFIXES: Record<string, string> = {
   items: "itm",
   roles: "role",
   barcodeFormats: "fmt",
+  batchFormats: "bfmt",
   stockBalances: "sb",
   opnameEntries: "ent",
   uom: "uom",
@@ -42,7 +44,6 @@ const ID_PREFIXES: Record<string, string> = {
 const UUID_ID_TABLES: Record<string, string> = {
   scanSessions: "ses",
   scanRecords: "rec",
-  stockMovements: "smv",
   stockMovementDetails: "smd",
   stockLedger: "sld",
   stockBatches: "stb",
@@ -133,6 +134,7 @@ const CRUD_TABLES: Record<string, AnyPgTable> = {
   items: schema.items,
   stockBalances: schema.stockBalances,
   barcodeFormats: schema.barcodeFormats,
+  batchFormats: schema.batchFormats,
   projects: schema.projects,
   scanSessions: schema.scanSessions,
   scanRecords: schema.scanRecords,
@@ -184,6 +186,14 @@ function queryNum(req: Request, name: string): number | null {
 
 function idColumn(table: AnyPgTable) {
   return (table as unknown as { id: AnyPgColumn }).id;
+}
+
+/** Format batch aktif (segments JSONB → tipe parser). */
+async function activeBatchFormats(): Promise<BatchFormatLike[]> {
+  return (await db
+    .select()
+    .from(schema.batchFormats)
+    .where(eq(schema.batchFormats.isActive, true))) as unknown as BatchFormatLike[];
 }
 
 function sanitizeRow(table: AnyPgTable, row: Record<string, unknown>) {
@@ -270,6 +280,7 @@ const TABLE_MENU: Record<string, string | string[]> = {
   itemGroups: "master",
   items: "master",
   barcodeFormats: "master",
+  batchFormats: "master",
   projects: "opname",
   // Dibaca lintas fitur: halaman Scan, daftar Session, detail Session, dan
   // laporan Riwayat Scan — cukup punya salah satu menu untuk MEMBACA.
@@ -382,6 +393,7 @@ const SORT_COLS: Record<string, AnyPgColumn> = {
   users: schema.users.name,
   roles: schema.roles.name,
   barcodeFormats: schema.barcodeFormats.updatedAt,
+  batchFormats: schema.batchFormats.updatedAt,
   uom: schema.uom.code,
   movementTypes: schema.movementTypes.code,
   stockMovements: schema.stockMovements.movementDate,
@@ -406,9 +418,10 @@ const SEARCHABLE_COLS: Record<string, AnyPgColumn[]> = {
   uom: [schema.uom.code, schema.uom.name],
   movementTypes: [schema.movementTypes.code, schema.movementTypes.name],
   batches: [schema.batches.batchNumber, schema.batches.status],
+  batchFormats: [schema.batchFormats.name, schema.batchFormats.id],
   stockBatches: [schema.stockBatches.batchId],
   stockMovements: [
-    schema.stockMovements.movementNumber,
+    schema.stockMovements.id,
     schema.stockMovements.status,
     schema.stockMovements.description,
   ],
@@ -858,7 +871,7 @@ crudRouter.get("/items/lookup", async (req, res) => {  if (!req.user) {
     const itemsAll = await db.select().from(schema.items);
 
     for (const fmt of formats) {
-      const segments = (fmt.segments ?? []) as { id: string; field: string; start: number; end: number; label?: string }[];
+      const segments = (fmt.segments ?? []) as { id: string; field: string; start: number; end: number; label?: string; batchFormatId?: string }[];
       if (barcode.length < segments.reduce((m, s) => Math.max(m, s.end), 0)) continue;
 
       const values: Record<string, string> = {};
@@ -874,11 +887,22 @@ crudRouter.get("/items/lookup", async (req, res) => {  if (!req.user) {
         if (seg.field === "BARCODE_ID") barcodeId = val;
       }
 
+      // Segmen BATCH wajib menunjuk format batch — tanpa ikatan format tidak valid.
+      const batchSeg = segments.find((s) => s.field === "BATCH");
+      let batch: ReturnType<typeof parseBatchNumber> | null = null;
+      if (batchSeg) {
+        if (!batchSeg.batchFormatId) continue;
+        const bf = (await activeBatchFormats()).find(
+          (f) => f.id === batchSeg.batchFormatId
+        );
+        if (bf) batch = parseBatchNumber(values.BATCH, [bf]);
+      }
+
       if (barcodeId) {
         const item = itemsAll.find((it) => it.barcodeId === barcodeId);
         if (item) {
           const ig = itemGroupsAll.find((c) => c.id === item.itemGroupId) ?? null;
-          res.json({ found: true, item, itemGroup: ig ? { id: ig.id, code: ig.code, name: ig.name } : null, matched: true, formatId: fmt.id, formatName: fmt.name, values });
+          res.json({ found: true, item, itemGroup: ig ? { id: ig.id, code: ig.code, name: ig.name } : null, matched: true, formatId: fmt.id, formatName: fmt.name, values, batchNumber: values.BATCH ?? undefined, batch });
           return;
         }
       }
@@ -886,7 +910,21 @@ crudRouter.get("/items/lookup", async (req, res) => {  if (!req.user) {
         const item = itemsAll.find((it) => it.code.toLowerCase() === itemCode!.toLowerCase());
         if (item) {
           const ig = itemGroupsAll.find((c) => itemGroupCode ? c.code.toLowerCase() === itemGroupCode.toLowerCase() : c.id === item.itemGroupId) ?? null;
-          res.json({ found: true, item, itemGroup: ig ? { id: ig.id, code: ig.code, name: ig.name } : null, matched: true, formatId: fmt.id, formatName: fmt.name, values });
+          res.json({ found: true, item, itemGroup: ig ? { id: ig.id, code: ig.code, name: ig.name } : null, matched: true, formatId: fmt.id, formatName: fmt.name, values, batchNumber: values.BATCH ?? undefined, batch });
+          return;
+        }
+      }
+      // Fallback terakhir: item terkode lewat alternative code di batch.
+      if (batch?.alternativeCode) {
+        const alt = batch.alternativeCode.trim().toLowerCase();
+        const item = itemsAll.find(
+          (it) =>
+            it.alternativeCode &&
+            it.alternativeCode.trim().toLowerCase() === alt
+        );
+        if (item) {
+          const ig = itemGroupsAll.find((c) => c.id === item.itemGroupId) ?? null;
+          res.json({ found: true, item, itemGroup: ig ? { id: ig.id, code: ig.code, name: ig.name } : null, matched: true, formatId: fmt.id, formatName: fmt.name, values, batchNumber: values.BATCH ?? undefined, batch });
           return;
         }
       }
@@ -945,6 +983,20 @@ crudRouter.get("/scan-records/check", async (req, res) => {
         scannedAt: record.scannedAt,
       },
     });
+  } catch (e) {
+    res.status(500).json({ error: messageOf(e) });
+  }
+});
+
+// GET /batch-formats/parse?number= — hint live saat input batch number
+// (form stock movement, master batch). Bisa dibaca oleh siapa pun yang
+// boleh membuka master, inventory, atau opname.
+crudRouter.get("/batch-formats/parse", async (req, res) => {
+  if (!(await checkAnyPermission(req, res, ["master", "inventory", "opname"], "view"))) return;
+  try {
+    const number = queryStr(req, "number");
+    if (!number) { res.json({ parsed: null }); return; }
+    res.json({ parsed: parseBatchNumber(number, await activeBatchFormats()) });
   } catch (e) {
     res.status(500).json({ error: messageOf(e) });
   }
@@ -1146,6 +1198,73 @@ crudRouter.get("/:table/:id", async (req, res) => {
   }
 });
 
+// Cari atau buat batch (item, batch_number) dari scan record — metadata
+// (tanggal produksi/shift/custom) diisi otomatis dari parse batch format.
+// Bila batch number meng-encode kode alternatif item yang tidak cocok,
+// lempar error (kode BATCH_MISMATCH → 409 di caller).
+async function resolveBatchFromScan(
+  itemId: string,
+  batchNumber: string
+): Promise<string | null> {
+  const [item] = await db
+    .select({ alternativeCode: schema.items.alternativeCode })
+    .from(schema.items)
+    .where(eq(schema.items.id, itemId))
+    .limit(1);
+  const parsed = parseBatchNumber(batchNumber, await activeBatchFormats());
+  const alt = parsed?.alternativeCode;
+  if (alt && item?.alternativeCode) {
+    if (alt.trim().toLowerCase() !== item.alternativeCode.trim().toLowerCase()) {
+      const err = new Error(
+        `Batch "${batchNumber}" meng-encode kode alternatif "${alt}" tetapi item ini punya kode alternatif "${item.alternativeCode}" — batch tidak cocok dengan item.`
+      ) as Error & { code?: string };
+      err.code = "BATCH_MISMATCH";
+      throw err;
+    }
+  }
+
+  const [existing] = await db
+    .select({ id: schema.batches.id })
+    .from(schema.batches)
+    .where(
+      and(
+        eq(schema.batches.itemId, itemId),
+        eq(schema.batches.batchNumber, batchNumber)
+      )
+    )
+    .limit(1);
+  if (existing) return existing.id;
+
+  const id = `bat_${crypto.randomUUID()}`;
+  const values: typeof schema.batches.$inferInsert = {
+    id,
+    itemId,
+    batchNumber,
+    status: "ACTIVE",
+  };
+  if (parsed) {
+    if (parsed.productionDate) values.productionDate = parsed.productionDate;
+    if (parsed.shift) values.shift = parsed.shift;
+    if (Object.keys(parsed.meta).length > 0) values.meta = parsed.meta;
+  }
+  try {
+    await db.insert(schema.batches).values(values).onConflictDoNothing();
+  } catch {
+    // race — batch dibuat request lain; cari lagi di bawah
+  }
+  const [row] = await db
+    .select({ id: schema.batches.id })
+    .from(schema.batches)
+    .where(
+      and(
+        eq(schema.batches.itemId, itemId),
+        eq(schema.batches.batchNumber, batchNumber)
+      )
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
 // POST /:table
 crudRouter.post("/:table", async (req, res) => {
   const tableName = paramString(req, "table");
@@ -1182,6 +1301,17 @@ crudRouter.post("/:table", async (req, res) => {
         values.code = String(values.code).trim();
       }
     }
+    if (tableName === "scanRecords") {
+      const parsed = (values.parsed ?? {}) as Record<string, unknown>;
+      const batchNumber =
+        typeof parsed.BATCH === "string" && parsed.BATCH.trim()
+          ? parsed.BATCH.trim()
+          : null;
+      if (batchNumber && typeof values.itemId === "string") {
+        const batchId = await resolveBatchFromScan(values.itemId, batchNumber);
+        if (batchId) values.batchId = batchId;
+      }
+    }
     let insertValues = await ensureRowId(tableName, values);
     let rows: Record<string, unknown>[];
     try {
@@ -1201,6 +1331,14 @@ crudRouter.post("/:table", async (req, res) => {
     const row = rows[0] ?? insertValues;
     res.status(201).json(sanitizeRow(table, row as Record<string, unknown>));
   } catch (e) {
+    if (
+      typeof e === "object" &&
+      e !== null &&
+      (e as { code?: string }).code === "BATCH_MISMATCH"
+    ) {
+      res.status(409).json({ error: (e as Error).message });
+      return;
+    }
     res.status(500).json({ error: messageOf(e) });
   }
 });
@@ -1265,6 +1403,23 @@ crudRouter.delete("/:table/:id", async (req, res) => {
         .limit(1);
       if (mt?.builtin) {
         res.status(409).json({ error: "Tipe transaksi bawaan (Receipt/Issue/Transfer) tidak dapat dihapus." });
+        return;
+      }
+    }
+    if (tableName === "batchFormats") {
+      const rowId = paramString(req, "id");
+      const refs = await db
+        .select({ id: schema.barcodeFormats.id, name: schema.barcodeFormats.name, segments: schema.barcodeFormats.segments })
+        .from(schema.barcodeFormats);
+      const usedBy = refs.find((f) =>
+        ((f.segments ?? []) as { batchFormatId?: string }[]).some(
+          (s) => s.batchFormatId === rowId
+        )
+      );
+      if (usedBy) {
+        res.status(409).json({
+          error: `Format batch ini masih dipakai oleh format barcode "${usedBy.name}" — ubah atau hapus segmen BATCH-nya terlebih dahulu.`,
+        });
         return;
       }
     }

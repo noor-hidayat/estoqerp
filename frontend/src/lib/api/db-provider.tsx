@@ -53,6 +53,7 @@ export const EMPTY_DB: DB = {
   items: [],
   stockBalances: [],
   barcodeFormats: [],
+  batchFormats: [],
   projects: [],
   scanSessions: [],
   scanRecords: [],

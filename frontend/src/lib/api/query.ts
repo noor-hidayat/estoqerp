@@ -6,7 +6,8 @@ import type {
   User, Role, RolePermission, BranchAccess,
   OpnameProject, OpnameProjectDetail,
   MovementType, Uom, StockMovementListRow, StockMovementDetailFull,
-  StockLedgerRow, MovementInput, Batch, StockBatch,
+  StockLedgerRow, MovementInput, Batch, StockBatch, BatchFormat,
+  ScanHistoryRow,
 } from "@/types";
 
 function qs(params: Record<string, unknown>): string {
@@ -199,6 +200,10 @@ export function useBarcodeFormats() {
   return useResourceList<BarcodeFormat>("barcodeFormats");
 }
 
+export function useBatchFormats() {
+  return useResourceList<BatchFormat>("batchFormats");
+}
+
 export function useMovementTypes() {
   return useResourceList<MovementType>("movementTypes");
 }
@@ -227,6 +232,8 @@ export function useStockMovements(params?: {
   typeId?: string;
   fromWarehouseId?: string;
   toWarehouseId?: string;
+  sort?: string;
+  dir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 }) {
@@ -242,6 +249,17 @@ export function useStockMovement(id?: string) {
     queryFn: () => api.get<StockMovementDetailFull>(`/transactions/${id}`),
     enabled: !!id,
   });
+}
+
+export function useScanHistory(params?: {
+  query?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  return usePaginatedList<ScanHistoryRow>(
+    "transactions/scan-history",
+    params as Record<string, unknown>
+  );
 }
 
 export function useStockLedger(params?: {

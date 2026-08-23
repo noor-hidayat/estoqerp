@@ -1,19 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { FolderKanban, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { FolderKanban, Plus, Trash2 } from "lucide-react";
 import { useOpnameProjects, useDeleteOpnameProject } from "@/lib/api/query";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cx } from "@/lib/utils";
+import { cx, timeAgo } from "@/lib/utils";
 
 interface ProjectRow {
   id: string;
@@ -22,10 +16,10 @@ interface ProjectRow {
   deadline: string | null;
   progress: { pct: number };
   status: string;
+  createdAt: string;
 }
 
 export default function ProjectsPage() {
-  const navigate = useNavigate();
   const { data: projects, isLoading } = useOpnameProjects();
   const deleteMut = useDeleteOpnameProject();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -121,35 +115,11 @@ export default function ProjectsPage() {
       cell: (p) => <StatusBadge status={p.status} />,
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
+      id: "created",
+      header: "Created",
+      sortValue: (p) => p.createdAt,
       cell: (p) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreHorizontal size={15} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => navigate(`/app/so?projectId=${p.id}`)}>
-              Stock Opname
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => {
-                if (
-                  confirm("Delete this project and all stock opnames within it?")
-                ) {
-                  deleteMut.mutate(p.id);
-                }
-              }}
-            >
-              <Trash2 size={14} />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <span className="text-muted-foreground">{timeAgo(p.createdAt)}</span>
       ),
     },
   ];
