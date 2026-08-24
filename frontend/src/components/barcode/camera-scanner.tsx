@@ -5,6 +5,7 @@ import { Camera, Video, X } from "lucide-react";
 
 const MAX_DECODE_WIDTH = 560;
 const DEDUP_MS = 200;           // debounce barcode yang sama
+const SCAN_COOLDOWN_MS = 1200;  // jeda setelah scan sukses sebelum scan berikutnya
 const ROI_W_PCT = 0.80;         // lebar ROI = 80% frame (sesuai viewfinder)
 const ROI_H_PCT = 0.45;         // tinggi ROI = 45% frame (sesuai viewfinder)
 
@@ -56,6 +57,7 @@ export function CameraScanner({
   const workerBusyRef = useRef(false);
   const seqRef = useRef(0);
   const lastScanRef = useRef<{ text: string; at: number } | null>(null);
+  const cooldownUntilRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(true);
@@ -83,7 +85,11 @@ export function CameraScanner({
       const last = lastScanRef.current;
       if (last && last.text === text && now - last.at < DEDUP_MS) return;
 
+      // Jeda setelah scan sukses — abaikan deteksi selama cooldown.
+      if (now < cooldownUntilRef.current) return;
+
       lastScanRef.current = { text, at: now };
+      cooldownUntilRef.current = now + SCAN_COOLDOWN_MS;
       playBeep();
       onScanRef.current(text);
     };

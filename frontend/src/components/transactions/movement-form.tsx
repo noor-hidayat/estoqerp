@@ -506,8 +506,26 @@ export function MovementForm({
       itemCode: string;
       serial: string;
     }[]
-  >([]);
+  >(() =>
+    (initial?.details ?? [])
+      .filter((d) => d.barcode)
+      .map((d) => ({
+        key: `${d.barcode}-${Math.random().toString(36).slice(2)}`,
+        barcode: d.barcode as string,
+        batch: (d as { batchNumber?: string | null }).batchNumber ?? "",
+        itemCode: (d as { itemCode?: string | null }).itemCode ?? "",
+        serial: (d as { serialNumber?: string | null }).serialNumber ?? "",
+      }))
+  );
   const lastBarcodeRef = useRef<{ barcode: string; at: number } | null>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const scanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-enter: scanner/manual ketik → submit 1 detik setelah berhenti;
+  // paste → langsung submit tanpa nunggu.
+  useEffect(() => () => {
+    if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
+  }, []);
 
   const { data: types = [], isLoading: typesLoading } = useMovementTypes();
   const { data: items = [] } = useItemsList();
@@ -950,11 +968,29 @@ export function MovementForm({
             </div>
             <div className="relative">
               <Input
+                ref={scanInputRef}
                 value={scanInput}
                 disabled={readOnly}
-                onChange={(e) => setScanInput(e.target.value)}
+                onChange={(e) => {
+                  const isPaste =
+                    (e.nativeEvent as InputEvent).inputType === "insertFromPaste" ||
+                    (e.nativeEvent as InputEvent).inputType === "insertFromDrop";
+                  setScanInput(e.target.value);
+                  if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
+                  if (isPaste) {
+                    if (e.target.value.trim()) void handleScanned(e.target.value);
+                  } else {
+                    scanTimerRef.current = setTimeout(() => {
+                      const v = scanInputRef.current?.value ?? "";
+                      if (v.trim()) void handleScanned(v);
+                    }, 1000);
+                  }
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") void handleScanned(scanInput);
+                  if (e.key === "Enter") {
+                    if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
+                    void handleScanned(scanInput);
+                  }
                 }}
                 placeholder="Scan Barcode"
                 className="h-8 rounded-md pr-11 pl-3 font-mono text-[13px] shadow-none focus-visible:ring-1"
@@ -972,43 +1008,29 @@ export function MovementForm({
             </div>
           </div>
 
-          {!readOnly && scanHistory.length > 0 && (
+          {!readOnly && (
             <div className="overflow-hidden rounded-md border border-border">
               <div className="border-b border-border bg-muted/40 px-3 py-1.5">
                 <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Scan History
                 </span>
               </div>
-              <div className="max-h-56 overflow-y-auto">
-                <table className="w-full text-left text-[12px]">
-                  <thead className="sticky top-0 bg-card">
-                    <tr className="border-b border-border text-[10.5px] uppercase tracking-wider text-muted-foreground">
-                      <th className="px-3 py-1.5 font-semibold">Barcode</th>
-                      <th className="px-2 py-1.5 font-semibold">Batch</th>
-                      <th className="px-2 py-1.5 font-semibold">Item Code</th>
-                      <th className="px-3 py-1.5 font-semibold">Serial Number</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {scanHistory.slice(-10).reverse().map((h) => (
-                      <tr key={h.key} className="hover:bg-muted/30">
-                        <td className="break-all px-3 py-1.5 font-mono text-[11.5px] text-foreground">
-                          {h.barcode}
-                        </td>
-                        <td className="break-all px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
-                          {h.batch || "—"}
-                        </td>
-                        <td className="px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
-                          {h.itemCode}
-                        </td>
-                        <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
-                          {h.serial || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {scanHistory.length === 0 ? (
+                <p className="px-3 py-3 text-[12px] text-muted-foreground">
+                  Belum ada barcode di-scan.
+                </p>
+              ) : (
+                <div className="max-h-56 overflow-y-auto">
+                  {scanHistory.slice(-10).reverse().map((h) => (
+                    <div
+                      key={h.key}
+                      className="break-all border-b border-border px-3 py-1.5 font-mono text-[11.5px] text-foreground last:border-0"
+                    >
+                      {h.barcode}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1255,7 +1277,6 @@ export function MovementForm({
           <div className="min-h-0 flex-1 overflow-hidden rounded-xl">
             <CameraScanner
               onScan={(text) => {
-                setCameraOpen(false);
                 void handleScanned(text);
               }}
               onClose={() => setCameraOpen(false)}
