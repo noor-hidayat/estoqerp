@@ -66,8 +66,10 @@ export default function BatchBarcodesPage() {
       id: "barcode",
       header: "Barcode",
       sortValue: (r) => r.barcode,
-      cell: (r) => <span className="font-mono text-xs">{r.barcode}</span>,
-      className: "whitespace-nowrap",
+      cell: (r) => (
+        <span className="block break-all font-mono text-xs">{r.barcode}</span>
+      ),
+      minWidth: 160,
     },
     {
       id: "batch",

@@ -30,8 +30,10 @@ const MAX_ROWS = 7;
 
 export function VarianceSummary({
   warehouses,
+  dragHandle,
 }: {
   warehouses: WarehouseOpnameRow[];
+  dragHandle?: React.ReactNode;
 }) {
   const rows = useMemo(() => {
     const sorted = warehouses
@@ -51,8 +53,9 @@ export function VarianceSummary({
 
   return (
     <Card className="h-full">
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle>Variance Summary</CardTitle>
+        {dragHandle}
       </CardHeader>
 
       <CardContent className="p-0">

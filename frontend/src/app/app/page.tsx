@@ -1,70 +1,45 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
-  ArrowUpRight,
-  Barcode,
-  ChevronRight,
-  ClipboardList,
-  Gauge,
-  Package,
-  ScanLine,
-} from "lucide-react";
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge, StatusBadge } from "@/components/ui/badge";
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical, Maximize2, SlidersHorizontal } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDashboard } from "@/lib/api/query";
-import { cn, formatId, formatNumber, relativeTime } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 import {
-  StockOpnameChart,
-  type WarehouseOpnameRow,
-} from "@/components/dashboard/stock-opname-chart";
-import { VarianceSummary } from "@/components/dashboard/variance-summary";
-
-function MetricCard({
-  label,
-  value,
-  icon,
-  tone = "primary",
-}: {
-  label: string;
-  value: ReactNode;
-  icon: ReactNode;
-  tone?: "primary" | "emerald" | "sky";
-}) {
-  const tones = {
-    primary: "bg-primary/10 text-primary",
-    emerald: "bg-emerald-50 text-emerald-600",
-    sky: "bg-sky-50 text-sky-600",
-  } as const;
-  return (
-    <Card className="@container/card">
-      <CardHeader className="relative">
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="mt-1 text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-          {value}
-        </CardTitle>
-        <div
-          className={cn(
-            "absolute right-4 top-4 flex size-9 items-center justify-center rounded-lg",
-            tones[tone]
-          )}
-        >
-          {icon}
-        </div>
-      </CardHeader>
-    </Card>
-  );
-}
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { useDashboard } from "@/lib/api/query";
+import { useDashboardLayout } from "@/lib/api/use-dashboard-layout";
+import { cn } from "@/lib/utils";
+import {
+  WIDGETS,
+  DEFAULT_LAYOUT,
+  type WidgetId,
+  type DashboardData,
+} from "@/components/dashboard/widgets";
 
 function DashboardSkeleton() {
   return (
@@ -89,13 +64,150 @@ function DashboardSkeleton() {
   );
 }
 
+function SortableWidget({
+  id,
+  span,
+  onResizePreview,
+  onResizeCommit,
+  render,
+}: {
+  id: string;
+  span: number;
+  onResizePreview: (id: string, span: number) => void;
+  onResizeCommit: (id: string, span: number) => void;
+  render: (dragHandle: ReactNode) => ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    gridColumn: `span ${span}`,
+  };
+
+  const dragHandle = (
+    <button
+      type="button"
+      aria-label="Drag to reorder"
+      className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground cursor-grab touch-none active:cursor-grabbing"
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical size={15} strokeWidth={2} />
+    </button>
+  );
+
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const grid = (e.currentTarget as HTMLElement).closest(
+      "[data-grid]"
+    ) as HTMLElement | null;
+    if (!grid) return;
+    const cs = getComputedStyle(grid);
+    const cols = cs.gridTemplateColumns.split(" ").filter(Boolean).length || 1;
+    const gap = parseFloat(cs.columnGap || "0") || 0;
+    const rect = grid.getBoundingClientRect();
+    const colWidth = (rect.width - (cols - 1) * gap) / cols;
+    const startX = e.clientX;
+    const startSpan = span;
+    let current = startSpan;
+
+    const onMove = (ev: PointerEvent) => {
+      const delta = ev.clientX - startX;
+      let ns = startSpan + Math.round((delta + colWidth / 2) / colWidth);
+      ns = Math.max(1, Math.min(cols, ns));
+      if (ns !== current) {
+        current = ns;
+        onResizePreview(id, ns);
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.userSelect = "";
+      onResizeCommit(id, current);
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const resizeHandle = (
+    <button
+      type="button"
+      aria-label="Resize widget"
+      onPointerDown={startResize}
+      className="absolute bottom-2 right-2 inline-flex size-6 cursor-se-resize items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted hover:text-foreground"
+    >
+      <Maximize2 size={13} strokeWidth={2} />
+    </button>
+  );
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(isDragging && "opacity-70", "relative")}
+    >
+      {render(dragHandle)}
+      {resizeHandle}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { data: dashboard, isLoading, isError } = useDashboard();
-  const [chartExpanded, setChartExpanded] = useState(false);
+  const { layout, isLoading: layoutLoading, save } = useDashboardLayout();
+  const [customizeOpen, setCustomizeOpen] = useState(false);
 
-  const recentSessions = dashboard?.recentSessions ?? [];
+  const savedOrder = (layout?.order ?? DEFAULT_LAYOUT.order) as WidgetId[];
+  const savedHidden = new Set<WidgetId>(
+    (layout?.hidden ?? DEFAULT_LAYOUT.hidden) as WidgetId[]
+  );
 
-  if (isLoading) return <DashboardSkeleton />;
+  const order = useMemo(() => {
+    const known = savedOrder.filter((id) => id in WIDGETS);
+    const missing = (Object.keys(WIDGETS) as WidgetId[]).filter(
+      (id) => !known.includes(id)
+    );
+    return [...known, ...missing];
+  }, [savedOrder]);
+
+  const hidden = savedHidden;
+
+  const [liveSpans, setLiveSpans] = useState<Record<string, number>>({});
+  const spans = { ...(layout?.spans ?? {}), ...liveSpans } as Record<string, number>;
+
+  function previewSpan(id: string, ns: number) {
+    setLiveSpans((p) => ({ ...p, [id]: ns }));
+  }
+  function commitSpan(id: string, ns: number) {
+    setLiveSpans((p) => {
+      const next = { ...p };
+      delete next[id];
+      return next;
+    });
+    save({
+      order,
+      hidden: [...hidden],
+      spans: { ...(layout?.spans ?? {}), [id]: ns },
+    });
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  if (isLoading || layoutLoading) return <DashboardSkeleton />;
 
   if (isError || !dashboard) {
     return (
@@ -113,209 +225,100 @@ export default function DashboardPage() {
     );
   }
 
-  const whOpname: WarehouseOpnameRow[] = dashboard.warehouseOpname ?? [];
-  const LIMIT = 7;
+  const visible = order.filter((id) => !hidden.has(id));
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = order.indexOf(active.id as WidgetId);
+    const newIndex = order.indexOf(over.id as WidgetId);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const next = arrayMove(order, oldIndex, newIndex);
+    save({ order: next, hidden: [...hidden], spans: { ...(layout?.spans ?? {}), ...liveSpans } });
+  }
+
+  function toggleHidden(id: WidgetId) {
+    const nextHidden = new Set(hidden);
+    if (nextHidden.has(id)) nextHidden.delete(id);
+    else nextHidden.add(id);
+    save({ order, hidden: [...nextHidden], spans: { ...(layout?.spans ?? {}), ...liveSpans } });
+  }
+
+  function resetLayout() {
+    save({ order: DEFAULT_LAYOUT.order, hidden: DEFAULT_LAYOUT.hidden });
+  }
 
   return (
     <div className="space-y-6">
-      {/* ===== KPI SUMMARY ===== */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="Active Projects"
-          value={formatNumber(dashboard.active)}
-          icon={<ClipboardList size={17} strokeWidth={2} />}
-        />
-        <MetricCard
-          label="Total Scans"
-          value={formatNumber(dashboard.totalScan)}
-          icon={<ScanLine size={17} strokeWidth={2} />}
-          tone="emerald"
-        />
-        <MetricCard
-          label="Progress"
-          value={`${dashboard.progressPct}%`}
-          icon={<Gauge size={17} strokeWidth={2} />}
-          tone="sky"
-        />
-        <MetricCard
-          label="Total Items"
-          value={formatNumber(dashboard.totalItems)}
-          icon={<Package size={17} strokeWidth={2} />}
-        />
+      <div className="flex items-center justify-end">
+        <Button variant="outline" size="sm" onClick={() => setCustomizeOpen(true)}>
+          <SlidersHorizontal size={14} strokeWidth={2} />
+          Customize
+        </Button>
       </div>
 
-      {/* ===== ANALYTICS: CHART + VARIANCE ===== */}
-      <section className="grid items-start gap-5 xl:grid-cols-[1.7fr_1fr]">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Stock Opname per Warehouse</CardTitle>
-            {whOpname.length > LIMIT && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setChartExpanded((v) => !v)}
-                className="shrink-0 text-primary"
-              >
-                {chartExpanded ? "Collapse" : `View all (${whOpname.length})`}
-                <ChevronRight
-                  size={13}
-                  strokeWidth={2.5}
-                  className={cn(
-                    "transition-transform",
-                    chartExpanded && "rotate-90"
-                  )}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={visible} strategy={rectSortingStrategy}>
+          <div data-grid className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
+            {visible.map((id) => {
+              const W = WIDGETS[id];
+              return (
+                <SortableWidget
+                  key={id}
+                  id={id}
+                  span={spans[id] ?? W.defaultSpan}
+                  onResizePreview={previewSpan}
+                  onResizeCommit={commitSpan}
+                  render={(dh) => <W.Component data={dashboard as DashboardData} dragHandle={dh} />}
                 />
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            {whOpname.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                No warehouse data yet.
-              </p>
-            ) : (
-              <StockOpnameChart
-                warehouses={whOpname}
-                expanded={chartExpanded}
-              />
-            )}
-          </CardContent>
-          <CardFooter className="flex items-center justify-center gap-6 border-t text-sm">
-            <span className="flex items-center gap-2 font-medium leading-none">
-              <span className="size-2.5 rounded-sm bg-[var(--chart-1)]" />
-              Opname Result
-            </span>
-            <span className="flex items-center gap-2 font-medium leading-none">
-              <span className="size-2.5 rounded-sm bg-[var(--chart-2)]" />
-              System Stock
-            </span>
-          </CardFooter>
-        </Card>
+              );
+            })}
+          </div>
+        </SortableContext>
+      </DndContext>
 
-        <VarianceSummary warehouses={whOpname} />
-      </section>
-
-      {/* ===== BOTTOM: ACTIVITY + PROGRESS ===== */}
-      <section className="grid items-start gap-5 lg:grid-cols-2">
-        {/* AKTIVITAS TERBARU */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Recent Activity</CardTitle>
-            <Badge tone="success" dot>
-              Live
-            </Badge>
-          </CardHeader>
-
-          <CardContent className="p-0">
-            {recentSessions.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No scan sessions yet.
-              </p>
-            ) : (
-              <div className="divide-y divide-border">
-                {recentSessions.map((s) => (
-                  <div
-                    key={s.id}
-                    className="flex items-center gap-3 px-6 py-3.5"
-                  >
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <Barcode size={14} strokeWidth={2} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="flex items-baseline gap-2">
-                        <span className="font-mono text-[11px] text-muted-foreground">
-                          {formatId(s.code)}
-                        </span>
-                        <span className="truncate text-sm font-medium">
-                          {s.product}
-                        </span>
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {s.scannedBy} · {formatNumber(s.qty)} scanned
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {relativeTime(s.at)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-
-          <CardFooter className="border-t px-6 py-3">
+      <Sheet open={customizeOpen} onOpenChange={setCustomizeOpen}>
+        <SheetContent side="right" className="w-[360px] sm:w-[400px]">
+          <SheetHeader>
+            <SheetTitle>Customize Dashboard</SheetTitle>
+            <SheetDescription>
+              Atur urutan &amp; widget yang ditampilkan. Tersimpan otomatis.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-2">
+            {(Object.keys(WIDGETS) as WidgetId[]).map((id) => {
+              const w = WIDGETS[id];
+              const isHidden = hidden.has(id);
+              return (
+                <div
+                  key={id}
+                  className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5"
+                >
+                  <span className="text-sm font-medium">{w.title}</span>
+                  <Switch
+                    checked={!isHidden}
+                    onCheckedChange={() => toggleHidden(id)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-6">
             <Button
-              asChild
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="text-primary"
+              className="w-full"
+              onClick={resetLayout}
             >
-              <Link href="/app/report/history">
-                View all activity
-                <ChevronRight size={13} strokeWidth={2.5} />
-              </Link>
+              Reset to default
             </Button>
-          </CardFooter>
-        </Card>
-
-        {/* PROJECT PROGRESS */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Project Progress</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {dashboard.projectProgressRows.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No projects yet.
-              </p>
-            ) : (
-              <div className="divide-y divide-border">
-                {dashboard.projectProgressRows.map((p) => {
-                  const done = p.pct >= 100;
-                  return (
-                    <Link
-                      key={p.id}
-                      href={`/app/so?projectId=${p.id}`}
-                      className="group block px-6 py-4 transition-colors hover:bg-muted/50"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="truncate text-[13px] font-semibold text-foreground group-hover:text-primary">
-                          {p.name}
-                        </p>
-                        <div className="flex shrink-0 items-center gap-2.5">
-                          <span className="font-mono text-[12.5px] font-bold text-foreground">
-                            {p.pct}%
-                          </span>
-                          <StatusBadge
-                            status={done ? "APPROVED" : p.status}
-                          />
-                        </div>
-                      </div>
-                      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-primary transition-all duration-500"
-                          style={{ width: `${p.pct}%` }}
-                        />
-                      </div>
-                      <div className="mt-1.5 flex items-center justify-between gap-3">
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {p.warehouse} · {p.counted} of {p.total} locations
-                          completed
-                        </p>
-                        <ArrowUpRight
-                          size={13}
-                          strokeWidth={2.5}
-                          className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-                        />
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

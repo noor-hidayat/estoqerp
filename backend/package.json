@@ -14,6 +14,7 @@
     "db:seed-dummy": "tsx src/db/seed-dummy.ts",
     "db:seed-transfer": "tsx src/db/seed-transfer-bulk.ts",
     "db:backfill-transfer": "tsx src/db/apply-transfer-effects.ts",
+    "db:backfill-barcodes": "tsx src/db/backfill-stock-barcodes.ts",
     "db:backfill-ids": "tsx src/db/migrate-opname.ts",
     "db:backfill-movement-ids": "tsx src/db/backfill-movement-ids.ts",
     "db:migrate-rbac": "tsx src/db/migrate-rbac.ts",
