@@ -6,6 +6,8 @@ export interface NavItem {
   icon: string;
   /** RBAC menu key — item shows when role has view access to this menu. */
   menu: string;
+  /** Bila true, item hanya tampil bila role punya akses MANAGE (bukan sekadar view). */
+  manage?: boolean;
   /** Submenu (Data Library, Settings) — rendered as expandable group. */
   children?: NavItem[];
 }
@@ -17,13 +19,20 @@ export interface NavGroup {
 
 export const NAV: NavGroup[] = [
   {
-    title: "Main",
+    title: "Dashboards",
     items: [
       {
         label: "Dashboard",
         href: "/app",
         icon: "LayoutDashboard",
         menu: "dashboard",
+      },
+      {
+        label: "Konfigurasi Dashboard",
+        href: "/app/dashboard-config",
+        icon: "LayoutGrid",
+        menu: "dashboard",
+        manage: true,
       },
     ],
   },
@@ -125,6 +134,41 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
+    title: "Supply Chain",
+    items: [
+      {
+        label: "Suppliers",
+        href: "/app/suppliers",
+        icon: "Truck",
+        menu: "supply.suppliers",
+      },
+      {
+        label: "Customers",
+        href: "/app/customers",
+        icon: "Users",
+        menu: "supply.customers",
+      },
+      {
+        label: "Purchase Orders",
+        href: "/app/purchase-orders",
+        icon: "ShoppingCart",
+        menu: "supply.purchaseOrders",
+      },
+      {
+        label: "Sales Orders",
+        href: "/app/sales-orders",
+        icon: "Receipt",
+        menu: "supply.salesOrders",
+      },
+      {
+        label: "Goods Receipts",
+        href: "/app/goods-receipts",
+        icon: "PackageCheck",
+        menu: "supply.goodsReceipts",
+      },
+    ],
+  },
+  {
     title: "Settings",
     items: [
       {
@@ -220,7 +264,10 @@ export const NAV: NavGroup[] = [
 ];
 
 /** Filter nav based on view access (permission-based, not role id). */
-export function navForPermissions(canView: (menu: string) => boolean): NavGroup[] {
+export function navForPermissions(
+  canView: (menu: string) => boolean,
+  canManage?: (menu: string) => boolean
+): NavGroup[] {
   return NAV.map((group) => ({
     ...group,
     items: group.items
@@ -228,9 +275,11 @@ export function navForPermissions(canView: (menu: string) => boolean): NavGroup[
         ...item,
         children: item.children?.filter((child) => canView(child.menu)),
       }))
-      .filter(
-        (item) =>
-          canView(item.menu) || (item.children?.length ?? 0) > 0
-      ),
+      .filter((item) => {
+        const visible = item.manage
+          ? canManage?.(item.menu) ?? false
+          : canView(item.menu) || (item.children?.length ?? 0) > 0;
+        return visible;
+      }),
   })).filter((group) => group.items.length > 0);
 }

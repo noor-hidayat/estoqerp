@@ -31,9 +31,9 @@ export const stockLedgerRouter = Router();
 type Tx = NodePgTransaction<typeof schema, ExtractTablesWithRelations<typeof schema>>;
 
 const MOVEMENT_STATUSES = ["DRAFT", "POSTED", "CANCELED"] as const;
-type MovementStatus = (typeof MOVEMENT_STATUSES)[number];
+export type MovementStatus = (typeof MOVEMENT_STATUSES)[number];
 
-interface DetailInput {
+export interface DetailInput {
   itemId: string;
   fromWarehouseId?: string | null;
   toWarehouseId?: string | null;
@@ -52,7 +52,7 @@ interface EffectDetail {
   batchId: string | null;
 }
 
-interface MovementInput {
+export interface MovementInput {
   typeId: string;
   movementDate: string | null;
   status: MovementStatus;
@@ -637,7 +637,7 @@ async function recomputeLedgerBalances(
   `);
 }
 
-async function insertMovementWithDetails(
+export async function insertMovementWithDetails(
   tx: Tx,
   input: MovementInput,
   actorId: string

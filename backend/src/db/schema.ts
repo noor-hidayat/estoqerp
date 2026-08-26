@@ -107,6 +107,32 @@ export const userSettings = pgTable(
   ]
 );
 
+// Dashboard customizable (multi-dashboard, diatur admin/global).
+// Tiap widget disimpan di tabel terpisah `dashboard_widgets`.
+export const dashboards = pgTable("dashboards", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  ownerId: text("owner_id").references(() => users.id),
+  branchId: text("branch_id").references(() => branches.id),
+  isGlobal: boolean("is_global").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const dashboardWidgets = pgTable("dashboard_widgets", {
+  id: text("id").primaryKey(),
+  dashboardId: text("dashboard_id")
+    .notNull()
+    .references(() => dashboards.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // bar | line | pie | table | kpi
+  config: jsonb("config").notNull().default({}),
+  layout: jsonb("layout").notNull().default({}), // { x, y, w, h }
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // Konfigurasi AI assistant (satu baris global).
 export const aiSettings = pgTable(
   "ai_settings",
@@ -577,4 +603,209 @@ export const opnameScanDetails = pgTable(
     index("idx_opname_scan_details_opname").on(t.opnameId),
     index("idx_opname_scan_details_wh").on(t.warehouseId),
   ]
+);
+
+// --- Supply Chain: master + dokumen (PO / SO / Goods Receipt=Inbound) ---
+
+export const docStatuses = ["DRAFT", "POSTED", "CANCELED"] as const;
+export type DocStatus = (typeof docStatuses)[number];
+
+export const suppliers = pgTable("suppliers", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  contactPerson: text("contact_person"),
+  phone: text("phone"),
+  email: text("email"),
+  address: text("address"),
+  taxId: text("tax_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  branchId: text("branch_id").references(() => branches.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const customers = pgTable("customers", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  contactPerson: text("contact_person"),
+  phone: text("phone"),
+  email: text("email"),
+  address: text("address"),
+  taxId: text("tax_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  branchId: text("branch_id").references(() => branches.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const purchaseOrders = pgTable(
+  "purchase_orders",
+  {
+    id: text("id").primaryKey(),
+    poNo: text("po_no").notNull().unique(),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => suppliers.id),
+    warehouseId: text("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id),
+    orderDate: date("order_date").notNull(),
+    expectedDate: date("expected_date"),
+    status: text("status", { enum: docStatuses })
+      .notNull()
+      .default("DRAFT"),
+    notes: text("notes"),
+    createdBy: text("created_by").references(() => users.id),
+    branchId: text("branch_id").references(() => branches.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_purchase_orders_supplier").on(t.supplierId),
+    index("idx_purchase_orders_wh").on(t.warehouseId),
+    index("idx_purchase_orders_status").on(t.status),
+  ]
+);
+
+export const purchaseOrderLines = pgTable(
+  "purchase_order_lines",
+  {
+    id: text("id").primaryKey(),
+    purchaseOrderId: text("purchase_order_id")
+      .notNull()
+      .references(() => purchaseOrders.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => items.id),
+    uomId: text("uom_id")
+      .notNull()
+      .references(() => uom.id),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
+    batchNumber: text("batch_number"),
+    note: text("note"),
+  },
+  (t) => [index("idx_pol_po").on(t.purchaseOrderId)]
+);
+
+export const salesOrders = pgTable(
+  "sales_orders",
+  {
+    id: text("id").primaryKey(),
+    soNo: text("so_no").notNull().unique(),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    warehouseId: text("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id),
+    orderDate: date("order_date").notNull(),
+    expectedDate: date("expected_date"),
+    status: text("status", { enum: docStatuses })
+      .notNull()
+      .default("DRAFT"),
+    notes: text("notes"),
+    createdBy: text("created_by").references(() => users.id),
+    branchId: text("branch_id").references(() => branches.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_sales_orders_customer").on(t.customerId),
+    index("idx_sales_orders_wh").on(t.warehouseId),
+    index("idx_sales_orders_status").on(t.status),
+  ]
+);
+
+export const salesOrderLines = pgTable(
+  "sales_order_lines",
+  {
+    id: text("id").primaryKey(),
+    salesOrderId: text("sales_order_id")
+      .notNull()
+      .references(() => salesOrders.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => items.id),
+    uomId: text("uom_id")
+      .notNull()
+      .references(() => uom.id),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
+    batchNumber: text("batch_number"),
+    note: text("note"),
+  },
+  (t) => [index("idx_sol_so").on(t.salesOrderId)]
+);
+
+export const goodsReceipts = pgTable(
+  "goods_receipts",
+  {
+    id: text("id").primaryKey(),
+    grNo: text("gr_no").notNull().unique(),
+    purchaseOrderId: text("purchase_order_id")
+      .notNull()
+      .references(() => purchaseOrders.id),
+    supplierId: text("supplier_id").references(() => suppliers.id),
+    warehouseId: text("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id),
+    receiptDate: date("receipt_date").notNull(),
+    status: text("status", { enum: docStatuses })
+      .notNull()
+      .default("DRAFT"),
+    notes: text("notes"),
+    createdBy: text("created_by").references(() => users.id),
+    branchId: text("branch_id").references(() => branches.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_goods_receipts_po").on(t.purchaseOrderId),
+    index("idx_goods_receipts_wh").on(t.warehouseId),
+    index("idx_goods_receipts_status").on(t.status),
+  ]
+);
+
+export const goodsReceiptLines = pgTable(
+  "goods_receipt_lines",
+  {
+    id: text("id").primaryKey(),
+    goodsReceiptId: text("goods_receipt_id")
+      .notNull()
+      .references(() => goodsReceipts.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => items.id),
+    uomId: text("uom_id")
+      .notNull()
+      .references(() => uom.id),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
+    batchNumber: text("batch_number"),
+    note: text("note"),
+  },
+  (t) => [index("idx_grl_gr").on(t.goodsReceiptId)]
 );

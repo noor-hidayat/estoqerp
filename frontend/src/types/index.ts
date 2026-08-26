@@ -462,4 +462,105 @@ export interface MovementInput {
   }[];
 }
 
+// ---- Supply Chain ----
+
+export type DocStatus = "DRAFT" | "POSTED" | "CANCELED";
+
+/** Suppliers & Customers share an identical field shape. */
+export interface Party {
+  id: string;
+  code: string;
+  name: string;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  taxId?: string | null;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type Supplier = Party;
+export type Customer = Party;
+
+export interface PurchaseOrderLine {
+  id: string;
+  purchaseOrderId?: string;
+  itemId: string;
+  uomId: string;
+  /** Arrives as string from API; send as string or number. */
+  qty: string;
+  unitPrice?: string | null;
+  batchNumber?: string | null;
+  note?: string | null;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  /** Equals the row id. */
+  poNo: string | number;
+  supplierId: string;
+  warehouseId: string;
+  orderDate: string;
+  expectedDate?: string | null;
+  notes?: string | null;
+  status: DocStatus;
+  createdAt?: string;
+  updatedAt?: string;
+  lines?: PurchaseOrderLine[];
+  /** Linked Goods Receipts (populated on detail fetch). */
+  receipts?: GoodsReceipt[];
+}
+
+export interface SalesOrderLine {
+  id: string;
+  salesOrderId?: string;
+  itemId: string;
+  uomId: string;
+  qty: string;
+  unitPrice?: string | null;
+  batchNumber?: string | null;
+  note?: string | null;
+}
+
+export interface SalesOrder {
+  id: string;
+  soNo: string | number;
+  customerId: string;
+  warehouseId: string;
+  orderDate: string;
+  expectedDate?: string | null;
+  notes?: string | null;
+  status: DocStatus;
+  createdAt?: string;
+  updatedAt?: string;
+  lines?: SalesOrderLine[];
+}
+
+export interface GoodsReceiptLine {
+  id: string;
+  goodsReceiptId?: string;
+  purchaseOrderId?: string;
+  itemId: string;
+  uomId: string;
+  qty: string;
+  unitPrice?: string | null;
+  batchNumber?: string | null;
+  note?: string | null;
+}
+
+export interface GoodsReceipt {
+  id: string;
+  grNo: string | number;
+  purchaseOrderId: string;
+  warehouseId: string;
+  receiptDate: string;
+  notes?: string | null;
+  status: DocStatus;
+  createdAt?: string;
+  updatedAt?: string;
+  lines?: GoodsReceiptLine[];
+}
+
 

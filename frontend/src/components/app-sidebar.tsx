@@ -17,7 +17,8 @@ import { can } from "@/lib/permissions"
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { isSystem, permissions } = useSession()
   const canView = (menu: string) => can(isSystem, permissions, menu, "view")
-  const groups = navForPermissions(canView)
+  const canManage = (menu: string) => can(isSystem, permissions, menu, "manage")
+  const groups = navForPermissions(canView, canManage)
 
   return (
     <Sidebar collapsible="icon" {...props}>

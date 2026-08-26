@@ -5,6 +5,8 @@ import {
   branches,
   branchAccesses,
   barcodeFormats,
+  dashboards,
+  dashboardWidgets,
   itemGroups,
   items,
   locations,
@@ -114,7 +116,7 @@ async function ensureSystemRoles() {
   ]);
 
   // Permission dasar untuk role non-administrator (isSystem bypass).
-  const allMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","settings.columnWidth","master","master.items","master.itemGroups","master.uom","master.barcodeFormats","master.barcodeFormats.new","master.barcodeFormats.edit","master.batchFormats","master.batchFormats.new","master.batchFormats.edit","inventory","inventory.stockBalance","inventory.branches","inventory.warehouses","inventory.locations","reports","reports.project","reports.summary","reports.history","reports.variance","settings","settings.users","settings.roles","settings.roles.new","settings.roles.edit","ai"];
+  const allMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","settings.columnWidth","master","master.items","master.itemGroups","master.uom","master.barcodeFormats","master.barcodeFormats.new","master.barcodeFormats.edit","master.batchFormats","master.batchFormats.new","master.batchFormats.edit","inventory","inventory.stockBalance","inventory.branches","inventory.warehouses","inventory.locations","supply.suppliers","supply.customers","supply.purchaseOrders","supply.salesOrders","supply.goodsReceipts","reports","reports.project","reports.summary","reports.history","reports.variance","settings","settings.users","settings.roles","settings.roles.new","settings.roles.edit","ai"];
   // Menu yang punya tombol Export (Export/Import hanya untuk menu ini).
   const exportMenus = new Set(["inventory.stockBalance","reports.project","reports.summary","reports.history","reports.variance"]);
   const baseActions = ["view","create","update","delete"];
@@ -129,7 +131,7 @@ async function ensureSystemRoles() {
       perms.push({ id: permId(), roleId: "role_admin", menu, action });
     }
   }
-  const staffMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","reports","reports.project","reports.summary","reports.history","reports.variance","ai"];
+  const staffMenus = ["dashboard","opname","opname.new","opname.variance","opname.detail","opname.detail.scan","opname.detail.sessions","opname.detail.sessions.detail","opname.detail.variance","supply.suppliers","supply.customers","supply.purchaseOrders","supply.salesOrders","supply.goodsReceipts","reports","reports.project","reports.summary","reports.history","reports.variance","ai"];
   for (const menu of staffMenus) {
     perms.push({ id: permId(), roleId: "role_staff", menu, action: "view" });
   }
@@ -137,7 +139,106 @@ async function ensureSystemRoles() {
   perms.push({ id: permId(), roleId: "role_staff", menu: "opname", action: "update" });
   perms.push({ id: permId(), roleId: "role_staff", menu: "opname.detail.scan", action: "create" });
   perms.push({ id: permId(), roleId: "role_staff", menu: "opname.detail.scan", action: "update" });
+  // Admin boleh mengelola konfigurasi dashboard (builder).
+  perms.push({ id: permId(), roleId: "role_admin", menu: "dashboard", action: "manage" });
   if (perms.length) await db.insert(rolePermissions).values(perms);
+}
+
+// Factory default widgets for the new customizable model.
+const DEFAULT_DASHBOARD_WIDGETS = [
+  {
+    type: "kpi",
+    config: {
+      factTable: "stock_balances",
+      measures: [{ field: "closingQty", aggregation: "sum" }],
+      groupBy: [],
+      filters: {},
+    },
+    layout: { x: 0, y: 0, w: 3, h: 4 },
+  },
+  {
+    type: "bar",
+    config: {
+      factTable: "stock_balances",
+      measures: [{ field: "closingQty", aggregation: "sum" }],
+      groupBy: ["warehouse"],
+      filters: {},
+    },
+    layout: { x: 3, y: 0, w: 5, h: 8 },
+  },
+  {
+    type: "line",
+    config: {
+      factTable: "stock_ledger",
+      measures: [{ field: "qtyIn", aggregation: "sum" }],
+      groupBy: ["month"],
+      filters: {},
+    },
+    layout: { x: 8, y: 0, w: 5, h: 8 },
+  },
+  {
+    type: "pie",
+    config: {
+      factTable: "stock_balances",
+      measures: [{ field: "closingQty", aggregation: "sum" }],
+      groupBy: ["itemGroup"],
+      filters: {},
+    },
+    layout: { x: 0, y: 4, w: 4, h: 8 },
+  },
+  {
+    type: "table",
+    config: {
+      factTable: "stock_balances",
+      measures: [{ field: "closingQty", aggregation: "sum" }],
+      groupBy: ["itemId"],
+      filters: {},
+    },
+    layout: { x: 4, y: 8, w: 8, h: 8 },
+  },
+];
+
+async function ensureDefaultDashboard() {
+  const [existing] = await db.select({ id: dashboards.id }).from(dashboards).limit(1);
+
+  if (existing) {
+    // Pastikan dashboard bawaan punya widget default.
+    const [w] = await db
+      .select({ id: dashboardWidgets.id })
+      .from(dashboardWidgets)
+      .where(eq(dashboardWidgets.dashboardId, existing.id))
+      .limit(1);
+    if (!w) {
+      for (const wgt of DEFAULT_DASHBOARD_WIDGETS) {
+        await db.insert(dashboardWidgets).values({
+          id: nextId("wgt"),
+          dashboardId: existing.id,
+          type: wgt.type,
+          config: wgt.config,
+          layout: wgt.layout,
+        });
+      }
+    }
+    return;
+  }
+
+  const dashId = nextId("dsb");
+  await db.insert(dashboards).values({
+    id: dashId,
+    name: "Default Dashboard",
+    ownerId: null,
+    branchId: null,
+    isGlobal: true,
+  });
+  for (const wgt of DEFAULT_DASHBOARD_WIDGETS) {
+    await db.insert(dashboardWidgets).values({
+      id: nextId("wgt"),
+      dashboardId: dashId,
+      type: wgt.type,
+      config: wgt.config,
+      layout: wgt.layout,
+    });
+  }
 }
 
 async function seedDummyData(adminId: string) {
@@ -464,6 +565,7 @@ async function main() {
   const adminId = await ensureAdmin();
   await ensureSystemRoles();
   await seedDummyData(adminId);
+  await ensureDefaultDashboard();
   console.log(`Login: ${EMAIL} / ${PASSWORD}`);
 }
 

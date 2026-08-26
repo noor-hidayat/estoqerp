@@ -42,6 +42,8 @@ const ID_PREFIXES: Record<string, string> = {
   stockLedger: "sld",
   stockBatches: "stb",
   stockBarcodes: "sbc",
+  suppliers: "sup",
+  customers: "cus",
 };
 
 // Semua tabel memakai id serial {prefix}-{YYMM}-{0001} — lihat nextRowId().
@@ -123,6 +125,8 @@ const CRUD_TABLES: Record<string, AnyPgTable> = {
   opnameWarehouses: schema.opnameWarehouses,
   opnameScans: schema.opnameScans,
   opnameScanDetails: schema.opnameScanDetails,
+  suppliers: schema.suppliers,
+  customers: schema.customers,
 };
 
 export const crudRouter = Router();
@@ -267,6 +271,8 @@ const TABLE_MENU: Record<string, string | string[]> = {
   // laporan Riwayat Scan — cukup punya salah satu menu untuk MEMBACA.
   opnameScans: ["opname.detail.scan", "opname.detail.sessions", "opname.detail.sessions.detail"],
   opnameScanDetails: ["opname.detail.scan", "opname.detail.sessions", "opname.detail.sessions.detail"],
+  suppliers: "supply.suppliers",
+  customers: "supply.customers",
 };
 
 // MENULIS scan (membuat header scan, menyimpan detail barcode, menutup scan)
@@ -368,6 +374,8 @@ const SORT_COLS: Record<string, AnyPgColumn> = {
   stockBarcodes: schema.stockBarcodes.updatedAt,
   opnameScans: schema.opnameScans.startedAt,
   opnameScanDetails: schema.opnameScanDetails.scannedAt,
+  suppliers: schema.suppliers.name,
+  customers: schema.customers.name,
 };
 
 function getOrderBy(req: Request, tableName: string) {
@@ -400,6 +408,8 @@ const SEARCHABLE_COLS: Record<string, AnyPgColumn[]> = {
     schema.items.itemGroupId,
     schema.items.id,
   ],
+  suppliers: [schema.suppliers.code, schema.suppliers.name],
+  customers: [schema.customers.code, schema.customers.name],
 };
 
 /**

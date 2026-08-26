@@ -7,6 +7,15 @@ interface ParsedOptions {
   placeholder: string | null;
 }
 
+function getNodeText(node: React.ReactNode): string {
+  if (node == null || node === false || node === true) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(getNodeText).join("");
+  if (React.isValidElement(node))
+    return getNodeText((node.props as { children?: React.ReactNode }).children);
+  return "";
+}
+
 function optionsFromChildren(children: React.ReactNode): ParsedOptions {
   let placeholder: string | null = null;
   const options: SearchableOption[] = [];
@@ -15,10 +24,9 @@ function optionsFromChildren(children: React.ReactNode): ParsedOptions {
     const props = child.props as React.OptionHTMLAttributes<HTMLOptionElement>;
     if (typeof (props as { value?: unknown }).value !== "string") return;
     const value = props.value as string;
-    const text = props.children;
-    const label = typeof text === "string" || typeof text === "number" ? String(text) : "";
-    if (value === "" && label.trim() !== "") {
-      placeholder = label.trim();
+    const label = getNodeText(props.children).trim();
+    if (value === "" && label !== "") {
+      placeholder = label;
     } else {
       options.push({ value, label });
     }

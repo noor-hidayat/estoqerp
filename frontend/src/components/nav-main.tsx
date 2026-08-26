@@ -30,6 +30,10 @@ import {
   Bot,
   ClipboardList,
   Ruler,
+  Truck,
+  ShoppingCart,
+  Receipt,
+  PackageCheck,
   type LucideIcon,
 } from "lucide-react"
 import Link from "next/link"
@@ -80,6 +84,11 @@ const ICONS: Record<string, LucideIcon> = {
   Layers,
   ClipboardList,
   Ruler,
+  LayoutGrid,
+  Truck,
+  ShoppingCart,
+  Receipt,
+  PackageCheck,
 }
 
 function isActive(href: string, pathname: string): boolean {

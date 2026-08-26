@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { cx } from "@/lib/utils";
 
@@ -45,8 +46,10 @@ export function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useImperativeHandle(inputRef, () => innerRef.current as HTMLInputElement, []);
 
@@ -81,11 +84,32 @@ export function SearchableSelect({
   useEffect(() => setHighlight(0), [visible]);
 
   useEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+    const update = () => {
+      const el = innerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setCoords({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const t = e.target as Node;
+      if (wrapRef.current && wrapRef.current.contains(t)) return;
+      if (dropdownRef.current && dropdownRef.current.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -169,40 +193,47 @@ export function SearchableSelect({
           </div>
         </div>
 
-        {open && (
-          <div className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
-            <div className="max-h-56 overflow-y-auto p-1">
-              {visible.length === 0 ? (
-                <p className="px-3 py-3 text-[12.5px] text-muted-foreground">
-                  {emptyText}
-                </p>
-              ) : (
-                visible.map((o, i) => (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onMouseEnter={() => setHighlight(i)}
-                    onClick={() => pick(o)}
-                    className={cx(
-                      "flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-[13.5px] text-foreground transition-colors",
-                      i === highlight && "bg-accent"
-                    )}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                    {o.value === value && (
-                      <Check size={14} strokeWidth={2.5} className="shrink-0 text-primary" />
-                    )}
-                  </button>
-                ))
-              )}
-              {totalMatches > maxSuggestions && (
-                <p className="px-3 pb-1.5 pt-2 text-[11px] text-muted-foreground">
-                  Showing {visible.length} of {totalMatches} — keep typing to narrow
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+        {open &&
+          coords &&
+          createPortal(
+            <div
+              ref={dropdownRef}
+              style={{ position: "fixed", top: coords.top, left: coords.left, width: coords.width, zIndex: 9999 }}
+              className="overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+            >
+              <div className="max-h-56 overflow-y-auto p-1">
+                {visible.length === 0 ? (
+                  <p className="px-3 py-3 text-[12.5px] text-muted-foreground">
+                    {emptyText}
+                  </p>
+                ) : (
+                  visible.map((o, i) => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onMouseEnter={() => setHighlight(i)}
+                      onClick={() => pick(o)}
+                      className={cx(
+                        "flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-[13.5px] text-foreground transition-colors",
+                        i === highlight && "bg-accent"
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                      {o.value === value && (
+                        <Check size={14} strokeWidth={2.5} className="shrink-0 text-primary" />
+                      )}
+                    </button>
+                  ))
+                )}
+                {totalMatches > maxSuggestions && (
+                  <p className="px-3 pb-1.5 pt-2 text-[11px] text-muted-foreground">
+                    Showing {visible.length} of {totalMatches} — keep typing to narrow
+                  </p>
+                )}
+              </div>
+            </div>,
+            document.body
+          )}
       </div>
     </div>
   );

@@ -2,14 +2,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import type {
   Branch, Warehouse, Location, ItemGroup, Item, StockBalance,
-  BarcodeFormat, ProjectStatus,
+  BarcodeFormat,
   User, Role, RolePermission, BranchAccess,
   OpnameProject, OpnameProjectDetail, OpnameProjectListItem,
   OpnameWarehouse, OpnameScan, OpnameScanDetail, OpnameScanDetailsResponse, OpnameStats,
   MovementType, Uom, StockMovementListRow, StockMovementDetailFull,
   StockLedgerRow, MovementInput, Batch, StockBatch, StockBarcode, BatchFormat,
   ScanHistoryRow,
+  Supplier, Customer, PurchaseOrder, PurchaseOrderLine,
+  SalesOrder, SalesOrderLine, GoodsReceipt, GoodsReceiptLine,
 } from "@/types";
+import type { DashboardMeta, WidgetConfig, WidgetRow } from "@/components/dashboard/types";
 
 function qs(params: Record<string, unknown>): string {
   const entries = Object.entries(params).filter(([, v]) => v != null && v !== "");
@@ -29,7 +32,7 @@ interface PaginatedResponse<T> {
 
 // ---- Generic resource hooks ----
 
-function useResourceList<T>(table: string, params?: Record<string, unknown>) {
+export function useResourceList<T>(table: string, params?: Record<string, unknown>) {
   return useQuery({
     queryKey: [table, params],
     queryFn: async () => {
@@ -215,6 +218,231 @@ export function useUoms() {
 
 export function useUom(id?: string) {
   return useResourceOne<Uom>("uom", id);
+}
+
+// ---- Supply Chain: Suppliers & Customers ----
+
+export function useSuppliers(params?: Record<string, unknown>) {
+  return useResourceList<Supplier>("suppliers", params);
+}
+
+export function useSupplier(id?: string) {
+  return useResourceOne<Supplier>("suppliers", id);
+}
+
+export function useCustomers(params?: Record<string, unknown>) {
+  return useResourceList<Customer>("customers", params);
+}
+
+export function useCustomer(id?: string) {
+  return useResourceOne<Customer>("customers", id);
+}
+
+// ---- Supply Chain: Purchase Orders ----
+
+export function usePurchaseOrders(params?: Record<string, unknown>) {
+  return useResourceList<PurchaseOrder>("purchase-orders", params);
+}
+
+export function usePurchaseOrder(id?: string) {
+  return useResourceOne<PurchaseOrder>("purchase-orders", id);
+}
+
+export function useCreatePurchaseOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      api.post<{ id: string }>("/purchase-orders", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+    },
+  });
+}
+
+export function useUpdatePurchaseOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) =>
+      api.patch(`/purchase-orders/${id}`, patch),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders", id] });
+    },
+  });
+}
+
+export function useRemovePurchaseOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/purchase-orders/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+    },
+  });
+}
+
+export function usePostPurchaseOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/purchase-orders/${id}/post`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders", id] });
+    },
+  });
+}
+
+export function useCancelPurchaseOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/purchase-orders/${id}/cancel`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders", id] });
+    },
+  });
+}
+
+export function useCreateReceiptFromPo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, receiptDate }: { id: string; receiptDate: string }) =>
+      api.post<{ id: string }>(`/purchase-orders/${id}/create-receipt`, { receiptDate }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
+    },
+  });
+}
+
+// ---- Supply Chain: Sales Orders ----
+
+export function useSalesOrders(params?: Record<string, unknown>) {
+  return useResourceList<SalesOrder>("sales-orders", params);
+}
+
+export function useSalesOrder(id?: string) {
+  return useResourceOne<SalesOrder>("sales-orders", id);
+}
+
+export function useCreateSalesOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      api.post<{ id: string }>("/sales-orders", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales-orders"] });
+    },
+  });
+}
+
+export function useUpdateSalesOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) =>
+      api.patch(`/sales-orders/${id}`, patch),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ["sales-orders"] });
+      qc.invalidateQueries({ queryKey: ["sales-orders", id] });
+    },
+  });
+}
+
+export function useRemoveSalesOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/sales-orders/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales-orders"] });
+    },
+  });
+}
+
+export function usePostSalesOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/sales-orders/${id}/post`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["sales-orders"] });
+      qc.invalidateQueries({ queryKey: ["sales-orders", id] });
+    },
+  });
+}
+
+export function useCancelSalesOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/sales-orders/${id}/cancel`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["sales-orders"] });
+      qc.invalidateQueries({ queryKey: ["sales-orders", id] });
+    },
+  });
+}
+
+// ---- Supply Chain: Goods Receipts ----
+
+export function useGoodsReceipts(params?: Record<string, unknown>) {
+  return useResourceList<GoodsReceipt>("goods-receipts", params);
+}
+
+export function useGoodsReceipt(id?: string) {
+  return useResourceOne<GoodsReceipt>("goods-receipts", id);
+}
+
+export function useCreateGoodsReceipt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      api.post<{ id: string }>("/goods-receipts", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
+    },
+  });
+}
+
+export function useUpdateGoodsReceipt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) =>
+      api.patch(`/goods-receipts/${id}`, patch),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
+      qc.invalidateQueries({ queryKey: ["goods-receipts", id] });
+    },
+  });
+}
+
+export function useRemoveGoodsReceipt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/goods-receipts/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
+    },
+  });
+}
+
+export function usePostGoodsReceipt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/goods-receipts/${id}/post`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
+      qc.invalidateQueries({ queryKey: ["goods-receipts", id] });
+    },
+  });
+}
+
+export function useCancelGoodsReceipt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/goods-receipts/${id}/cancel`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
+      qc.invalidateQueries({ queryKey: ["goods-receipts", id] });
+    },
+  });
 }
 
 export function useBatches(params?: { itemId?: string }) {
@@ -436,18 +664,23 @@ export function useBranchAccesses(roleId?: string) {
   return useResourceList<BranchAccess>("branchAccesses", roleId ? { roleId } : undefined);
 }
 
-// ---- Special endpoints ----
+// ---- Dashboard builder ----
 
-export function useDashboard() {
+export function useDashboardMeta() {
   return useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => api.get<{
-      active: number; final: number; totalScan: number; totalItems: number;
-      progressPct: number; progressCounted: number; progressTotal: number;
-      recentSessions: { id: string; code: string; product: string; qty: number; scannedBy: string; at: string }[];
-      projectProgressRows: { id: string; name: string; pct: number; warehouse: string; counted: number; total: number; status: ProjectStatus }[];
-      warehouseOpname: { warehouseId: string; warehouseName: string; projectName: string; systemQty: number; countedQty: number }[];
-    }>("/dashboard"),
+    queryKey: ["dashboardMeta"],
+    queryFn: () => api.get<DashboardMeta>("/dashboards/meta"),
+  });
+}
+
+/** Eksekusi query widget terhadap whitelist fact table (branch-scoped di server). */
+export function useWidgetQuery(config: WidgetConfig | undefined) {
+  return useQuery({
+    queryKey: ["widgetQuery", config],
+    enabled: !!config && !!config.factTable && config.measures.length > 0,
+    queryFn: () =>
+      api.post<{ rows: WidgetRow[] }>("/dashboards/widgets/query", config),
+    staleTime: 30_000,
   });
 }
 

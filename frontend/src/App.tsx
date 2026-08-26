@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import LoginPage from "@/app/login/page";
 import AppLayout from "@/app/app/layout";
 import DashboardPage from "@/app/app/page";
+import DashboardConfigPage from "@/app/app/dashboard-config/page";
 import OpnamePage from "@/app/app/so/page";
 import NewOpnamePage from "@/app/app/so/new/page";
 import VarianceListPage from "@/app/app/so/variance/page";
@@ -70,6 +71,17 @@ import ImportDataPage from "@/app/app/settings/import/page";
 import AiSettingsPage from "@/app/app/settings/ai/page";
 import SettingsPage from "@/app/app/settings/page";
 import AiChatPage from "@/app/app/ai/page";
+import SuppliersPage from "@/app/app/suppliers/page";
+import CustomersPage from "@/app/app/customers/page";
+import PurchaseOrdersPage from "@/app/app/purchase-orders/page";
+import NewPurchaseOrderPage from "@/app/app/purchase-orders/new/page";
+import PurchaseOrderDetailPage from "@/app/app/purchase-orders/[id]/page";
+import SalesOrdersPage from "@/app/app/sales-orders/page";
+import NewSalesOrderPage from "@/app/app/sales-orders/new/page";
+import SalesOrderDetailPage from "@/app/app/sales-orders/[id]/page";
+import GoodsReceiptsPage from "@/app/app/goods-receipts/page";
+import NewGoodsReceiptPage from "@/app/app/goods-receipts/new/page";
+import GoodsReceiptDetailPage from "@/app/app/goods-receipts/[id]/page";
 
 /** Halaman pertama "/app" — Dashboard bila punya aksesnya, selain itu
  *  diarahkan ke menu pertama yang boleh dibuka role-nya. */
@@ -96,6 +108,7 @@ export default function App() {
 
         <Route path="/app" element={<AppLayout />}>
           <Route index element={<HomeRoute />} />
+          <Route path="dashboard-config" element={<DashboardConfigPage />} />
           <Route path="project" element={<ProjectsPage />} />
           <Route path="project/new" element={<NewProjectPage />} />
           <Route path="so" element={<OpnamePage />} />
@@ -165,6 +178,17 @@ export default function App() {
           <Route path="settings/import" element={<ImportDataPage />} />
           <Route path="settings/ai" element={<AiSettingsPage />} />
           <Route path="ai" element={<AiChatPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
+          <Route path="customers" element={<CustomersPage />} />
+          <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
+          <Route path="purchase-orders/new" element={<NewPurchaseOrderPage />} />
+          <Route path="purchase-orders/:id" element={<PurchaseOrderDetailPage />} />
+          <Route path="sales-orders" element={<SalesOrdersPage />} />
+          <Route path="sales-orders/new" element={<NewSalesOrderPage />} />
+          <Route path="sales-orders/:id" element={<SalesOrderDetailPage />} />
+          <Route path="goods-receipts" element={<GoodsReceiptsPage />} />
+          <Route path="goods-receipts/new" element={<NewGoodsReceiptPage />} />
+          <Route path="goods-receipts/:id" element={<GoodsReceiptDetailPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/app" replace />} />
