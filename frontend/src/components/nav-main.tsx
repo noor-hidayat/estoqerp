@@ -1,5 +1,3 @@
-"use client"
-
 import { useEffect, useRef, useState } from "react"
 import {
   Archive,
@@ -19,6 +17,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   MapPin,
+  Megaphone,
   NotebookText,
   Package,
   Settings,
@@ -36,9 +35,7 @@ import {
   PackageCheck,
   type LucideIcon,
 } from "lucide-react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-
+import { Link, useLocation } from "react-router-dom";
 import {
   Collapsible,
   CollapsibleContent,
@@ -89,6 +86,7 @@ const ICONS: Record<string, LucideIcon> = {
   ShoppingCart,
   Receipt,
   PackageCheck,
+  Megaphone,
 }
 
 function isActive(href: string, pathname: string): boolean {
@@ -98,7 +96,7 @@ function isActive(href: string, pathname: string): boolean {
 }
 
 export function NavMain({ groups }: { groups: NavGroup[] }) {
-  const pathname = usePathname()
+  const { pathname } = useLocation()
   const { state } = useSidebar()
   const isCollapsed = state === "collapsed"
 
@@ -175,7 +173,7 @@ export function NavMain({ groups }: { groups: NavGroup[] }) {
                       isActive={isItemActive}
                       tooltip={item.label}
                     >
-                      <Link href={item.href}>
+                      <Link to={item.href}>
                         <Icon />
                         <span>{item.label}</span>
                       </Link>
@@ -221,12 +219,12 @@ function NavCollapsibleItem({
   const Icon = ICONS[item.icon] ?? LayoutGrid
 
   // Mode kecil (ikon): klik parent langsung menuju halamannya
-  // (mis. /app/data-library), bukan membuka submenu.
+  // (mis. /app/setup), bukan membuka submenu.
   if (isCollapsed) {
     return (
       <SidebarMenuItem>
         <SidebarMenuButton asChild isActive={isItemActive} tooltip={item.label}>
-          <Link href={item.href}>
+          <Link to={item.href}>
             <Icon />
             <span>{item.label}</span>
           </Link>
@@ -258,7 +256,7 @@ function NavCollapsibleItem({
                   asChild
                   isActive={activeHrefs.has(child.href)}
                 >
-                  <Link href={child.href}>
+                  <Link to={child.href}>
                     <span>{child.label}</span>
                   </Link>
                 </SidebarMenuSubButton>

@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 import { Bot, Copy, Check, Loader2, Plus, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -7,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/session";
 import { AnswerContent } from "@/components/ai-chat/answer-render";
 import { useChat, type ChatMessage } from "@/components/ai-chat/use-chat";
+import { useActiveWorkspace } from "@/hooks/use-workspace";
 
 const SUGGESTIONS = [
   "Berapa total item di master data?",
@@ -17,7 +16,8 @@ const SUGGESTIONS = [
 
 export default function AiChatPage() {
   const { user } = useSession();
-  const { messages, busy, status, send, stop, reset } = useChat();
+  const { activeId } = useActiveWorkspace();
+  const { messages, busy, status, send, stop, reset } = useChat(activeId);
   const [input, setInput] = useState("");
   const [scrolled, setScrolled] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);

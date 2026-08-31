@@ -1,5 +1,3 @@
-"use client";
-
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Receipt } from "lucide-react";

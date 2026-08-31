@@ -1,5 +1,3 @@
-"use client"
-
 import type * as React from "react"
 
 import { NavMain } from "@/components/nav-main"
@@ -13,12 +11,14 @@ import {
 import { navForPermissions } from "@/components/app-shell/nav"
 import { useSession } from "@/lib/session"
 import { can } from "@/lib/permissions"
+import { useActiveWorkspace } from "@/hooks/use-workspace"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { isSystem, permissions } = useSession()
+  const { activeId } = useActiveWorkspace()
   const canView = (menu: string) => can(isSystem, permissions, menu, "view")
   const canManage = (menu: string) => can(isSystem, permissions, menu, "manage")
-  const groups = navForPermissions(canView, canManage)
+  const groups = navForPermissions(canView, canManage, activeId)
 
   return (
     <Sidebar collapsible="icon" {...props}>

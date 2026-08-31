@@ -1,5 +1,3 @@
-"use client";
-
 import {
   createContext,
   useCallback,
@@ -21,6 +19,7 @@ export const ROLE_LABELS: Record<string, string> = {
 export interface SessionAccess {
   branchIds: string[];
   warehouseIds: string[];
+  workspaceIds: string[];
 }
 
 interface SessionValue {
@@ -43,7 +42,7 @@ interface LoginResponse {
 interface MeResponse extends User {
   isSystem: boolean;
   permissions: { menu: string; action: string }[];
-  access: { branchIds: string[]; warehouseIds: string[] };
+  access: { branchIds: string[]; warehouseIds: string[]; workspaceIds: string[] };
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -53,7 +52,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isSystem, setIsSystem] = useState(false);
   const [permissions, setPermissions] = useState<{ menu: string; action: string }[]>([]);
-  const [access, setAccess] = useState<SessionAccess>({ branchIds: [], warehouseIds: [] });
+  const [access, setAccess] = useState<SessionAccess>({ branchIds: [], warehouseIds: [], workspaceIds: [] });
 
   useEffect(() => {
     let disposed = false;
@@ -62,7 +61,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setUser(me);
       setIsSystem(me.isSystem ?? false);
       setPermissions(me.permissions ?? []);
-      setAccess(me.access ?? { branchIds: [], warehouseIds: [] });
+      setAccess(me.access ?? { branchIds: [], warehouseIds: [], workspaceIds: [] });
     };
 
     const initializeSession = async () => {
@@ -126,7 +125,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const me = await api.get<MeResponse>("/auth/me");
         setIsSystem(me.isSystem ?? false);
         setPermissions(me.permissions ?? []);
-        setAccess(me.access ?? { branchIds: [], warehouseIds: [] });
+        setAccess(me.access ?? { branchIds: [], warehouseIds: [], workspaceIds: [] });
       } catch {
         // If /auth/me fails right after login, ignore — the worst case is
         // the same old behaviour (empty sidebar until refresh).
@@ -151,7 +150,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setIsSystem(false);
     setPermissions([]);
-    setAccess({ branchIds: [], warehouseIds: [] });
+    setAccess({ branchIds: [], warehouseIds: [], workspaceIds: [] });
   }, []);
 
   const hasRole = useCallback(

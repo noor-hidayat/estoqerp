@@ -60,6 +60,8 @@ router.post("/", async (req: Request, res: Response) => {
   const body = req.body as {
     name: string;
     deadline?: string | null;
+    cutOffDate?: string | null;
+    cutOffTime?: string | null;
     description?: string | null;
     mode: "COMPARE" | "SCRATCH";
     warehouses: { warehouseId: string; branchId: string }[];
@@ -67,6 +69,10 @@ router.post("/", async (req: Request, res: Response) => {
 
   if (!body.name || !body.mode || !Array.isArray(body.warehouses) || body.warehouses.length === 0) {
     res.status(400).json({ error: "Nama, mode, dan minimal 1 gudang diperlukan." });
+    return;
+  }
+  if (!body.cutOffDate || !body.cutOffTime) {
+    res.status(400).json({ error: "Cut off date dan time wajib diisi." });
     return;
   }
 
@@ -95,6 +101,8 @@ router.post("/", async (req: Request, res: Response) => {
         status: "DRAFT",
         createdAt: now,
         deadline,
+        cutOffDate: body.cutOffDate as string,
+        cutOffTime: body.cutOffTime as string,
         createdBy: req.user!.id,
         description: body.description ?? null,
       });
@@ -134,6 +142,8 @@ router.get("/", async (req: Request, res: Response) => {
       mode: schema.opnameProjects.mode,
       status: schema.opnameProjects.status,
       deadline: schema.opnameProjects.deadline,
+      cutOffDate: schema.opnameProjects.cutOffDate,
+      cutOffTime: schema.opnameProjects.cutOffTime,
       createdAt: schema.opnameProjects.createdAt,
       createdBy: schema.opnameProjects.createdBy,
       description: schema.opnameProjects.description,
@@ -577,15 +587,19 @@ router.get("/:id/stats", async (req: Request, res: Response) => {
 router.patch("/:id", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "opname", "update"))) return;
 
-  const { name, deadline, description, status } = req.body as {
+  const { name, deadline, cutOffDate, cutOffTime, description, status } = req.body as {
     name?: string;
     deadline?: string | null;
+    cutOffDate?: string | null;
+    cutOffTime?: string | null;
     description?: string | null;
     status?: string;
   };
   const patch: Record<string, unknown> = {};
   if (name !== undefined) patch.name = name;
   if (deadline !== undefined) patch.deadline = deadline ? new Date(deadline) : null;
+  if (cutOffDate !== undefined) (patch as Record<string, unknown>).cutOffDate = cutOffDate;
+  if (cutOffTime !== undefined) (patch as Record<string, unknown>).cutOffTime = cutOffTime;
   if (description !== undefined) patch.description = description;
   if (status !== undefined) {
     if (!["DRAFT", "IN_PROGRESS", "APPROVED", "CANCELLED"].includes(status)) {

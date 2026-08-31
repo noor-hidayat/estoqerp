@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api/client";
 import { useSession } from "@/lib/session";
@@ -35,9 +33,9 @@ const uid = () => `msg_${Date.now()}_${counter++}`;
 
 const HISTORY_MAX = 100;
 
-export function useChat() {
+export function useChat(workspaceId?: string | null) {
   const { user } = useSession();
-  const historyKey = user?.id ? `ai-chat-history-${user.id}` : null;
+  const historyKey = user?.id ? `ai-chat-history-${user.id}:${workspaceId ?? "global"}` : null;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
@@ -48,8 +46,9 @@ export function useChat() {
 
   useEffect(() => {
     let disposed = false;
+    const qs = workspaceId ? `?workspaceId=${workspaceId}` : "";
     api
-      .get<AiStatus>("/ai/status")
+      .get<AiStatus>(`/ai/status${qs}`)
       .then((s) => {
         if (!disposed) setStatus(s);
       })
@@ -59,7 +58,7 @@ export function useChat() {
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [workspaceId]);
 
   // Model terpilih mengikuti pengaturan AI (settings) — provider default dengan key aktif.
   useEffect(() => {
@@ -106,6 +105,7 @@ export function useChat() {
           messages: [...history, { role: "user", content }],
           provider,
           model,
+          workspaceId: workspaceId ?? undefined,
         },
         (ev) => {
           if (ev.type === "token" && ev.text) {
@@ -138,7 +138,7 @@ export function useChat() {
       setBusy(false);
       abortRef.current = null;
     }
-  }, [messages, modelId]);
+  }, [messages, modelId, workspaceId]);
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
 

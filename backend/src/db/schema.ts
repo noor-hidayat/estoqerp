@@ -90,6 +90,38 @@ export const branchAccesses = pgTable(
   ]
 );
 
+// --- Workspace: 4 fixed workspace untuk mengelompokkan menu ---
+export const workspaces = pgTable("workspaces", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  icon: text("icon").notNull().default("Layers"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Akses workspace per ROLE — siapa boleh lihat workspace tersebut.
+export const workspaceAccesses = pgTable(
+  "workspace_access",
+  {
+    id: text("id").primaryKey(),
+    roleId: text("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    uniqueIndex("uq_workspace_access").on(t.roleId, t.workspaceId),
+    index("idx_workspace_access_role").on(t.roleId),
+    index("idx_workspace_access_ws").on(t.workspaceId),
+  ]
+);
+
 // Preferensi UI per-user (misal lebar kolom tabel), disimpan di sistem.
 export const userSettings = pgTable(
   "user_settings",
@@ -114,6 +146,7 @@ export const dashboards = pgTable("dashboards", {
   name: text("name").notNull(),
   ownerId: text("owner_id").references(() => users.id),
   branchId: text("branch_id").references(() => branches.id),
+  workspaceId: text("workspace_id").references(() => workspaces.id),
   isGlobal: boolean("is_global").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -133,11 +166,12 @@ export const dashboardWidgets = pgTable("dashboard_widgets", {
     .defaultNow(),
 });
 
-// Konfigurasi AI assistant (satu baris global).
+// Konfigurasi AI assistant — per workspace (workspace_id null = global fallback).
 export const aiSettings = pgTable(
   "ai_settings",
   {
     id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     enabled: boolean("enabled").notNull().default(false),
     defaultProvider: text("default_provider", { enum: ["GOOGLE", "DEEPSEEK"] })
       .notNull()
@@ -149,7 +183,8 @@ export const aiSettings = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-  }
+  },
+  (t) => [uniqueIndex("uq_ai_settings_workspace").on(t.workspaceId)]
 );
 
 export const branches = pgTable("branches", {
@@ -312,6 +347,8 @@ export const opnameProjects = pgTable("opname_projects", {
     .defaultNow(),
   deadline: timestamp("deadline", { withTimezone: true }),
   opnameDate: date("opname_date"),
+  cutOffDate: date("cut_off_date"),
+  cutOffTime: text("cut_off_time"),
   createdBy: text("created_by").references(() => users.id),
   description: text("description"),
 });
@@ -501,6 +538,8 @@ export const stockLedger = pgTable(
   },
   (t) => [
     index("idx_stock_ledger_item_wh").on(t.itemId, t.warehouseId),
+    index("idx_stock_ledger_wh_item").on(t.warehouseId, t.itemId),
+    index("idx_stock_ledger_wh_item_date").on(t.warehouseId, t.itemId, t.transactionDate, t.createdAt),
     index("idx_stock_ledger_date").on(t.transactionDate),
     index("idx_stock_ledger_batch").on(t.batchId),
   ]
@@ -602,6 +641,62 @@ export const opnameScanDetails = pgTable(
     index("idx_opname_scan_details_scan").on(t.scanId),
     index("idx_opname_scan_details_opname").on(t.opnameId),
     index("idx_opname_scan_details_wh").on(t.warehouseId),
+  ]
+);
+
+export const opnameCountStatuses = ["DRAFT", "POSTED", "CANCELED"] as const;
+export type OpnameCountStatus = (typeof opnameCountStatuses)[number];
+
+export const opnameCounts = pgTable(
+  "opname_counts",
+  {
+    id: text("id").primaryKey(), // SOC-mmyy-XXXX e.g. SOC-0826-0001
+    projectId: text("project_id")
+      .notNull()
+      .references(() => opnameProjects.id, { onDelete: "cascade" }),
+    warehouseId: text("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id),
+    postingDate: date("posting_date"),
+    postingTime: text("posting_time"),
+    cutOffDate: date("cut_off_date"),
+    cutOffTime: text("cut_off_time"),
+    notes: text("notes"),
+    status: text("status", { enum: opnameCountStatuses }).notNull().default("DRAFT"),
+    createdBy: text("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_opname_counts_project").on(t.projectId),
+    index("idx_opname_counts_warehouse").on(t.warehouseId),
+    index("idx_opname_counts_created").on(t.createdAt),
+    index("idx_opname_counts_status").on(t.status),
+  ]
+);
+
+export const opnameCountDetails = pgTable(
+  "opname_count_details",
+  {
+    id: text("id").primaryKey(),
+    countId: text("count_id")
+      .notNull()
+      .references(() => opnameCounts.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => items.id),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    batch: text("batch"),
+    uomId: text("uom_id").references(() => uom.id),
+    warehouseId: text("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_opname_count_details_count").on(t.countId),
+    index("idx_opname_count_details_item").on(t.itemId),
+    index("idx_opname_count_details_wh").on(t.warehouseId),
   ]
 );
 

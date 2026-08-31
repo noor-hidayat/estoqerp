@@ -1,6 +1,4 @@
-"use client";
-
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { ArrowUpRight, Bot, FileSpreadsheet, SquareAsterisk, Users } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
@@ -72,7 +70,7 @@ export default function SettingsPage() {
           {MENUS.map((m, i) => (
             <Link
               key={m.href}
-              href={m.href}
+              to={m.href}
               className="animate-fade-up group flex items-center gap-4 rounded-xl border border-border bg-card p-6 transition-all duration-300 hover:-translate-y-0.5 hover:border-border hover:shadow-[0_14px_36px_-16px_rgb(17_17_17/0.14)]"
               style={{ animationDelay: `${i * 70}ms` }}
             >

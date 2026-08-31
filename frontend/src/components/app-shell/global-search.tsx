@@ -1,7 +1,5 @@
-"use client";
-
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { Search, CornerDownLeft, ArrowUp, ArrowDown } from "lucide-react";
 import {
   Dialog,
@@ -39,7 +37,8 @@ function buildPages(): PageEntry[] {
 const PAGES = buildPages();
 
 export function GlobalSearch() {
-  const router = useRouter();
+  const navigate = useNavigate();
+  const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);

@@ -30,6 +30,24 @@ export interface BranchAccess {
   entityId: string;
 }
 
+export interface Workspace {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  icon: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorkspaceAccess {
+  id: string;
+  roleId: string;
+  workspaceId: string;
+}
+
 export interface UserSetting {
   id: string;
   userId: string;
@@ -185,6 +203,8 @@ export interface OpnameProject {
   createdAt: string;
   updatedAt: string;
   deadline?: string;
+  cutOffDate?: string | null;
+  cutOffTime?: string | null;
   opnameDate?: string;
   createdBy?: string;
   description?: string;

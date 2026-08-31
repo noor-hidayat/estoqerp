@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "../db/pool";
 import { refreshTokens, users, roles, rolePermissions, branchAccesses, branches, warehouses } from "../db/schema";
+import * as schema from "../db/schema";
 import { nextRowId } from "../lib/id";
 import { config } from "../config";
 import { requireAuth, requireRoles, type AuthUser } from "../middleware/auth";
@@ -207,12 +208,15 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   let permissions: { menu: string; action: string }[] = [];
   let branchIds: string[] = [];
   let warehouseIds: string[] = [];
+  let workspaceIds: string[] = [];
 
   if (isSystem) {
     const allBranches = await db.select({ id: branches.id }).from(branches);
     const allWarehouses = await db.select({ id: warehouses.id }).from(warehouses);
+    const allWorkspaces = await db.select({ id: schema.workspaces.id }).from(schema.workspaces);
     branchIds = allBranches.map((b) => b.id);
     warehouseIds = allWarehouses.map((w) => w.id);
+    workspaceIds = allWorkspaces.map((w) => w.id);
   } else {
     permissions = (await db
       .select({ menu: rolePermissions.menu, action: rolePermissions.action })
@@ -243,12 +247,18 @@ authRouter.get("/me", requireAuth, async (req, res) => {
 
     branchIds = [...branchSet];
     warehouseIds = [...warehouseSet];
+
+    const was = await db
+      .select({ workspaceId: schema.workspaceAccesses.workspaceId })
+      .from(schema.workspaceAccesses)
+      .where(eq(schema.workspaceAccesses.roleId, user.role));
+    workspaceIds = was.map((w) => w.workspaceId);
   }
 
   res.json({
     ...toPublicUser(row),
     isSystem,
     permissions,
-    access: { branchIds, warehouseIds },
+    access: { branchIds, warehouseIds, workspaceIds },
   });
 });

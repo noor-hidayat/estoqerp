@@ -1,5 +1,3 @@
-"use client";
-
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Users } from "lucide-react";

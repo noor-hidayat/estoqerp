@@ -97,7 +97,14 @@ export function useBranch(id?: string) {
 }
 
 export function useBranches() {
-  return useResourceList<Branch>("branches");
+  return useQuery({
+    queryKey: ["branches"],
+    queryFn: () => api.get<Branch[]>("/branches"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useWarehouse(id?: string) {
@@ -105,11 +112,26 @@ export function useWarehouse(id?: string) {
 }
 
 export function useWarehouses(branchId?: string) {
-  return useResourceList<Warehouse>("warehouses", branchId ? { branchId } : undefined);
+  const params = branchId ? { branchId } : undefined;
+  return useQuery({
+    queryKey: ["warehouses", params],
+    queryFn: () => api.get<Warehouse[]>(`/warehouses${qs(params ?? {})}`),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useAllWarehouses() {
-  return useResourceList<Warehouse>("warehouses");
+  return useQuery({
+    queryKey: ["warehouses"],
+    queryFn: () => api.get<Warehouse[]>("/warehouses"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useLocation(id?: string) {
@@ -125,7 +147,14 @@ export function useItemGroup(id?: string) {
 }
 
 export function useItemGroups() {
-  return useResourceList<ItemGroup>("itemGroups");
+  return useQuery({
+    queryKey: ["itemGroups"],
+    queryFn: () => api.get<ItemGroup[]>("/itemGroups"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export interface ItemGroupCounts {
@@ -148,7 +177,15 @@ export function useItems(params?: { query?: string; itemGroupId?: string; page?:
 }
 
 export function useItemsList(params?: { query?: string; itemGroupId?: string }) {
-  return useResourceList<Item>("items", params as Record<string, unknown>);
+  const qsParams = params as Record<string, unknown> | undefined;
+  return useQuery({
+    queryKey: ["items", qsParams],
+    queryFn: () => api.get<Item[]>(`/items${qs(qsParams ?? {})}`),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useStockBalances(params?: { warehouseId?: string; itemId?: string }) {
@@ -201,19 +238,47 @@ export function useStockBalanceSummary(params?: {
 }
 
 export function useBarcodeFormats() {
-  return useResourceList<BarcodeFormat>("barcodeFormats");
+  return useQuery({
+    queryKey: ["barcodeFormats"],
+    queryFn: () => api.get<BarcodeFormat[]>("/barcodeFormats"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useBatchFormats() {
-  return useResourceList<BatchFormat>("batchFormats");
+  return useQuery({
+    queryKey: ["batchFormats"],
+    queryFn: () => api.get<BatchFormat[]>("/batchFormats"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useMovementTypes() {
-  return useResourceList<MovementType>("movementTypes");
+  return useQuery({
+    queryKey: ["movementTypes"],
+    queryFn: () => api.get<MovementType[]>("/movementTypes"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useUoms() {
-  return useResourceList<Uom>("uom");
+  return useQuery({
+    queryKey: ["uom"],
+    queryFn: () => api.get<Uom[]>("/uom"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 }
 
 export function useUom(id?: string) {
@@ -664,6 +729,18 @@ export function useBranchAccesses(roleId?: string) {
   return useResourceList<BranchAccess>("branchAccesses", roleId ? { roleId } : undefined);
 }
 
+export function useWorkspaces() {
+  return useQuery({
+    queryKey: ["workspaces"],
+    queryFn: () => api.get<import("@/types").Workspace[]>("/workspaces"),
+    staleTime: 10 * 60_000,
+  });
+}
+
+export function useWorkspaceAccesses(roleId?: string) {
+  return useResourceList<import("@/types").WorkspaceAccess>("workspaceAccesses", roleId ? { roleId } : undefined);
+}
+
 // ---- Dashboard builder ----
 
 export function useDashboardMeta() {
@@ -691,6 +768,8 @@ export function useCreateOpnameProject() {
     mutationFn: (body: {
       name: string;
       deadline?: string | null;
+      cutOffDate: string;
+      cutOffTime: string;
       mode: "COMPARE" | "SCRATCH";
       warehouses: { warehouseId: string; branchId: string }[];
     }) => api.post("/opname-projects", body),
@@ -704,7 +783,7 @@ export function useCreateOpnameProject() {
 export function useUpdateOpnameProject() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: { name?: string; deadline?: string | null; status?: string } }) =>
+    mutationFn: ({ id, patch }: { id: string; patch: { name?: string; deadline?: string | null; cutOffDate?: string | null; cutOffTime?: string | null; status?: string } }) =>
       api.patch(`/opname-projects/${id}`, patch),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["opnameProjects"] });
@@ -720,6 +799,69 @@ export function useDeleteOpnameProject() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["opnameProjects"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export interface OpnameCount {
+  id: string;
+  projectId: string;
+  warehouseId: string;
+  postingDate?: string | null;
+  postingTime?: string | null;
+  cutOffDate?: string | null;
+  cutOffTime?: string | null;
+  notes?: string | null;
+  status: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  projectName?: string;
+  warehouseName?: string;
+  auditor?: string;
+}
+
+export function useOpnameCounts() {
+  return useQuery({
+    queryKey: ["opnameCounts"],
+    queryFn: () => api.get<OpnameCount[]>("/opname-counts"),
+  });
+}
+
+export function useOpnameCount(id?: string) {
+  return useQuery({
+    queryKey: ["opnameCounts", id],
+    queryFn: () => api.get<OpnameCount & { details: { itemId: string; qty: string; batch?: string | null; uomId?: string | null; warehouseId: string }[] }>(`/opname-counts/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateOpnameCount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      projectId: string;
+      warehouseId: string;
+      postingDate?: string | null;
+      postingTime?: string | null;
+      cutOffDate?: string | null;
+      cutOffTime?: string | null;
+      notes?: string | null;
+      details: { itemId: string; qty: number | string; batch?: string | null; uomId?: string | null }[];
+    }) => api.post<{ id: string }>("/opname-counts", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["opnameCounts"] });
+    },
+  });
+}
+
+export function useUpdateOpnameCount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/opname-counts/${id}`, patch),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ["opnameCounts"] });
+      qc.invalidateQueries({ queryKey: ["opnameCounts", id] });
     },
   });
 }

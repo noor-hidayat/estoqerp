@@ -1,7 +1,5 @@
-"use client";
-
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { BrandMark } from "@/components/app-shell/sidebar";
@@ -11,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
 export function LoginForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
+  const [searchParams] = useSearchParams();
   const { user, loading, signIn } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

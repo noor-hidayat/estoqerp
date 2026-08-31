@@ -1,7 +1,5 @@
-"use client";
-
 import { useEffect, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useSession } from "@/lib/session";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Topbar } from "./topbar";
@@ -14,8 +12,9 @@ import {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, loading } = useSession();
-  const router = useRouter();
-  const pathname = usePathname();
+  const navigate = useNavigate();
+  const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
+  const { pathname } = useLocation();
   const isAiChat = pathname === "/app/ai";
 
   useEffect(() => {

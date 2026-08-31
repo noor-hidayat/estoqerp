@@ -1,7 +1,5 @@
-"use client";
-
 import { useMemo } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { ArrowDownRight, ArrowRight, ArrowUpRight } from "lucide-react";
 import {
   Card,
@@ -136,7 +134,7 @@ export function VarianceSummary({
 
       <CardFooter className="border-t bg-muted/50 px-6 py-3">
         <Link
-          href="/app/data-library/warehouses"
+          to="/app/setup/warehouses"
           className="flex items-center gap-1 text-[12px] font-semibold text-primary transition-colors hover:text-primary/80"
         >
           View all warehouses

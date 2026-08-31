@@ -1,5 +1,3 @@
-"use client";
-
 import * as XLSX from "xlsx";
 import { api } from "@/lib/api/client";
 

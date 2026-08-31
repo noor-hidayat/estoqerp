@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
@@ -10,6 +8,7 @@ export interface DashboardSummary {
   name: string;
   ownerId: string | null;
   branchId: string | null;
+  workspaceId: string | null;
   isGlobal: boolean;
   createdAt: string;
 }
@@ -20,11 +19,14 @@ export interface DashboardDetail extends DashboardSummary {
 
 const ACTIVE_KEY = "dashboard.activeId";
 
-export function useDashboards() {
+export function useDashboards(workspaceId?: string | null) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
-    queryKey: ["dashboards"],
-    queryFn: () => api.get<DashboardSummary[]>("/dashboards"),
+    queryKey: ["dashboards", workspaceId ?? "all"],
+    queryFn: () => {
+      const qs = workspaceId ? `?workspaceId=${workspaceId}` : "";
+      return api.get<DashboardSummary[]>(`/dashboards${qs}`);
+    },
   });
 
   const create = useMutation({

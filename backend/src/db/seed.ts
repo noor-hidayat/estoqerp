@@ -450,9 +450,10 @@ async function seedDummyData(adminId: string) {
 
     // --- Projects opname (4 tabel) ---
     const parent1 = { id: nextId("opj", daysAgo(120)), name: "Opname Tahunan 2025", mode: "COMPARE" as const, status: "APPROVED" as const, createdAt: daysAgo(120), updatedAt: daysAgo(90), deadline: daysAgo(90), createdBy: adminId };
-    const parent2 = { id: nextId("opj", daysAgo(10)), name: "Opname Bulanan September", mode: "COMPARE" as const, status: "IN_PROGRESS" as const, createdAt: daysAgo(10), updatedAt: hoursAgo(3), deadline: daysAgo(-20), createdBy: admin2.id };
-    const parent3 = { id: nextId("opj", daysAgo(6)), name: "Stocktake Gudang Surabaya", mode: "SCRATCH" as const, status: "IN_PROGRESS" as const, createdAt: daysAgo(6), updatedAt: daysAgo(1), deadline: daysAgo(-14), createdBy: adminId };
-    const parent4 = { id: nextId("opj", daysAgo(2)), name: "Opname Awal Gudang Bahan Baku", mode: "COMPARE" as const, status: "DRAFT" as const, createdAt: daysAgo(2), updatedAt: daysAgo(2), deadline: daysAgo(-30), createdBy: adminId };
+    // Deadline semua di bawah now() agar tidak ada dummy di masa depan (sebelumnya daysAgo(-20) = now+20d)
+    const parent2 = { id: nextId("opj", daysAgo(10)), name: "Opname Bulanan September", mode: "COMPARE" as const, status: "IN_PROGRESS" as const, createdAt: daysAgo(10), updatedAt: hoursAgo(3), deadline: daysAgo(5), createdBy: admin2.id };
+    const parent3 = { id: nextId("opj", daysAgo(6)), name: "Stocktake Gudang Surabaya", mode: "SCRATCH" as const, status: "IN_PROGRESS" as const, createdAt: daysAgo(6), updatedAt: daysAgo(1), deadline: daysAgo(3), createdBy: adminId };
+    const parent4 = { id: nextId("opj", daysAgo(2)), name: "Opname Awal Gudang Bahan Baku", mode: "COMPARE" as const, status: "DRAFT" as const, createdAt: daysAgo(2), updatedAt: daysAgo(2), deadline: daysAgo(1), createdBy: adminId };
     await tx.insert(opnameProjects).values([parent1, parent2, parent3, parent4]);
 
     // Warehouse peserta per project (status per gudang).

@@ -1,6 +1,4 @@
-"use client"
-
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +28,7 @@ export function Breadcrumb({
             {i > 0 && <ChevronRight size={12} strokeWidth={2} className="shrink-0" />}
             {c.href && !last ? (
               <Link
-                href={c.href}
+                to={c.href}
                 className="whitespace-nowrap transition-colors hover:text-primary"
               >
                 {c.label}

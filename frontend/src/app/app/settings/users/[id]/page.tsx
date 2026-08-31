@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Save } from "lucide-react";
@@ -17,7 +15,7 @@ import {
   FormGrid,
   FormActions,
 } from "@/components/ui/form-page";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
 export default function EditUserPage() {
@@ -104,7 +102,7 @@ export default function EditUserPage() {
       <RoleGuard roles={["role_sys_admin"]} menus={["settings.users"]}>
         <p className="py-20 text-center text-lg font-semibold text-foreground">User not found</p>
         <div className="text-center">
-          <Link href="/app/settings/users" className="text-sm text-primary hover:text-primary/80">Back to Users</Link>
+          <Link to="/app/settings/users" className="text-sm text-primary hover:text-primary/80">Back to Users</Link>
         </div>
       </RoleGuard>
     );

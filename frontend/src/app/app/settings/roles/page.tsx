@@ -1,5 +1,3 @@
-"use client";
-
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, SquareAsterisk, Trash2 } from "lucide-react";

@@ -1,5 +1,3 @@
-"use client";
-
 import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
 
 export interface ComboOption {

@@ -8,6 +8,7 @@ declare global {
     interface Request {
       accessibleBranchIds?: string[];
       accessibleWarehouseIds?: string[];
+      accessibleWorkspaceIds?: string[];
     }
   }
 }
@@ -31,14 +32,17 @@ export function resolveScope(req: Request, _res: Response, next: NextFunction) {
       if (admin) {
         const allBranches = await db.select({ id: schema.branches.id }).from(schema.branches);
         const allWarehouses = await db.select({ id: schema.warehouses.id }).from(schema.warehouses);
+        const allWorkspaces = await db.select({ id: schema.workspaces.id }).from(schema.workspaces);
         req.accessibleBranchIds = allBranches.map((b) => b.id);
         req.accessibleWarehouseIds = allWarehouses.map((w) => w.id);
+        req.accessibleWorkspaceIds = allWorkspaces.map((w) => w.id);
         next();
         return;
       }
 
       const branchSet = new Set<string>();
       const warehouseSet = new Set<string>();
+      const workspaceSet = new Set<string>();
 
       const ras = await db
         .select({ entityType: schema.branchAccesses.entityType, entityId: schema.branchAccesses.entityId })
@@ -58,8 +62,15 @@ export function resolveScope(req: Request, _res: Response, next: NextFunction) {
         }
       }
 
+      const was = await db
+        .select({ workspaceId: schema.workspaceAccesses.workspaceId })
+        .from(schema.workspaceAccesses)
+        .where(eq(schema.workspaceAccesses.roleId, user.role));
+      for (const w of was) workspaceSet.add(w.workspaceId);
+
       req.accessibleBranchIds = [...branchSet];
       req.accessibleWarehouseIds = [...warehouseSet];
+      req.accessibleWorkspaceIds = [...workspaceSet];
       next();
     } catch (e) {
       next(e);

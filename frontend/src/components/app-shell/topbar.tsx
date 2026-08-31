@@ -1,6 +1,4 @@
-"use client";
-
-import { usePathname, useRouter } from "next/navigation";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useMemo } from "react";
 import { ChevronsUpDown, LogOut } from "lucide-react";
 import { useSession, ROLE_LABELS } from "@/lib/session";
@@ -23,8 +21,9 @@ import { getPageTitle } from "./route-titles";
 import { GlobalSearch } from "./global-search";
 
 export function Topbar() {
-  const pathname = usePathname();
-  const router = useRouter();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
   const { user, signOut } = useSession();
 
   const ids = useMemo(() => {

@@ -6,9 +6,6 @@ dist/
 build/
 out/
 
-# next.js
-.next/
-
 # env files (keep .env.example)
 .env*
 !.env.example
@@ -23,7 +20,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 
 # vercel
 .vercel

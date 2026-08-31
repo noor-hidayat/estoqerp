@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -36,6 +34,7 @@ import type {
 } from "@/types";
 import { cn, cx } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -401,14 +400,24 @@ export function MovementForm({
   );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(() => !!initial);
   const [cancelling, setCancelling] = useState(false);
   useErrorToast(error);
 
   const serialize = () =>
     JSON.stringify({ form, editPostingDate, rows });
   const [snapshot, setSnapshot] = useState<string>(() => serialize());
+  // keep snapshot in sync when initial loads (detail page)
+  useEffect(() => {
+    if (initial) {
+      setSnapshot(serialize());
+      setSaved(true);
+    }
+  }, [initial?.id]);
   const dirty = serialize() !== snapshot;
+  const showNotSave = !readOnly && (!saved || dirty);
+  const fallbackBadge = saved && !dirty && !readOnly ? <Badge tone="neutral">Draft</Badge> : null;
+  const displayBadge = showNotSave ? <Badge tone="destructive">Not Save</Badge> : (statusBadge ?? fallbackBadge);
 
   const handleCancel = async () => {
     if ((!onCancel && !onAmend) || cancelling) return;
@@ -517,6 +526,34 @@ export function MovementForm({
         serial: (d as { serialNumber?: string | null }).serialNumber ?? "",
       }))
   );
+  const [internalTab, setInternalTab] = useState<"details" | "scans">("details");
+  const hasExternalTabs = !!tabs;
+  const internalTabsNode = (
+    <div className="flex items-center gap-1 border-b border-border">
+      <button
+        onClick={() => setInternalTab("details")}
+        className={
+          internalTab === "details"
+            ? "border-b-2 border-primary px-3 pb-2 text-[13px] font-semibold text-foreground"
+            : "border-b-2 border-transparent px-3 pb-2 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+        }
+      >
+        Details
+      </button>
+      <button
+        onClick={() => setInternalTab("scans")}
+        className={
+          internalTab === "scans"
+            ? "border-b-2 border-primary px-3 pb-2 text-[13px] font-semibold text-foreground"
+            : "border-b-2 border-transparent px-3 pb-2 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+        }
+      >
+        Scan History{scanHistory.length > 0 ? ` (${scanHistory.length})` : ""}
+      </button>
+    </div>
+  );
+  const effectiveTabs = tabs ?? internalTabsNode;
+  const showScans = !hasExternalTabs && internalTab === "scans";
   const lastBarcodeRef = useRef<{ barcode: string; at: number } | null>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const scanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -858,15 +895,17 @@ export function MovementForm({
   return (
     <FormPage
       title={title}
-      titleBadge={statusBadge}
+      titleBadge={displayBadge}
       className={className}
-      tabs={tabs}
+      tabs={effectiveTabs}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {actions}
           {onCancel && (
             <Button
               variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-xs"
               onClick={handleCancel}
               disabled={cancelling}
             >
@@ -874,16 +913,63 @@ export function MovementForm({
             </Button>
           )}
           {!readOnly && (
-            <Button variant="primary" onClick={save} disabled={saving}>
-              {saving ? "Saving..." : saved && onPost && !dirty ? "Post" : submitLabel}
+            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={saving}>
+              {saving ? "Saving..." : saved && onPost && !dirty ? "Submit" : submitLabel}
             </Button>
           )}
         </div>
       }
     >
-      <div className="flex flex-col gap-5">
-      <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
-        <FormSection className="pb-0">
+      {showScans ? (
+        scanHistory.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-card px-6 py-12 text-center">
+            <p className="text-[13px] font-medium text-foreground">Belum ada scan history</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">Scan barcode di tab Details untuk melihat history.</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[12.5px]">
+                <thead className="bg-muted/40 text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2.5 font-semibold">No.</th>
+                    <th className="px-4 py-2.5 font-semibold">Barcode</th>
+                    <th className="px-3 py-2.5 font-semibold">Batch</th>
+                    <th className="px-3 py-2.5 font-semibold">Item Code</th>
+                    <th className="px-3 py-2.5 font-semibold">Serial</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Qty</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {scanHistory.slice().reverse().map((h, idx) => {
+                    const qtyFromRow = (() => {
+                      const row = rows.find((r) => r.barcode === h.barcode || r.units?.some((u) => u.barcode === h.barcode));
+                      if (row?.units) {
+                        const u = row.units.find((uu) => uu.barcode === h.barcode);
+                        if (u) return String(u.qty);
+                      }
+                      return row ? row.qty : "1";
+                    })();
+                    return (
+                      <tr key={h.key} className="hover:bg-muted/30">
+                        <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{scanHistory.length - idx}</td>
+                        <td className="break-all px-4 py-2.5 font-mono text-xs text-foreground">{h.barcode}</td>
+                        <td className="break-all px-3 py-2.5 font-mono text-[11.5px] text-muted-foreground">{h.batch || "—"}</td>
+                        <td className="px-3 py-2.5 font-mono text-[11.5px] font-medium text-foreground">{h.itemCode || "—"}</td>
+                        <td className="px-3 py-2.5 font-mono text-[11.5px] text-muted-foreground">{h.serial || "—"}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-[12px] font-semibold tabular-nums text-foreground">{qtyFromRow}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      ) : (
+        <div className="flex flex-col gap-5">
+        <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
+          <FormSection className="pb-0">
           <FormGrid>
             <div className="flex flex-col gap-5">
               <Select
@@ -1008,29 +1094,23 @@ export function MovementForm({
             </div>
           </div>
 
-          {!readOnly && (
-            <div className="overflow-hidden rounded-md border border-border">
-              <div className="border-b border-border bg-muted/40 px-3 py-1.5">
-                <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Scan History
-                </span>
+          {scanHistory.length > 0 && (
+            <div>
+              <div className="mb-2">
+                <span className="text-[13px] font-medium text-foreground">Last barcode</span>
               </div>
-              {scanHistory.length === 0 ? (
-                <p className="px-3 py-3 text-[12px] text-muted-foreground">
-                  Belum ada barcode di-scan.
-                </p>
-              ) : (
-                <div className="max-h-56 overflow-y-auto">
+              <div className="overflow-hidden rounded-md border border-border bg-zinc-100 dark:bg-muted/40">
+                <div className="max-h-[280px] overflow-y-auto">
                   {scanHistory.slice(-10).reverse().map((h) => (
                     <div
                       key={h.key}
-                      className="break-all border-b border-border px-3 py-1.5 font-mono text-[11.5px] text-foreground last:border-0"
+                      className="break-all border-b border-border/60 bg-card px-3 py-1.5 font-mono text-[11.5px] text-foreground last:border-0 even:bg-zinc-50 dark:even:bg-muted/20"
                     >
                       {h.barcode}
                     </div>
                   ))}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
@@ -1258,6 +1338,7 @@ export function MovementForm({
         </FormSection>
       </div>
       </div>
+      )}
 
       {!readOnly && cameraOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black/90 p-4">

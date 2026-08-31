@@ -1,5 +1,3 @@
-"use client";
-
 /** Pembersih & render jawaban AI: teks polos + tabel sungguhan. */
 
 /** Bersihkan sisa markdown agar teks mudah dibaca (bintang, header, backtick). */

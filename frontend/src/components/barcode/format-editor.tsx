@@ -1,7 +1,5 @@
-"use client";
-
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import {
   useInsert,
@@ -223,7 +221,8 @@ function SegmentRow({
 }
 
 export function FormatEditor({ format }: { format: BarcodeFormat }) {
-  const router = useRouter();
+  const navigate = useNavigate();
+  const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
   const insert = useInsert("barcodeFormats");
   const update = useUpdate("barcodeFormats");
   const {
@@ -331,7 +330,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
       } else {
         await update.mutateAsync({ id: format.id, patch: next });
       }
-      router.push("/app/data-library/barcode-formats");
+      router.push("/app/setup/barcode-formats");
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
       setSaving(false);
@@ -424,7 +423,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
               batchFormatsLoading={batchFormatsLoading}
               batchFormatsError={batchFormatsError}
               onCreateBatchFormat={() =>
-                router.push("/app/data-library/batch-formats")
+                router.push("/app/setup/batch-formats")
               }
               onChange={(next) => updateSegment(seg.id, next)}
               onRemove={() => removeSegment(seg.id)}
@@ -456,7 +455,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
       <FormActions>
         <Button
           variant="ghost"
-          onClick={() => router.push("/app/data-library/barcode-formats")}
+          onClick={() => router.push("/app/setup/barcode-formats")}
           disabled={saving}
         >
           Batal

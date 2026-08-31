@@ -1,7 +1,5 @@
-"use client";
-
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import { useInsert, useUpdate } from "@/lib/api/query";
 import { useSaveShortcut } from "@/lib/use-save-shortcut";
@@ -262,7 +260,8 @@ function SegmentRow({
 }
 
 export function BatchFormatEditor({ format }: { format: BatchFormat }) {
-  const router = useRouter();
+  const navigate = useNavigate();
+  const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
   const insert = useInsert("batchFormats");
   const update = useUpdate("batchFormats");
   const isNew = !format.name;
@@ -349,7 +348,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
       } else {
         await update.mutateAsync({ id: format.id, patch: next });
       }
-      router.push("/app/data-library/batch-formats");
+      router.push("/app/setup/batch-formats");
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
       setSaving(false);
@@ -493,7 +492,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
       <FormActions>
         <Button
           variant="ghost"
-          onClick={() => router.push("/app/data-library/batch-formats")}
+          onClick={() => router.push("/app/setup/batch-formats")}
           disabled={saving}
         >
           Batal

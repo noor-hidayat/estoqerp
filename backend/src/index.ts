@@ -14,6 +14,7 @@ import { dashboardRouter } from "./routes/dashboard";
 import { dashboardBuilderRouter } from "./routes/dashboard-builder";
 import { importRouter } from "./routes/import";
 import opnameProjectsRouter from "./routes/opname-projects";
+import opnameCountsRouter from "./routes/opname-counts";
 import { stockLedgerRouter, transactionsRouter } from "./routes/transactions";
 import { supplyChainRouter } from "./routes/supply-chain";
 
@@ -38,6 +39,7 @@ app.use("/api", dashboardRouter);
 app.use("/api", dashboardBuilderRouter);
 app.use("/api/import", importRouter);
 app.use("/api/opname-projects", opnameProjectsRouter);
+app.use("/api/opname-counts", opnameCountsRouter);
 app.use("/api/transactions", transactionsRouter);
 app.use("/api/stock-ledger", stockLedgerRouter);
 app.use("/api/ai", aiRouter);

@@ -2,7 +2,7 @@
 import type { Request, Response } from "express";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/pool";
-import { roles, rolePermissions, branchAccesses } from "../db/schema";
+import { roles, rolePermissions, branchAccesses, workspaceAccesses } from "../db/schema";
 
 type EntityType = "BRANCH" | "WAREHOUSE";
 
@@ -126,4 +126,21 @@ export async function canAccessEntity(
     )
     .limit(1);
   return !!ra;
+}
+
+export async function canAccessWorkspace(roleId: string, workspaceId: string): Promise<boolean> {
+  if (await isAdminUser(roleId)) return true;
+  const [r] = await db
+    .select({ id: workspaceAccesses.id })
+    .from(workspaceAccesses)
+    .where(and(eq(workspaceAccesses.roleId, roleId), eq(workspaceAccesses.workspaceId, workspaceId)))
+    .limit(1);
+  return !!r;
+}
+
+export async function hasWorkspaceAccess(req: Request, workspaceId: string): Promise<boolean> {
+  if (!req.user) return false;
+  if (await isAdminUser(req.user.role)) return true;
+  const ids = req.accessibleWorkspaceIds ?? [];
+  return ids.includes(workspaceId);
 }

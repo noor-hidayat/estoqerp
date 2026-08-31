@@ -1,5 +1,3 @@
-"use client"
-
 import * as React from "react"
 import { Clock } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"

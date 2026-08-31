@@ -6,6 +6,7 @@ import { requireRoles } from "../middleware/auth";
 import { isDataRelated, lookupEntities } from "../ai/context";
 import { getCachedContext } from "../ai/context-cache";
 import { streamAiChat, KNOWN_MODELS, type AiChatMessage, type AiProviderName } from "../ai/providers";
+import { checkPermission, hasWorkspaceAccess } from "../middleware/rbac";
 
 export const aiRouter = Router();
 
@@ -15,19 +16,25 @@ function sendEvent(res: Response, obj: unknown) {
   res.write(`data: ${JSON.stringify(obj)}\n\n`);
 }
 
-async function loadSettings() {
-  const [row] = await db.select().from(schema.aiSettings).limit(1);
-  return row ?? null;
+async function loadSettings(workspaceId?: string | null) {
+  const rows = await db.select().from(schema.aiSettings);
+  if (workspaceId) {
+    const found = rows.find((r) => (r as unknown as { workspaceId: string | null }).workspaceId === workspaceId);
+    if (found) return found;
+  }
+  const global = rows.find((r) => (r as unknown as { workspaceId: string | null }).workspaceId == null);
+  return global ?? rows[0] ?? null;
 }
 
 function providerLabel(p: string): string {
   return p === "DEEPSEEK" ? "DeepSeek" : "Google Gemini";
 }
 
-// Status publik untuk semua user login (dipakai widget chat).
-aiRouter.get("/status", async (_req, res, next) => {
+// Status publik untuk semua user login (dipakai widget chat) — per workspace jika ?workspaceId.
+aiRouter.get("/status", async (req, res, next) => {
   try {
-    const s = await loadSettings();
+    const workspaceId = typeof req.query.workspaceId === "string" ? req.query.workspaceId : undefined;
+    const s = await loadSettings(workspaceId ?? null);
     res.json({
       enabled: s?.enabled ?? false,
       defaultProvider: s?.defaultProvider ?? "GOOGLE",
@@ -53,9 +60,10 @@ aiRouter.get("/models", (_req, res, next) => {
 // Kelola konfigurasi AI — khusus role manager (sys admin & admin).
 const MANAGER_ROLES = ["role_sys_admin", "role_admin"];
 
-aiRouter.get("/settings", requireRoles(...MANAGER_ROLES), async (_req, res, next) => {
+aiRouter.get("/settings", requireRoles(...MANAGER_ROLES), async (req, res, next) => {
   try {
-    const s = await loadSettings();
+    const workspaceId = typeof req.query.workspaceId === "string" ? req.query.workspaceId : undefined;
+    const s = await loadSettings(workspaceId ?? null);
     res.json({
       enabled: s?.enabled ?? false,
       defaultProvider: s?.defaultProvider ?? "GOOGLE",
@@ -85,7 +93,8 @@ aiRouter.put("/settings", requireRoles(...MANAGER_ROLES), async (req, res, next)
       return trimmed.length > 0 ? trimmed : null;
     };
 
-    const existing = await loadSettings();
+    const workspaceId = typeof body.workspaceId === "string" && body.workspaceId ? body.workspaceId : null;
+    const existing = await loadSettings(workspaceId);
     const row = {
       enabled: typeof body.enabled === "boolean" ? body.enabled : existing?.enabled ?? false,
       defaultProvider: provider,
@@ -93,6 +102,7 @@ aiRouter.put("/settings", requireRoles(...MANAGER_ROLES), async (req, res, next)
       googleModel: typeof body.googleModel === "string" && body.googleModel.trim() ? body.googleModel.trim() : existing?.googleModel ?? "gemini-3.5-flash",
       deepseekApiKey: resolveKey(body.deepseekApiKey, existing?.deepseekApiKey ?? null),
       deepseekModel: typeof body.deepseekModel === "string" && body.deepseekModel.trim() ? body.deepseekModel.trim() : existing?.deepseekModel ?? "deepseek-chat",
+      workspaceId,
     };
 
     if (existing) {
@@ -101,10 +111,11 @@ aiRouter.put("/settings", requireRoles(...MANAGER_ROLES), async (req, res, next)
         .set({ ...row, updatedAt: new Date() })
         .where(eq(schema.aiSettings.id, existing.id));
     } else {
-      await db.insert(schema.aiSettings).values({ id: "ai_001", ...row });
+      const id = workspaceId ? `ai-${workspaceId}` : "ai_001";
+      await db.insert(schema.aiSettings).values({ id, ...row });
     }
 
-    const s = await loadSettings();
+    const s = await loadSettings(workspaceId);
     res.json({
       enabled: s?.enabled ?? false,
       defaultProvider: s?.defaultProvider ?? "GOOGLE",
@@ -118,10 +129,16 @@ aiRouter.put("/settings", requireRoles(...MANAGER_ROLES), async (req, res, next)
   }
 });
 
-// Chat streaming (SSE) — semua user login, data di-scope sesuai aksesnya.
+// Chat streaming (SSE) — per workspace, cek permission ai + akses workspace.
 aiRouter.post("/chat", async (req: Request, res: Response, next) => {
   try {
     const body = req.body ?? {};
+    const workspaceId = typeof body.workspaceId === "string" && body.workspaceId ? body.workspaceId : null;
+    if (workspaceId && !(await hasWorkspaceAccess(req as unknown as Parameters<typeof hasWorkspaceAccess>[0], workspaceId))) {
+      res.status(403).json({ error: "Tidak punya akses workspace." });
+      return;
+    }
+    if (!(await checkPermission(req, res, "ai", "view"))) return;
     const rawMessages = Array.isArray(body.messages) ? body.messages : [];
     const messages: AiChatMessage[] = [];
     for (const m of rawMessages) {
@@ -135,7 +152,7 @@ aiRouter.post("/chat", async (req: Request, res: Response, next) => {
       return;
     }
 
-    const settings = await loadSettings();
+    const settings = await loadSettings(workspaceId);
     const requested: string = typeof body.provider === "string" ? body.provider.toUpperCase() : "";
     const provider: AiProviderName =
       requested === "GOOGLE" || requested === "DEEPSEEK" ? requested : (settings?.defaultProvider ?? "GOOGLE");

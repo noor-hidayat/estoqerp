@@ -1,5 +1,3 @@
-"use client";
-
 import type { Branch, Warehouse, Location } from "@/types";
 
 export interface CheckedIds {

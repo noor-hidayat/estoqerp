@@ -15,7 +15,19 @@ export interface NavItem {
 export interface NavGroup {
   title: string;
   items: NavItem[];
+  /** Jika true, grup ini tampil di semua workspace (Settings/Setup) */
+  shared?: boolean;
 }
+
+export const WORKSPACES = [
+  { id: "wsp-stockopname", code: "stockopname", label: "Stock Opname", icon: "ClipboardList", description: "Project, Scan & Laporan" },
+  { id: "wsp-warehouse", code: "warehouse", label: "Warehouse", icon: "Warehouse", description: "Stok, Ledger & Master" },
+  { id: "wsp-purchasing", code: "purchasing", label: "Purchasing", icon: "ShoppingCart", description: "Supplier, PO & GR" },
+  { id: "wsp-marketing", code: "marketing", label: "Marketing", icon: "Megaphone", description: "Customer & Sales Order" },
+] as const;
+
+export type WorkspaceId = (typeof WORKSPACES)[number]["id"];
+export type WorkspaceCode = (typeof WORKSPACES)[number]["code"];
 
 export const NAV: NavGroup[] = [
   {
@@ -26,13 +38,6 @@ export const NAV: NavGroup[] = [
         href: "/app",
         icon: "LayoutDashboard",
         menu: "dashboard",
-      },
-      {
-        label: "Konfigurasi Dashboard",
-        href: "/app/dashboard-config",
-        icon: "LayoutGrid",
-        menu: "dashboard",
-        manage: true,
       },
     ],
   },
@@ -170,6 +175,7 @@ export const NAV: NavGroup[] = [
   },
   {
     title: "Settings",
+    shared: true,
     items: [
       {
         label: "Settings",
@@ -198,62 +204,62 @@ export const NAV: NavGroup[] = [
         ],
       },
       {
-        label: "Data Library",
-        href: "/app/data-library",
+        label: "Setup",
+        href: "/app/setup",
         icon: "Database",
         menu: "master",
         children: [
           {
             label: "Item List",
-            href: "/app/data-library/items",
+            href: "/app/setup/items",
             icon: "Package",
             menu: "master.items",
           },
           {
             label: "Item Group",
-            href: "/app/data-library/item-groups",
+            href: "/app/setup/item-groups",
             icon: "Tag",
             menu: "master.itemGroups",
           },
           {
             label: "UOM",
-            href: "/app/data-library/uom",
+            href: "/app/setup/uom",
             icon: "Ruler",
             menu: "master.uom",
           },
           {
             label: "Barcode Format",
-            href: "/app/data-library/barcode-formats",
+            href: "/app/setup/barcode-formats",
             icon: "Barcode",
             menu: "master.barcodeFormats",
           },
           {
             label: "Batch Format",
-            href: "/app/data-library/batch-formats",
+            href: "/app/setup/batch-formats",
             icon: "Layers",
             menu: "master.batchFormats",
           },
           {
             label: "Transaction Types",
-            href: "/app/data-library/transaction-types",
+            href: "/app/setup/transaction-types",
             icon: "ArrowRightLeft",
             menu: "master.movementTypes",
           },
           {
             label: "Warehouses",
-            href: "/app/data-library/warehouses",
+            href: "/app/setup/warehouses",
             icon: "Warehouse",
             menu: "inventory.warehouses",
           },
           {
             label: "Locations",
-            href: "/app/data-library/locations",
+            href: "/app/setup/locations",
             icon: "MapPin",
             menu: "inventory.locations",
           },
           {
             label: "Branches",
-            href: "/app/data-library/branches",
+            href: "/app/setup/branches",
             icon: "Buildings",
             menu: "inventory.branches",
           },
@@ -263,23 +269,57 @@ export const NAV: NavGroup[] = [
   },
 ];
 
-/** Filter nav based on view access (permission-based, not role id). */
+export const WORKSPACE_MENU_MAP: Record<string, string[]> = {
+  "wsp-stockopname": ["dashboard", "opname", "reports", "ai"],
+  "wsp-warehouse": ["dashboard", "inventory", "master", "ai", "inventory.transactions", "inventory.stockBalance", "inventory.stockLedger", "inventory.batches", "inventory.warehouses", "inventory.locations", "inventory.branches"],
+  "wsp-purchasing": ["dashboard", "supply.suppliers", "supply.purchaseOrders", "supply.goodsReceipts", "ai"],
+  "wsp-marketing": ["dashboard", "supply.customers", "supply.salesOrders", "ai"],
+};
+
+function menuAllowedForWorkspace(menu: string, workspaceId: string | null): boolean {
+  if (!workspaceId) return true;
+  const allowed = WORKSPACE_MENU_MAP[workspaceId];
+  if (!allowed) return true;
+  return allowed.some((m) => menu === m || menu.startsWith(m + ".") || m.startsWith(menu + "."));
+}
+
+/** Filter nav based on view access + workspace. Shared groups (Settings) tampil di semua workspace. */
 export function navForPermissions(
+  canView: (menu: string) => boolean,
+  canManage?: (menu: string) => boolean,
+  workspaceId?: string | null
+): NavGroup[] {
+  return NAV.map((group) => {
+    // Shared group selalu tampil (filter hanya by permission, bukan workspace)
+    const isShared = (group as unknown as { shared?: boolean }).shared;
+    if (!isShared && workspaceId) {
+      // Jika grup tidak shared, cek apakah ada item yang allowed untuk workspace ini
+      const hasAllowed = group.items.some((it) => menuAllowedForWorkspace(it.menu, workspaceId) || it.children?.some((c) => menuAllowedForWorkspace(c.menu, workspaceId)));
+      if (!hasAllowed) return { ...group, items: [] };
+    }
+    return {
+      ...group,
+      items: group.items
+        .map((item) => ({
+          ...item,
+          children: item.children?.filter((child) => canView(child.menu) && menuAllowedForWorkspace(child.menu, workspaceId ?? null)),
+        }))
+        .filter((item) => {
+          const wsOk = menuAllowedForWorkspace(item.menu, workspaceId ?? null) || (item.children?.length ?? 0) > 0;
+          if (!wsOk && !isShared) return false;
+          const visible = item.manage
+            ? canManage?.(item.menu) ?? false
+            : canView(item.menu) || (item.children?.length ?? 0) > 0;
+          return visible;
+        }),
+    };
+  }).filter((group) => group.items.length > 0);
+}
+
+export function navForWorkspace(
+  workspaceId: string | null,
   canView: (menu: string) => boolean,
   canManage?: (menu: string) => boolean
 ): NavGroup[] {
-  return NAV.map((group) => ({
-    ...group,
-    items: group.items
-      .map((item) => ({
-        ...item,
-        children: item.children?.filter((child) => canView(child.menu)),
-      }))
-      .filter((item) => {
-        const visible = item.manage
-          ? canManage?.(item.menu) ?? false
-          : canView(item.menu) || (item.children?.length ?? 0) > 0;
-        return visible;
-      }),
-  })).filter((group) => group.items.length > 0);
+  return navForPermissions(canView, canManage, workspaceId);
 }

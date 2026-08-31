@@ -1,7 +1,5 @@
-"use client";
-
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { Pencil, X } from "lucide-react";
 import {
@@ -187,7 +185,7 @@ export default function GoodsReceiptDetailPage() {
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Purchase Order</dt>
                 <dd className="mt-1 text-sm">
-                  <Link href={`/app/purchase-orders/${gr.purchaseOrderId}`} className="font-medium text-primary hover:text-primary/80">
+                  <Link to={`/app/purchase-orders/${gr.purchaseOrderId}`} className="font-medium text-primary hover:text-primary/80">
                     PO {formatId(gr.purchaseOrderId)}
                   </Link>
                 </dd>

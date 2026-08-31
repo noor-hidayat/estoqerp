@@ -18,7 +18,7 @@ import type { NodePgTransaction } from "drizzle-orm/node-postgres/session";
 import { db } from "../db/pool";
 import * as schema from "../db/schema";
 import { parseBatchNumber, type BatchFormatLike } from "../lib/batch-parse";
-import { nextRowId } from "../lib/id";
+import { nextRowId, yymmOf } from "../lib/id";
 import {
   canAccessEntity,
   checkPermission,
@@ -163,12 +163,17 @@ async function nextMovementNumber(tx: Tx, _series: string, date: Date): Promise<
 
 async function validateWarehouseAccess(req: Request, res: Response, details: DetailInput[]): Promise<boolean> {
   if (await isAdminUser(req.user!.role)) return true;
-  for (const d of details) {
-    for (const whId of [d.fromWarehouseId, d.toWarehouseId]) {
-      if (whId && !(await canAccessEntity(req.user!.role, "WAREHOUSE", whId))) {
-        res.status(403).json({ error: `Tidak punya akses ke gudang ${whId}.` });
-        return false;
-      }
+  const whIds = [...new Set(details.flatMap((d) => [d.fromWarehouseId, d.toWarehouseId].filter(Boolean) as string[]))];
+  if (whIds.length === 0) return true;
+  const rows = await db
+    .select({ entityId: schema.branchAccesses.entityId })
+    .from(schema.branchAccesses)
+    .where(and(eq(schema.branchAccesses.roleId, req.user!.role), eq(schema.branchAccesses.entityType, "WAREHOUSE"), inArray(schema.branchAccesses.entityId, whIds)));
+  const allowed = new Set(rows.map((r) => r.entityId));
+  for (const whId of whIds) {
+    if (!allowed.has(whId)) {
+      res.status(403).json({ error: `Tidak punya akses ke gudang ${whId}.` });
+      return false;
     }
   }
   return true;
@@ -278,7 +283,8 @@ async function assertUniqueBarcodes(
 async function resolveBatch(
   tx: Tx,
   itemId: string,
-  batchNumber: string | null
+  batchNumber: string | null,
+  cachedFormats?: BatchFormatLike[] | null
 ): Promise<string | null> {
   if (!batchNumber) return null;
   const [item] = await tx
@@ -286,10 +292,10 @@ async function resolveBatch(
     .from(schema.items)
     .where(eq(schema.items.id, itemId))
     .limit(1);
-  const formats = (await db
+  const formats = cachedFormats ?? ((await db
     .select()
     .from(schema.batchFormats)
-    .where(eq(schema.batchFormats.isActive, true))) as unknown as BatchFormatLike[];
+    .where(eq(schema.batchFormats.isActive, true))) as unknown as BatchFormatLike[]);
   const parsed = parseBatchNumber(batchNumber, formats);
   assertBatchItemMatch(parsed, item?.alternativeCode ?? null, batchNumber);
   const [existing] = await tx
@@ -303,7 +309,7 @@ async function resolveBatch(
     )
     .limit(1);
   if (existing) {
-    await maybeFillBatchMeta(tx, existing.id);
+    await maybeFillBatchMeta(tx, existing.id, formats);
     return existing.id;
   }
   const id = await nextRowId(tx, schema.batches, "bat");
@@ -340,7 +346,7 @@ function assertBatchItemMatch(
 
 /** Isi metadata batch yang kosong dari parse batch number — hanya field yang
  *  belum terisi, agar edit manual tidak ditimpa. */
-async function maybeFillBatchMeta(tx: Tx, batchId: string) {
+async function maybeFillBatchMeta(tx: Tx, batchId: string, cachedFormats?: BatchFormatLike[] | null) {
   const [row] = await tx
     .select({
       batchNumber: schema.batches.batchNumber,
@@ -353,10 +359,10 @@ async function maybeFillBatchMeta(tx: Tx, batchId: string) {
     .where(eq(schema.batches.id, batchId))
     .limit(1);
   if (!row) return;
-  const formats = (await db
+  const formats = cachedFormats ?? ((await db
     .select()
     .from(schema.batchFormats)
-    .where(eq(schema.batchFormats.isActive, true))) as unknown as BatchFormatLike[];
+    .where(eq(schema.batchFormats.isActive, true))) as unknown as BatchFormatLike[]);
   const parsed = parseBatchNumber(row.batchNumber, formats);
   if (!parsed) return;
   const patch: Record<string, unknown> = {};
@@ -390,9 +396,10 @@ async function applyMovementEffect(
   details: EffectDetail[],
   actorId: string
 ) {
+  const t0 = Date.now();
   const now = new Date();
 
-  // --- 0. Validasi stok gudang asal mencukupi (agregat per warehouse+item) ---
+  // --- 0 & 1. Validasi & Update stock_balances agregat (batch, incremental) ---
   const outNeeds = new Map<string, number>();
   const keyOf = (wh: string, it: string) => `${wh}|${it}`;
   for (const d of details) {
@@ -401,37 +408,6 @@ async function applyMovementEffect(
       outNeeds.set(k, (outNeeds.get(k) ?? 0) + d.qty);
     }
   }
-  for (const [k, need] of outNeeds.entries()) {
-    const [warehouseId, itemId] = k.split("|");
-    const [existing] = await tx
-      .select({
-        closingQty: schema.stockBalances.closingQty,
-        itemName: schema.items.name,
-        warehouseName: schema.warehouses.name,
-      })
-      .from(schema.stockBalances)
-      .innerJoin(schema.items, eq(schema.items.id, schema.stockBalances.itemId))
-      .innerJoin(schema.warehouses, eq(schema.warehouses.id, schema.stockBalances.warehouseId))
-      .where(
-        and(
-          eq(schema.stockBalances.warehouseId, warehouseId),
-          eq(schema.stockBalances.itemId, itemId)
-        )
-      )
-      .for("update")
-      .limit(1);
-    const available = Number(existing?.closingQty ?? 0);
-    if (available < need) {
-      const itemName = existing?.itemName ?? itemId;
-      const whName = existing?.warehouseName ?? warehouseId;
-      const shortage = need - available;
-      throw new StockError(
-        `Stok "${itemName}" di ${whName} tidak mencukupi: tersedia ${available}, dibutuhkan ${need}, kurang ${shortage}.`
-      );
-    }
-  }
-
-  // --- 1. Update stock_balances agregat ---
   const aggSeen = new Map<string, number>();
   for (const d of details) {
     if (d.fromWarehouseId) {
@@ -443,50 +419,77 @@ async function applyMovementEffect(
       aggSeen.set(k, (aggSeen.get(k) ?? 0) + d.qty);
     }
   }
-  for (const [k, delta] of aggSeen.entries()) {
-    if (delta === 0) continue;
-    const [warehouseId, itemId] = k.split("|");
-    const [existing] = await tx
+  if (aggSeen.size > 0) {
+    const aggKeys = [...aggSeen.keys()];
+    const aggValues = sql.join(
+      aggKeys.map((k) => {
+        const [wh, it] = k.split("|");
+        return sql`(${wh}, ${it})`;
+      }),
+      sql`, `
+    );
+    // Batch SELECT FOR UPDATE for all wh+item combos
+    const existingBalances = await tx
       .select()
       .from(schema.stockBalances)
-      .where(
-        and(
-          eq(schema.stockBalances.warehouseId, warehouseId),
-          eq(schema.stockBalances.itemId, itemId)
-        )
-      )
-      .limit(1);
-    const prevIn = existing?.inQty ?? 0;
-    const prevOut = existing?.outQty ?? 0;
-    const prevClosing = existing?.closingQty ?? 0;
-    const inDelta = Math.max(delta, 0);
-    const outDelta = Math.max(-delta, 0);
-    const newClosing = prevClosing + inDelta - outDelta;
-    if (existing) {
-      await tx
-        .update(schema.stockBalances)
-        .set({
-          inQty: prevIn + inDelta,
-          outQty: prevOut + outDelta,
-          closingQty: newClosing,
-          updatedAt: now,
-        })
-        .where(eq(schema.stockBalances.id, existing.id));
-    } else {
-      await tx.insert(schema.stockBalances).values({
-        id: await nextRowId(tx, schema.stockBalances, "sb"),
-        warehouseId,
-        itemId,
-        openingQty: 0,
-        inQty: inDelta,
-        outQty: outDelta,
-        closingQty: newClosing,
-        updatedAt: now,
-      });
+      .where(sql`(warehouse_id, item_id) IN (VALUES ${aggValues})`)
+      .for("update");
+    const balMap = new Map(existingBalances.map((r) => [keyOf(r.warehouseId, r.itemId), r]));
+    // Validasi stok mencukupi untuk outNeeds
+    for (const [k, need] of outNeeds.entries()) {
+      const existing = balMap.get(k);
+      const available = Number(existing?.closingQty ?? 0);
+      if (available < need) {
+        const [warehouseId, itemId] = k.split("|");
+        const [meta] = await tx
+          .select({ itemName: schema.items.name, warehouseName: schema.warehouses.name })
+          .from(schema.items)
+          .innerJoin(schema.warehouses, sql`true`)
+          .where(and(eq(schema.items.id, itemId), eq(schema.warehouses.id, warehouseId)))
+          .limit(1);
+        // Fallback simple names if join fails
+        const itemName = meta?.itemName ?? itemId;
+        const whName = meta?.warehouseName ?? warehouseId;
+        const shortage = need - available;
+        throw new StockError(
+          `Stok "${itemName}" di ${whName} tidak mencukupi: tersedia ${available}, dibutuhkan ${need}, kurang ${shortage}.`
+        );
+      }
     }
+    // Update balances (parallel)
+    await Promise.all(
+      [...aggSeen.entries()].map(async ([k, delta]) => {
+        if (delta === 0) return;
+        const [warehouseId, itemId] = k.split("|");
+        const existing = balMap.get(k);
+        const prevIn = Number(existing?.inQty ?? 0);
+        const prevOut = Number(existing?.outQty ?? 0);
+        const prevClosing = Number(existing?.closingQty ?? 0);
+        const inDelta = Math.max(delta, 0);
+        const outDelta = Math.max(-delta, 0);
+        const newClosing = prevClosing + inDelta - outDelta;
+        if (existing) {
+          await tx
+            .update(schema.stockBalances)
+            .set({ inQty: prevIn + inDelta, outQty: prevOut + outDelta, closingQty: newClosing, updatedAt: now })
+            .where(eq(schema.stockBalances.id, existing.id));
+        } else {
+          await tx.insert(schema.stockBalances).values({
+            id: await nextRowId(tx, schema.stockBalances, "sb"),
+            warehouseId,
+            itemId,
+            openingQty: 0,
+            inQty: inDelta,
+            outQty: outDelta,
+            closingQty: newClosing,
+            updatedAt: now,
+          });
+        }
+      })
+    );
   }
 
-  // --- 2. Update stock_batches per (batch, warehouse) ---
+  // --- 2. Update stock_batches per (batch, warehouse) (batch) ---
   const batchSeen = new Map<string, { batchId: string; warehouseId: string; delta: number }>();
   for (const d of details) {
     if (!d.batchId) continue;
@@ -503,44 +506,43 @@ async function applyMovementEffect(
       else batchSeen.set(bk, { batchId: d.batchId, warehouseId: d.toWarehouseId, delta: d.qty });
     }
   }
-  for (const { batchId, warehouseId, delta } of batchSeen.values()) {
-    if (delta === 0) continue;
-    const [row] = await tx
+  if (batchSeen.size > 0) {
+    const batchKeys = [...batchSeen.values()];
+    const batchValues = sql.join(
+      batchKeys.map((b) => sql`(${b.batchId}, ${b.warehouseId})`),
+      sql`, `
+    );
+    const existingBatches = await tx
       .select()
       .from(schema.stockBatches)
-      .where(
-        and(
-          eq(schema.stockBatches.batchId, batchId),
-          eq(schema.stockBatches.warehouseId, warehouseId)
-        )
-      )
-      .for("update")
-      .limit(1);
-    const prev = Number(row?.qty ?? 0);
-    const next = prev + delta;
-    if (next < 0) {
-      throw new StockError(
-        `Stok batch tidak mencukupi di gudang asal: tersedia ${prev}, dibutuhkan ${-delta} untuk batch ${batchId}.`
-      );
-    }
-    if (row) {
-      await tx
-        .update(schema.stockBatches)
-        .set({ qty: String(next), updatedAt: now })
-        .where(eq(schema.stockBatches.id, row.id));
-    } else {
-      await tx.insert(schema.stockBatches).values({
-        id: await nextRowId(tx, schema.stockBatches, "stb"),
-        batchId,
-        warehouseId,
-        qty: String(next),
-        updatedAt: now,
-      });
-    }
-    await tx
-      .update(schema.batches)
-      .set({ status: next === 0 ? "EMPTY" : "ACTIVE", updatedAt: now })
-      .where(eq(schema.batches.id, batchId));
+      .where(sql`(batch_id, warehouse_id) IN (VALUES ${batchValues})`)
+      .for("update");
+    const batchMap = new Map(existingBatches.map((r) => [`${r.batchId}|${r.warehouseId}`, r]));
+    await Promise.all(
+      [...batchSeen.values()].map(async ({ batchId, warehouseId, delta }) => {
+        if (delta === 0) return;
+        const row = batchMap.get(`${batchId}|${warehouseId}`);
+        const prev = Number(row?.qty ?? 0);
+        const next = prev + delta;
+        if (next < 0) {
+          throw new StockError(
+            `Stok batch tidak mencukupi di gudang asal: tersedia ${prev}, dibutuhkan ${-delta} untuk batch ${batchId}.`
+          );
+        }
+        if (row) {
+          await tx.update(schema.stockBatches).set({ qty: String(next), updatedAt: now }).where(eq(schema.stockBatches.id, row.id));
+        } else {
+          await tx.insert(schema.stockBatches).values({
+            id: await nextRowId(tx, schema.stockBatches, "stb"),
+            batchId,
+            warehouseId,
+            qty: String(next),
+            updatedAt: now,
+          });
+        }
+        await tx.update(schema.batches).set({ status: next === 0 ? "EMPTY" : "ACTIVE", updatedAt: now }).where(eq(schema.batches.id, batchId));
+      })
+    );
   }
 
   // --- 3. Ledger — satu baris per (transaksi, item, gudang), qty dijumlahkan ---
@@ -564,76 +566,113 @@ async function applyMovementEffect(
       ledAgg.set(k, cur);
     }
   }
-  for (const { itemId, warehouseId, qtyIn, qtyOut, batchId } of ledAgg.values()) {
-    if (qtyIn === 0 && qtyOut === 0) continue;
-    await tx.insert(schema.stockLedger).values({
-      id: await nextRowId(tx, schema.stockLedger, "sld"),
-      transactionId: movement.id,
-      transactionType: typeCode,
-      transactionDate: movement.movementDate,
-      itemId,
-      warehouseId,
-      qtyIn: String(qtyIn),
-      qtyOut: String(qtyOut),
-      qtyBalance: "0",
-      referenceType: movement.referenceType ?? "STOCK_MOVEMENT",
-      referenceId: movement.referenceId ?? movement.id,
-      batchId,
-      createdBy: actorId,
-    });
+  if (ledAgg.size > 0) {
+    // Batch nextRowId for ledger: fetch max once, generate sequential in memory (avoid 5x LOCK)
+    const yymm = yymmOf(movement.movementDate);
+    const base = `sld-${yymm}-`;
+    const [lastLedger] = await tx
+      .select({ id: schema.stockLedger.id })
+      .from(schema.stockLedger)
+      .where(sql`${schema.stockLedger.id} LIKE ${base + "%"}`)
+      .orderBy(desc(schema.stockLedger.id))
+      .limit(1);
+    let nextN = lastLedger ? Number(String(lastLedger.id).split("-").pop()) + 1 : 1;
+    // Acquire advisory lock once per movement for sld YYMM (instead of per row)
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${base.slice(0, -1)}::text)::bigint)`);
+    const ledgerRows = [...ledAgg.values()]
+      .filter(({ qtyIn, qtyOut }) => qtyIn !== 0 || qtyOut !== 0)
+      .map(({ itemId, warehouseId, qtyIn, qtyOut, batchId }) => {
+        const ledgerId = `${base}${String(nextN++).padStart(4, "0")}`;
+        return {
+          id: ledgerId,
+          transactionId: movement.id,
+          transactionType: typeCode,
+          transactionDate: movement.movementDate,
+          itemId,
+          warehouseId,
+          qtyIn: String(qtyIn),
+          qtyOut: String(qtyOut),
+          qtyBalance: "0",
+          referenceType: movement.referenceType ?? "STOCK_MOVEMENT",
+          referenceId: movement.referenceId ?? movement.id,
+          batchId,
+          createdBy: actorId,
+        };
+      });
+    if (ledgerRows.length > 0) {
+      await tx.insert(schema.stockLedger).values(ledgerRows);
+    }
   }
 
-  // --- 4. Hitung ulang saldo berjalan semua (gudang, item) yang terpengaruh ---
-  // Menjamin konsistensi walau transaksi backdated (tanggal lama) diposting
-  // setelah ada baris yang lebih baru.
+  // --- 4. Hitung ulang saldo berjalan suffix dari postingDate sampai MAX (incremental, tidak full scan 1jt)
+  const tRecompute0 = Date.now();
   await recomputeLedgerBalances(
     tx,
-    [...ledAgg.values()].map(({ warehouseId, itemId }) => ({ warehouseId, itemId }))
+    [...ledAgg.values()].map(({ warehouseId, itemId }) => ({ warehouseId, itemId })),
+    movement.movementDate
   );
+  const totalMs = Date.now()-t0;
+  const recomputeMs = Date.now()-tRecompute0;
+  console.log(`[TIMING] applyMovementEffect ${movement.id} total=${totalMs}ms recompute=${recomputeMs}ms keys=${ledAgg.size}`);
 }
 
-/** Hitung ulang stock_ledger.qty_balance menjadi saldo berjalan agregat yang
- *  konsisten dengan stock_balances, untuk (warehouse_id, item_id) tertentu:
- *    base = stock_balances.closing_qty - SUM(qty_in - qty_out) seluruh ledger
- *    balance baris = base + kumulatif (qty_in - qty_out) urut
- *                   (transaction_date, created_at, id)
- *  Dipanggil setelah insert (posting) maupun delete (unpost) baris ledger. */
+/** Hitung ulang stock_ledger.qty_balance incremental:
+ *  Hanya hitung ulang suffix dari postingDate sampai MAX, bukan full scan.
+ *  prev = balance terakhir sebelum postingDate (Index Scan LIMIT 1)
+ *  suffix = rows dengan transaction_date >= postingDate (max 20k, bukan 1jt)
+ *  new_balance = prev + running SUM suffix.
+ *  Jika postingDate >= MAX, cuma 1-5 rows baru (80ms). */
 async function recomputeLedgerBalances(
   tx: Tx,
-  keys: { warehouseId: string; itemId: string }[]
+  keys: { warehouseId: string; itemId: string }[],
+  postingDate?: Date | null
 ) {
   if (keys.length === 0) return;
   const values = sql.join(
     keys.map((k) => sql`(${k.warehouseId}, ${k.itemId})`),
     sql`, `
   );
+  // Jika postingDate null, fallback ke full recompute lama (jarang)
+  if (!postingDate) {
+    await tx.execute(sql`
+      WITH calc AS (
+        SELECT l.id,
+          (COALESCE(b.closing_qty, 0) - COALESCE(t.total, 0) + SUM(l.qty_in - l.qty_out) OVER (PARTITION BY l.warehouse_id, l.item_id ORDER BY l.transaction_date, l.created_at, l.id)::numeric)::numeric(15,3) AS new_balance
+        FROM stock_ledger l
+        JOIN (VALUES ${values}) AS k(warehouse_id, item_id) ON k.warehouse_id = l.warehouse_id AND k.item_id = l.item_id
+        LEFT JOIN (SELECT warehouse_id, item_id, SUM(qty_in - qty_out)::numeric AS total FROM stock_ledger GROUP BY warehouse_id, item_id) t ON t.warehouse_id = l.warehouse_id AND t.item_id = l.item_id
+        LEFT JOIN stock_balances b ON b.warehouse_id = l.warehouse_id AND b.item_id = l.item_id
+      )
+      UPDATE stock_ledger l SET qty_balance = c.new_balance FROM calc c WHERE l.id = c.id
+    `);
+    return;
+  }
+  const pd = postingDate.toISOString();
   await tx.execute(sql`
-    WITH calc AS (
-      SELECT
-        l.id,
-        (
-          COALESCE(b.closing_qty, 0)
-          - COALESCE(t.total, 0)
-          + SUM(l.qty_in - l.qty_out) OVER (
-              PARTITION BY l.warehouse_id, l.item_id
-              ORDER BY l.transaction_date, l.created_at, l.id
-            )::numeric
-        )::numeric(15,3) AS new_balance
+    WITH keys(warehouse_id, item_id) AS (VALUES ${values}),
+    prev AS (
+      SELECT k.warehouse_id, k.item_id, l.qty_balance
+      FROM keys k
+      LEFT JOIN LATERAL (
+        SELECT qty_balance FROM stock_ledger
+        WHERE warehouse_id = k.warehouse_id AND item_id = k.item_id
+          AND transaction_date < ${pd}::timestamptz
+        ORDER BY transaction_date DESC, created_at DESC, id DESC LIMIT 1
+      ) l ON true
+    ),
+    suffix AS (
+      SELECT l.id, l.warehouse_id, l.item_id,
+        SUM(l.qty_in - l.qty_out) OVER (PARTITION BY l.warehouse_id, l.item_id ORDER BY l.transaction_date, l.created_at, l.id)::numeric AS running
       FROM stock_ledger l
-      JOIN (VALUES ${values}) AS k(warehouse_id, item_id)
-        ON k.warehouse_id = l.warehouse_id AND k.item_id = l.item_id
-      LEFT JOIN (
-        SELECT warehouse_id, item_id, SUM(qty_in - qty_out)::numeric AS total
-        FROM stock_ledger
-        GROUP BY warehouse_id, item_id
-      ) t ON t.warehouse_id = l.warehouse_id AND t.item_id = l.item_id
-      LEFT JOIN stock_balances b
-        ON b.warehouse_id = l.warehouse_id AND b.item_id = l.item_id
+      JOIN keys k ON k.warehouse_id = l.warehouse_id AND k.item_id = l.item_id
+      WHERE l.transaction_date >= ${pd}::timestamptz
+    ),
+    calc AS (
+      SELECT s.id, (COALESCE(p.qty_balance, 0) + s.running)::numeric(15,3) AS new_balance
+      FROM suffix s
+      LEFT JOIN prev p ON p.warehouse_id = s.warehouse_id AND p.item_id = s.item_id
     )
-    UPDATE stock_ledger l
-    SET qty_balance = c.new_balance
-    FROM calc c
-    WHERE l.id = c.id
+    UPDATE stock_ledger l SET qty_balance = c.new_balance FROM calc c WHERE l.id = c.id
   `);
 }
 
@@ -667,10 +706,27 @@ export async function insertMovementWithDetails(
   });
 
   const effectDetails: EffectDetail[] = [];
+  const batchFormatsCache = (await db
+    .select()
+    .from(schema.batchFormats)
+    .where(eq(schema.batchFormats.isActive, true))) as unknown as BatchFormatLike[];
+  // Batch nextRowId for smd: fetch max once, generate sequential
+  const yymmSmd = yymmOf(movementDate);
+  const baseSmd = `smd-${yymmSmd}-`;
+  const [lastSmd] = await tx
+    .select({ id: schema.stockMovementDetails.id })
+    .from(schema.stockMovementDetails)
+    .where(sql`${schema.stockMovementDetails.id} LIKE ${baseSmd + "%"}`)
+    .orderBy(desc(schema.stockMovementDetails.id))
+    .limit(1);
+  let nextSmdN = lastSmd ? Number(String(lastSmd.id).split("-").pop()) + 1 : 1;
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${baseSmd.slice(0, -1)}::text)::bigint)`);
+  const detailRows: typeof schema.stockMovementDetails.$inferInsert[] = [];
   for (const d of input.details) {
-    const batchId = await resolveBatch(tx, d.itemId, d.batchNumber ?? null);
-    await tx.insert(schema.stockMovementDetails).values({
-      id: await nextRowId(tx, schema.stockMovementDetails, "smd"),
+    const batchId = await resolveBatch(tx, d.itemId, d.batchNumber ?? null, batchFormatsCache);
+    const detailId = `${baseSmd}${String(nextSmdN++).padStart(4, "0")}`;
+    detailRows.push({
+      id: detailId,
       movementId,
       itemId: d.itemId,
       fromWarehouseId: d.fromWarehouseId,
@@ -688,6 +744,9 @@ export async function insertMovementWithDetails(
       qty: d.qty,
       batchId,
     });
+  }
+  if (detailRows.length > 0) {
+    await tx.insert(schema.stockMovementDetails).values(detailRows);
   }
 
   if (input.status === "POSTED") {
@@ -1136,7 +1195,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
       res.status(400).json({ error: (e as Error).message });
       return;
     }
-    await db.transaction(async (tx) => {
+     await db.transaction(async (tx) => {
       await tx.delete(schema.stockMovementDetails).where(eq(schema.stockMovementDetails.movementId, param(req, "id")));
       await tx
         .update(schema.stockMovements)
@@ -1151,10 +1210,27 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
         })
         .where(eq(schema.stockMovements.id, param(req, "id")));
       const effectDetails: EffectDetail[] = [];
+      const batchFormatsCache = (await db
+        .select()
+        .from(schema.batchFormats)
+        .where(eq(schema.batchFormats.isActive, true))) as unknown as BatchFormatLike[];
+      // Batch smd ids
+      const yymmSmdPatch = yymmOf(input.movementDate ? new Date(input.movementDate) : new Date());
+      const baseSmdPatch = `smd-${yymmSmdPatch}-`;
+      const [lastSmdPatch] = await tx
+        .select({ id: schema.stockMovementDetails.id })
+        .from(schema.stockMovementDetails)
+        .where(sql`${schema.stockMovementDetails.id} LIKE ${baseSmdPatch + "%"}`)
+        .orderBy(desc(schema.stockMovementDetails.id))
+        .limit(1);
+      let nextSmdPatchN = lastSmdPatch ? Number(String(lastSmdPatch.id).split("-").pop()) + 1 : 1;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${baseSmdPatch.slice(0, -1)}::text)::bigint)`);
+      const detailRowsPatch: typeof schema.stockMovementDetails.$inferInsert[] = [];
       for (const d of input.details) {
-        const batchId = await resolveBatch(tx, d.itemId, d.batchNumber ?? null);
-        await tx.insert(schema.stockMovementDetails).values({
-          id: await nextRowId(tx, schema.stockMovementDetails, "smd"),
+        const batchId = await resolveBatch(tx, d.itemId, d.batchNumber ?? null, batchFormatsCache);
+        const detailId = `${baseSmdPatch}${String(nextSmdPatchN++).padStart(4, "0")}`;
+        detailRowsPatch.push({
+          id: detailId,
           movementId: param(req, "id"),
           itemId: d.itemId,
           fromWarehouseId: d.fromWarehouseId,
@@ -1172,6 +1248,9 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
           qty: d.qty,
           batchId,
         });
+      }
+      if (detailRowsPatch.length > 0) {
+        await tx.insert(schema.stockMovementDetails).values(detailRowsPatch);
       }
       if (input.status === "POSTED") {
         await applyMovementEffect(
@@ -1290,7 +1369,7 @@ transactionsRouter.post("/:id/unpost", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "inventory.transactions", "update"))) return;
 
   const [movement] = await db
-    .select({ id: schema.stockMovements.id, status: schema.stockMovements.status })
+    .select({ id: schema.stockMovements.id, status: schema.stockMovements.status, movementDate: schema.stockMovements.movementDate })
     .from(schema.stockMovements)
     .where(eq(schema.stockMovements.id, param(req, "id")))
     .limit(1);
@@ -1399,13 +1478,14 @@ transactionsRouter.post("/:id/unpost", async (req: Request, res: Response) => {
         .delete(schema.stockLedger)
         .where(eq(schema.stockLedger.transactionId, movement.id));
 
-      // --- 3b. Hitung ulang saldo berjalan (gudang, item) yang terpengaruh ---
+      // --- 3b. Hitung ulang suffix dari postingDate sampai MAX (incremental, tidak full 1jt) ---
       await recomputeLedgerBalances(
         tx,
         [...aggSeen.keys()].map((k) => {
           const [warehouseId, itemId] = k.split("|");
           return { warehouseId, itemId };
-        })
+        }),
+        movement.movementDate
       );
 
       // --- 4. Ubah status menjadi CANCELED ---

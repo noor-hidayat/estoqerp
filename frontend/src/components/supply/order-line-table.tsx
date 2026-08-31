@@ -1,5 +1,3 @@
-"use client";
-
 import { Plus, Trash2 } from "lucide-react";
 import { useItemsList, useUoms } from "@/lib/api/query";
 import { SearchableSelect } from "@/components/ui/searchable-select";

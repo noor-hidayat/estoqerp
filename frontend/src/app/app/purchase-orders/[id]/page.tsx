@@ -1,7 +1,5 @@
-"use client";
-
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Pencil, Plus, X } from "lucide-react";
 import {
@@ -297,7 +295,7 @@ function POBody({
                 {po.receipts.map((r) => (
                   <Link
                     key={r.id}
-                    href={`/app/goods-receipts/${r.id}`}
+                    to={`/app/goods-receipts/${r.id}`}
                     className="flex items-center justify-between px-5 py-3 hover:bg-muted/60"
                   >
                     <span className="font-mono text-[13px] font-semibold">GR {formatId(r.id)}</span>

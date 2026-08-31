@@ -13,6 +13,7 @@ import { canAccessEntity, canViewOpnameContext, checkAnyPermission, checkPermiss
 const INSERT_OR_IGNORE = new Set([
   "rolePermissions",
   "branchAccesses",
+  "workspaceAccesses",
   "userSettings",
 ]);
 
@@ -22,6 +23,7 @@ const INSERT_OR_IGNORE = new Set([
 const ID_PREFIXES: Record<string, string> = {
   rolePermissions: "pm",
   branchAccesses: "bxa",
+  workspaceAccesses: "wsa",
   userSettings: "stg",
   branches: "br",
   warehouses: "wh",
@@ -44,6 +46,7 @@ const ID_PREFIXES: Record<string, string> = {
   stockBarcodes: "sbc",
   suppliers: "sup",
   customers: "cus",
+  workspaces: "wsp",
 };
 
 // Semua tabel memakai id serial {prefix}-{YYMM}-{0001} — lihat nextRowId().
@@ -105,6 +108,8 @@ const CRUD_TABLES: Record<string, AnyPgTable> = {
   roles: schema.roles,
   rolePermissions: schema.rolePermissions,
   branchAccesses: schema.branchAccesses,
+  workspaceAccesses: schema.workspaceAccesses,
+  workspaces: schema.workspaces,
   branches: schema.branches,
   warehouses: schema.warehouses,
   locations: schema.locations,
@@ -249,6 +254,8 @@ const TABLE_MENU: Record<string, string | string[]> = {
   roles: "settings.roles",
   rolePermissions: "settings.roles",
   branchAccesses: "settings.roles",
+  workspaceAccesses: "settings.roles",
+  workspaces: "settings.roles",
   branches: "inventory",
   warehouses: "inventory",
   locations: "inventory",
@@ -463,6 +470,7 @@ async function applyEntityScope(req: Request, tableName: string) {
   const s = schema;
   const branchIds = req.accessibleBranchIds ?? [];
   const warehouseIds = req.accessibleWarehouseIds ?? [];
+  const workspaceIds = (req as unknown as { accessibleWorkspaceIds?: string[] }).accessibleWorkspaceIds ?? [];
 
   if (tableName === "branches") {
     return branchIds.length > 0 ? inArray(s.branches.id, branchIds) : sql`FALSE`;
@@ -559,6 +567,16 @@ async function applyEntityScope(req: Request, tableName: string) {
       ) as ReturnType<typeof sql>;
     }
     return sql`FALSE`;
+  }
+  if (tableName === "workspaces") {
+    return workspaceIds.length > 0 ? inArray(s.workspaces.id, workspaceIds) : sql`FALSE`;
+  }
+  if (tableName === "dashboards") {
+    // Dashboard per workspace — jika workspaceIds ada, filter
+    if (workspaceIds.length > 0) {
+      return or(inArray(s.dashboards.workspaceId, workspaceIds), eq(s.dashboards.isGlobal, true)) as ReturnType<typeof sql>;
+    }
+    return undefined;
   }
   return undefined;
 }

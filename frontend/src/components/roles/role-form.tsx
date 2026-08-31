@@ -1,8 +1,6 @@
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import {
   useRoles,
@@ -11,6 +9,8 @@ import {
   useBranches,
   useAllWarehouses,
   useLocations,
+  useWorkspaces,
+  useWorkspaceAccesses,
   useInsert,
   useUpdate,
   useRemove,
@@ -18,8 +18,9 @@ import {
 import { api } from "@/lib/api/client";
 import { useSaveShortcut } from "@/lib/use-save-shortcut";
 import { cx } from "@/lib/utils";
-import type { Role, RolePermission, BranchAccess } from "@/types";
+import type { Role, RolePermission, BranchAccess, WorkspaceAccess } from "@/types";
 import { EntityAccess, type CheckedIds } from "@/components/access/entity-access";
+import { WORKSPACES } from "@/components/app-shell/nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toggle } from "@/components/ui/toggle";
@@ -176,23 +177,28 @@ function TriStateCheck({
 }
 
 export function RoleForm({ role }: { role?: Role }) {
-  const router = useRouter();
+  const navigate = useNavigate();
+  const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
 
   const { isLoading: rolesLoading } = useRoles();
   const { data: rolePermissions, isLoading: permsLoading } = useRolePermissions(role?.id);
   const { data: branchAccesses, isLoading: accessesLoading } = useBranchAccesses(role?.id);
+  const { data: workspaceAccesses, isLoading: wsAccessLoading } = useWorkspaceAccesses(role?.id);
   const { data: branches, isLoading: branchesLoading } = useBranches();
   const { data: warehouses, isLoading: whsLoading } = useAllWarehouses();
   const { data: locations, isLoading: locsLoading } = useLocations();
+  const { data: workspaces } = useWorkspaces();
 
   const insertRole = useInsert("roles");
   const updateRole = useUpdate("roles");
   const removePerm = useRemove("rolePermissions");
   const removeAccess = useRemove("branchAccesses");
+  const removeWsAccess = useRemove("workspaceAccesses");
   const insertPerm = useInsert("rolePermissions");
   const insertRoleAccess = useInsert("branchAccesses");
+  const insertWsAccess = useInsert("workspaceAccesses");
 
-  const isLoading = rolesLoading || permsLoading || accessesLoading || branchesLoading || whsLoading || locsLoading;
+  const isLoading = rolesLoading || permsLoading || accessesLoading || wsAccessLoading || branchesLoading || whsLoading || locsLoading;
 
   const [name, setName] = useState(role?.name ?? "");
   const [active, setActive] = useState(role?.active ?? true);
@@ -201,6 +207,7 @@ export function RoleForm({ role }: { role?: Role }) {
     branches: new Set(),
     warehouses: new Set(),
   });
+  const [checkedWs, setCheckedWs] = useState<Set<string>>(new Set());
   const permsLoadedRef = useRef(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(MENU_GROUPS.map((g) => g.title))
@@ -213,7 +220,7 @@ export function RoleForm({ role }: { role?: Role }) {
   // (Dipakai di mode edit — state diisi dari database, bukan inisialisasi awal.)
   useEffect(() => {
     if (!role || permsLoadedRef.current) return;
-    if (!rolePermissions || !branchAccesses) return;
+    if (!rolePermissions || !branchAccesses || !workspaceAccesses) return;
 
     const map: Record<string, Set<string>> = {};
     for (const p of rolePermissions) {
@@ -228,9 +235,10 @@ export function RoleForm({ role }: { role?: Role }) {
       if (ra.entityType === "WAREHOUSE") c.warehouses.add(ra.entityId);
     }
     setChecked(c);
+    setCheckedWs(new Set(workspaceAccesses.map((w) => w.workspaceId)));
 
     permsLoadedRef.current = true;
-  }, [role, rolePermissions, branchAccesses]);
+  }, [role, rolePermissions, branchAccesses, workspaceAccesses]);
 
   const togglePerm = (menu: string, action: string) => {
     setPerms((p) => {
@@ -332,6 +340,14 @@ export function RoleForm({ role }: { role?: Role }) {
     });
   };
 
+  const toggleWs = (id: string) => {
+    setCheckedWs((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
   const save = async () => {
     if (saving) return;
     if (!name.trim()) {       setError("Role name is required."); return; }
@@ -375,6 +391,14 @@ export function RoleForm({ role }: { role?: Role }) {
         await insertRoleAccess.mutateAsync({ roleId: id, entityType: "WAREHOUSE", entityId: eid });
       }
 
+      const freshWs = await api.get<WorkspaceAccess[]>(`/workspaceAccesses?roleId=${id}`);
+      for (const ra of freshWs) {
+        await removeWsAccess.mutateAsync(ra.id);
+      }
+      for (const wid of checkedWs) {
+        await insertWsAccess.mutateAsync({ roleId: id, workspaceId: wid });
+      }
+
       router.push("/app/settings/roles");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save role.");
@@ -410,6 +434,29 @@ export function RoleForm({ role }: { role?: Role }) {
               <Toggle checked={active} onChange={(v) => setActive(v)} />
               <span className="text-sm text-muted-foreground">{active ? "Active" : "Inactive"}</span>
             </div>
+          </div>
+        </FormSection>
+
+        <FormSection title="Workspace Access" description="Pilih workspace yang boleh diakses role ini. Dashboard & AI akan terfilter per workspace.">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {((workspaces && workspaces.length > 0 ? workspaces : (WORKSPACES as unknown as typeof workspaces)) as { id: string; name: string; description?: string | null; icon: string }[]).map((ws) => {
+              const on = checkedWs.has(ws.id);
+              const displayIcon = ws.icon ?? "Layers";
+              return (
+                <label key={ws.id} className={cx("flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition-colors", on ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50")}>
+                  <input type="checkbox" checked={on} onChange={() => toggleWs(ws.id)} className="size-4 rounded border-input" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">{ws.name}</div>
+                    <div className="text-xs text-muted-foreground">{ws.description ?? ""}</div>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{displayIcon}</span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setCheckedWs(new Set(((workspaces && workspaces.length > 0 ? workspaces : (WORKSPACES as unknown as typeof workspaces)) as { id:string }[]).map((w)=>w.id)))}>Select all</Button>
+            <Button variant="outline" size="sm" onClick={() => setCheckedWs(new Set())}>Clear</Button>
           </div>
         </FormSection>
 

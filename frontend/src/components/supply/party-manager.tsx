@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Pencil, Plus, Trash2, Truck, Users } from "lucide-react";

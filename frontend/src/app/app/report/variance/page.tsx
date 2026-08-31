@@ -1,5 +1,3 @@
-"use client";
-
 import { useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { FileDown, FileSpreadsheet, TriangleAlert } from "lucide-react";

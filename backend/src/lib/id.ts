@@ -30,9 +30,38 @@ export async function nextRowId(
 ): Promise<string> {
   const idCol = (table as unknown as { id: AnyPgColumn }).id;
   if (opts.lock) {
-    await exec.execute(sql`LOCK TABLE ${table} IN EXCLUSIVE MODE`);
+    const yymm = yymmOf(date);
+    await exec.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${prefix + "-" + yymm})::bigint)`);
   }
   const base = `${prefix}-${yymmOf(date)}-`;
+  const rows = (await exec
+    .select({ id: idCol })
+    .from(table)
+    .where(sql`${idCol} LIKE ${base + "%"}`)
+    .orderBy(desc(idCol))
+    .limit(1)) as { id: string }[];
+  const last = rows[0]?.id;
+  const n = last ? (Number(String(last).split("-").pop()) || 0) + 1 : 1;
+  return `${base}${String(n).padStart(4, "0")}`;
+}
+
+export function mmyyOf(date: Date | string = new Date()): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return `${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getFullYear()).slice(-2)}`;
+}
+
+export async function nextSocId(
+  exec: IdExecutor,
+  table: AnyPgTable,
+  date: Date | string = new Date(),
+  opts: { lock?: boolean } = {}
+): Promise<string> {
+  const idCol = (table as unknown as { id: AnyPgColumn }).id;
+  if (opts.lock) {
+    const mmyy = mmyyOf(date);
+    await exec.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"SOC-" + mmyy})::bigint)`);
+  }
+  const base = `SOC-${mmyyOf(date)}-`;
   const rows = (await exec
     .select({ id: idCol })
     .from(table)
@@ -51,6 +80,16 @@ export function nextSeedId(
   date: Date | string = new Date()
 ): string {
   const key = `${prefix}-${yymmOf(date)}`;
+  const n = (counters.get(key) ?? 0) + 1;
+  counters.set(key, n);
+  return `${key}-${String(n).padStart(4, "0")}`;
+}
+
+export function nextSocSeedId(
+  counters: Map<string, number>,
+  date: Date | string = new Date()
+): string {
+  const key = `SOC-${mmyyOf(date)}`;
   const n = (counters.get(key) ?? 0) + 1;
   counters.set(key, n);
   return `${key}-${String(n).padStart(4, "0")}`;

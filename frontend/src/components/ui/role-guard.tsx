@@ -1,15 +1,14 @@
-"use client";
-
 import type { ReactNode } from "react";
 import { LockKeyhole } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 
 /** "Access restricted" screen — used by RoleGuard and MenuGate. */
 export function AccessDenied() {
-  const router = useRouter();
+  const navigate = useNavigate();
+  const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
       <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-lg bg-muted text-muted-foreground">

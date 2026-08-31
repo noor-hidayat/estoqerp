@@ -1,5 +1,3 @@
-"use client";
-
 import { Responsive, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -11,11 +9,13 @@ import {
 import { WidgetRenderer } from "@/components/dashboard/widgets";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useActiveWorkspace } from "@/hooks/use-workspace";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 export default function DashboardPage() {
-  const { dashboards, isLoading: listLoading } = useDashboards();
+  const { activeId: workspaceId } = useActiveWorkspace();
+  const { dashboards, isLoading: listLoading } = useDashboards(workspaceId);
   const { activeId, setActiveId } = useActiveDashboardId(dashboards);
   const { data: dashboard, isLoading: dashLoading } = useDashboard(activeId ?? undefined);
 

@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef } from "react";
 
 export function useSaveShortcut(onSave: () => void, enabled = true) {

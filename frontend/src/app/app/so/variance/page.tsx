@@ -1,8 +1,6 @@
-"use client";
-
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import { Scale } from "lucide-react";
 import {
@@ -35,7 +33,7 @@ interface VarianceRow {
 }
 
 export default function VarianceReviewPage() {
-  const searchParams = useSearchParams();
+  const [searchParams] = useSearchParams();
   const urlProjectId = searchParams.get("projectId") ?? "";
   const [projectId, setProjectId] = useState(urlProjectId || "all");
   const [query, setQuery] = useState("");
@@ -114,7 +112,7 @@ export default function VarianceReviewPage() {
       sortValue: (r) => r.projectName,
       cell: (r) => (
         <Link
-          href={`/app/so/${r.projectId}`}
+          to={`/app/project/warehouse?projectId=${r.projectId}`}
           className="text-[13px] text-muted-foreground transition-colors hover:text-primary"
         >
           {r.projectName}

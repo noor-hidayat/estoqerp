@@ -1,7 +1,5 @@
-"use client";
-
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useBranches, useWarehouses, useInsert } from "@/lib/api/query";
 import { useSession } from "@/lib/session";
@@ -50,7 +48,8 @@ const MODES: {
 ];
 
 export default function NewProjectPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
+  const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
   useEffect(() => { router.replace("/app/project/new"); }, [router]);
 
   const { user, isSystem, access } = useSession();
@@ -108,7 +107,7 @@ export default function NewProjectPage() {
         deadline: deadline || undefined,
         createdBy: user?.id ?? "",
       })) as { id: string };
-      router.push(`/app/so/${created.id}`);
+      router.push(`/app/project/warehouse?projectId=${created.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create stock opname");
       setSaving(false);

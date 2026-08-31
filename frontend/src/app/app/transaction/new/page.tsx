@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -15,31 +13,32 @@ export default function NewTransactionPage() {
   const create = useCreateMovement();
   const update = useUpdateMovement();
   const post = usePostMovement();
-  const [savedTitle, setSavedTitle] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [savedTitle, setSavedTitle] = useState<string | null>(null);
 
   return (
     <MenuGate menu="inventory.transactions">
       <MovementForm
         title={savedTitle ?? "New Transaction"}
-        submitLabel="Save Transaction"
+        onSaved={(typeName) => setSavedTitle(typeName)}
+        submitLabel="Save"
         onSubmit={async (input) => {
           if (savedId) {
             await update.mutateAsync({ id: savedId, body: input });
+            navigate(`/app/transaction/${savedId}`, { replace: true });
           } else {
             const res = await create.mutateAsync(input);
             const id = (res as { id?: string }).id;
             if (id) {
               setSavedId(id);
-              navigate(`/app/transaction/${id}`);
+              navigate(`/app/transaction/${id}`, { replace: true });
             }
           }
         }}
-        onSaved={(typeName) => setSavedTitle(typeName)}
         onPost={async () => {
           if (!savedId) return;
           await post.mutateAsync(savedId);
-          alert("Transaction posted.");
+          navigate(`/app/transaction/${savedId}`, { replace: true });
         }}
       />
     </MenuGate>

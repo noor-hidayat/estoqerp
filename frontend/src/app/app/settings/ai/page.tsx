@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 import { Bot, CheckCircle2, Loader2, Save, XCircle } from "lucide-react";
 import { api } from "@/lib/api/client";

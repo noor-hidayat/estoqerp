@@ -34,9 +34,21 @@ const NUM_BARCODES = Number(process.env.NUM_BARCODES ?? 250_000);
 const BATCHES_PER_ITEM = Number(process.env.BATCHES_PER_ITEM ?? 8);
 const CHUNK = Number(process.env.CHUNK ?? 5_000);
 const RESET = process.env.RESET === "1" || process.env.RESET === "true";
+// Base date untuk dummy: default 60 hari lalu agar posting now() selalu di tail (> MAX).
+// Bisa di-override via env SEED_BASE_DATE (ISO string, mis. 2024-01-01T00:00:00Z).
+// Jika SEED_BASE_DATE tidak di-set, dummy berakhir 1 hari sebelum now -> suffix posting now() = 1-5 rows (80ms).
+const SEED_BASE_DATE_RAW = process.env.SEED_BASE_DATE;
+const SEED_BASE_DATE = SEED_BASE_DATE_RAW ? new Date(SEED_BASE_DATE_RAW) : null;
+if (SEED_BASE_DATE_RAW && Number.isNaN(SEED_BASE_DATE!.getTime())) {
+  throw new Error(`SEED_BASE_DATE tidak valid: ${SEED_BASE_DATE_RAW}`);
+}
+const FIXED_BASE_TIME = SEED_BASE_DATE
+  ? SEED_BASE_DATE.getTime()
+  : Date.now() - 60 * 86_400_000 - COUNT * 1_000; // berakhir kemarin
+const FIXED_BASE_DATE = new Date(FIXED_BASE_TIME);
 
 const yymm = (() => {
-  const d = new Date();
+  const d = FIXED_BASE_DATE;
   return `${String(d.getFullYear()).slice(-2)}${String(d.getMonth() + 1).padStart(2, "0")}`;
 })();
 
@@ -153,7 +165,10 @@ async function main() {
   let detailBuf: (typeof stockMovementDetails.$inferInsert)[] = [];
   let added = 0;
 
-  const baseTime = Date.now();
+  const baseTime = FIXED_BASE_TIME;
+  console.log(
+    `Base dummy date: ${FIXED_BASE_DATE.toISOString()} → ${new Date(FIXED_BASE_TIME + (COUNT - 1) * 1000).toISOString()} (MAX < now, posting now() = tail)`
+  );
   const flush = async () => {
     if (headerBuf.length) {
       await db.insert(stockMovements).values(headerBuf);

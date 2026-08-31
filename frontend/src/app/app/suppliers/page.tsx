@@ -1,5 +1,3 @@
-"use client";
-
 import { PartyManager } from "@/components/supply/party-manager";
 import { Truck } from "lucide-react";
 

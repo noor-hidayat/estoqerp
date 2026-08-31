@@ -1,5 +1,3 @@
-"use client";
-
 import { useNavigate } from "react-router-dom";
 import { CalendarIcon } from "lucide-react";
 import { useBranches, useWarehouses, useCreateOpnameProject } from "@/lib/api/query";
@@ -15,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { TimePicker } from "@/components/ui/time-picker";
 import { RoleGuard } from "@/components/ui/role-guard";
 import {
   FormPage,
@@ -27,6 +26,8 @@ import { useErrorToast } from "@/hooks/use-error-toast";
 const formSchema = z.object({
   name: z.string().min(1, "Project name is required"),
   deadline: z.date().optional(),
+  cutOffDate: z.date({ message: "Cut off date wajib" }),
+  cutOffTime: z.string().min(1, "Cut off time wajib"),
   mode: z.enum(["COMPARE", "SCRATCH"]),
   branchId: z.string(),
   warehouseIds: z.array(z.string()).min(1, "Select at least one warehouse"),
@@ -59,6 +60,8 @@ function Page() {
     defaultValues: {
       name: "",
       deadline: undefined,
+      cutOffDate: undefined,
+      cutOffTime: "",
       mode: "COMPARE",
       branchId: "",
       warehouseIds: [],
@@ -74,6 +77,8 @@ function Page() {
       {
         name: values.name,
         deadline: values.deadline ? format(values.deadline, "yyyy-MM-dd") : null,
+        cutOffDate: format(values.cutOffDate, "yyyy-MM-dd"),
+        cutOffTime: values.cutOffTime,
         mode: values.mode,
         warehouses: (warehouses ?? [])
           .filter((wh) => selected.has(wh.id))
@@ -95,31 +100,70 @@ function Page() {
 return (
     <FormPage
       title="Create Project"
-      description="Set the name, mode, and warehouses to be counted."
       actions={
-        <Button type="submit" form="create-project-form" variant="primary" disabled={create.isPending}>
+        <Button type="submit" form="create-project-form" variant="primary" size="sm" className="h-7 px-2.5 text-xs" disabled={create.isPending}>
           {create.isPending ? "Saving..." : "Save"}
         </Button>
       }
     >
-      <form
-        id="create-project-form"
-        onSubmit={form.handleSubmit(onSubmit)}
-        onReset={onReset}
-      >
-        <FormSection>
-          <FormGrid>
+      <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
+        <form
+          id="create-project-form"
+          onSubmit={form.handleSubmit(onSubmit)}
+          onReset={onReset}
+          className="flex flex-col gap-6"
+        >
+          <FormSection className="pb-0">
+            <FormGrid>
+              <div className="sm:col-span-2">
+                <Controller
+                  control={form.control}
+                  name="name"
+                  render={({ field, fieldState }) => (
+                    <Field data-invalid={fieldState.invalid}>
+                      <FieldLabel>Project Name</FieldLabel>
+                      <Input
+                        placeholder="Stock Opname August"
+                        type="text"
+                        {...field}
+                      />
+                      {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                    </Field>
+                  )}
+                />
+              </div>
+
             <Controller
               control={form.control}
-              name="name"
+              name="deadline"
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel>Project Name</FieldLabel>
-                  <Input
-                    placeholder="Stock Opname August"
-                    type="text"
-                    {...field}
-                  />
+                  <FieldLabel>Deadline</FieldLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? (
+                          format(field.value, "PPP")
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Pick a date
+                          </span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar mode="single" selected={field.value} onSelect={field.onChange} />
+                      <div className="border-t border-border p-2">
+                        <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => field.onChange(new Date())}>
+                          Today
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
                 </Field>
               )}
@@ -127,36 +171,40 @@ return (
 
             <Controller
               control={form.control}
-              name="deadline"
+              name="cutOffDate"
               render={({ field, fieldState }) => (
-                <div className="sm:col-span-2">
-                  <div className="sm:max-w-[49%]">
-                    <Field data-invalid={fieldState.invalid}>
-                      <FieldLabel>Deadline</FieldLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-start text-left font-normal"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {field.value ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span className="text-muted-foreground">
-                                Pick a date
-                              </span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar mode="single" onSelect={field.onChange} />
-                        </PopoverContent>
-                      </Popover>
-                      {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                    </Field>
-                  </div>
-                </div>
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel>Cut off date *</FieldLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? format(field.value, "PPP") : <span className="text-muted-foreground">Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar mode="single" selected={field.value} onSelect={field.onChange} />
+                      <div className="border-t border-border p-2">
+                        <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => field.onChange(new Date())}>
+                          Today
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                </Field>
+              )}
+            />
+
+            <Controller
+              control={form.control}
+              name="cutOffTime"
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel>Cut off time *</FieldLabel>
+                  <TimePicker value={field.value} onChange={field.onChange} />
+                  {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                </Field>
               )}
             />
 
@@ -211,35 +259,33 @@ return (
           </FormGrid>
         </FormSection>
 
-        <FormSection>
-          <FormGrid>
-            <Controller
-              control={form.control}
-              name="branchId"
-              render={({ field, fieldState }) => (
-                <div className="sm:col-span-2">
-                  <div className="sm:max-w-[49%]">
-                    <Field data-invalid={fieldState.invalid}>
-                      <FieldLabel>Select Branch</FieldLabel>
-                      <NativeSelect
-                        value={field.value ?? ""}
-                        onChange={(event) => field.onChange(event.target.value)}
-                        onBlur={field.onBlur}
-                        ref={field.ref}
-                      >
-                        <NativeSelectOption value="">All branches</NativeSelectOption>
-                        {branches?.map((b) => (
-                          <NativeSelectOption key={b.id} value={b.id}>
-                            {b.name}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                      {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                    </Field>
-                  </div>
-                </div>
-              )}
-            />
+          <div className="h-px bg-border" />
+
+          <FormSection className="pb-0">
+            <FormGrid>
+              <Controller
+                control={form.control}
+                name="branchId"
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel>Select Branch</FieldLabel>
+                    <NativeSelect
+                      value={field.value ?? ""}
+                      onChange={(event) => field.onChange(event.target.value)}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                    >
+                      <NativeSelectOption value="">All branches</NativeSelectOption>
+                      {branches?.map((b) => (
+                        <NativeSelectOption key={b.id} value={b.id}>
+                          {b.name}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                  </Field>
+                )}
+              />
 
             <Controller
               control={form.control}
@@ -290,6 +336,7 @@ return (
           </FormGrid>
         </FormSection>
         </form>
+      </div>
       </FormPage>
   );
 }

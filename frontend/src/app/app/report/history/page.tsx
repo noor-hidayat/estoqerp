@@ -1,5 +1,3 @@
-"use client";
-
 import { useMemo, useState } from "react";
 import { FileDown, FileSpreadsheet, History } from "lucide-react";
 

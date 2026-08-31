@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
-import { and, desc, eq, inArray, sql, sum, count, avg, min, max } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql, sum, count, avg, min, max } from "drizzle-orm";
 import { db } from "../db/pool";
 import * as s from "../db/schema";
-import { checkPermission } from "../middleware/rbac";
+import { checkPermission, hasWorkspaceAccess } from "../middleware/rbac";
 import { nextRowId } from "../lib/id";
 
 export const dashboardBuilderRouter = Router();
@@ -389,7 +389,13 @@ dashboardBuilderRouter.get("/dashboards/meta", async (req, res, next) => {
 dashboardBuilderRouter.get("/dashboards", async (req, res, next) => {
   if (!(await checkPermission(req, res, "dashboard", "view"))) return;
   try {
-    const rows = await db.select().from(s.dashboards).orderBy(s.dashboards.name);
+    const workspaceId = typeof req.query.workspaceId === "string" ? req.query.workspaceId : null;
+    let rows: (typeof s.dashboards.$inferSelect)[];
+    if (workspaceId) {
+      rows = await db.select().from(s.dashboards).where(or(eq(s.dashboards.workspaceId, workspaceId), eq(s.dashboards.isGlobal, true))).orderBy(s.dashboards.name);
+    } else {
+      rows = await db.select().from(s.dashboards).orderBy(s.dashboards.name);
+    }
     res.json(rows);
   } catch (e) {
     next(e);
@@ -401,12 +407,18 @@ dashboardBuilderRouter.post("/dashboards", async (req, res, next) => {
   try {
     const name = String(req.body?.name ?? "").trim();
     if (!name) return res.status(400).json({ error: "Nama dashboard wajib." });
+    const workspaceId = typeof req.body?.workspaceId === "string" && req.body.workspaceId ? req.body.workspaceId : null;
+    if (workspaceId && !(await hasWorkspaceAccess(req as any, workspaceId))) {
+      res.status(403).json({ error: "Tidak punya akses workspace." });
+      return;
+    }
     const id = await nextRowId(db, s.dashboards, "dsb");
     await db.insert(s.dashboards).values({
       id,
       name,
       ownerId: (req as any).user?.id ?? null,
       branchId: req.body?.branchId ?? null,
+      workspaceId,
       isGlobal: req.body?.isGlobal === false ? false : true,
     });
     res.status(201).json({ id });
