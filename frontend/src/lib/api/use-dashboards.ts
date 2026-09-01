@@ -21,12 +21,19 @@ const ACTIVE_KEY = "dashboard.activeId";
 
 export function useDashboards(workspaceId?: string | null) {
   const qc = useQueryClient();
+  // workspaceId === undefined = belum siap (tunggu workspaces), null = siap tapi tanpa filter (fetch all)
+  const enabled = workspaceId !== undefined;
   const { data, isLoading } = useQuery({
     queryKey: ["dashboards", workspaceId ?? "all"],
     queryFn: () => {
       const qs = workspaceId ? `?workspaceId=${workspaceId}` : "";
       return api.get<DashboardSummary[]>(`/dashboards${qs}`);
     },
+    enabled,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const create = useMutation({
@@ -61,6 +68,10 @@ export function useDashboard(id?: string) {
     queryKey: ["dashboard", id],
     enabled: !!id,
     queryFn: () => api.get<DashboardDetail>(`/dashboards/${id}`),
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -88,16 +99,57 @@ export function useActiveDashboardId(dashboards: DashboardSummary[]) {
   return { activeId, setActiveId };
 }
 
+export function useDashboardTemplates(workspaceId?: string | null) {
+  return useQuery({
+    queryKey: ["dashboard-templates", workspaceId ?? "all"],
+    queryFn: () => {
+      const qs = workspaceId ? `?workspaceId=${workspaceId}` : "";
+      return api.get<import("@/components/dashboard/widget-registry").WidgetTemplate[]>(`/dashboard-templates${qs}`);
+    },
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export interface DashboardWidgetsData {
+  widgets: {
+    id: string;
+    type: string;
+    layout: WidgetLayout;
+    title: string;
+    templateId: string | null;
+    rows: import("@/components/dashboard/types").WidgetRow[];
+    error: string | null;
+    config: WidgetConfig;
+  }[];
+}
+
+export function useDashboardWidgetsData(dashboardId?: string) {
+  return useQuery({
+    queryKey: ["dashboard-widgets-data", dashboardId],
+    enabled: !!dashboardId,
+    queryFn: () => api.get<DashboardWidgetsData>(`/dashboards/${dashboardId}/widgets/data`),
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
 // ---- Widget-level mutations ----
 
 export function useWidgetMutations(dashboardId: string) {
   const qc = useQueryClient();
-  const invalidate = () =>
+  const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["dashboard", dashboardId] });
+    qc.invalidateQueries({ queryKey: ["dashboard-widgets-data", dashboardId] });
+  };
 
   const addWidget = useMutation({
-    mutationFn: (body: { type: string; config: WidgetConfig; layout: WidgetLayout }) =>
-      api.post<WidgetInstance>(`/dashboards/${dashboardId}/widgets`, body),
+    mutationFn: (body: { type: string; config: WidgetConfig; layout: WidgetLayout } | { templateId: string; title?: string; layout: WidgetLayout }) =>
+      api.post<WidgetInstance>(`/dashboards/${dashboardId}/widgets`, body as unknown as Record<string, unknown>),
     onSuccess: invalidate,
   });
 
@@ -107,8 +159,8 @@ export function useWidgetMutations(dashboardId: string) {
       patch,
     }: {
       widgetId: string;
-      patch: { type?: string; config?: WidgetConfig };
-    }) => api.put(`/dashboards/${dashboardId}/widgets/${widgetId}`, patch),
+      patch: { type?: string; config?: WidgetConfig } | { templateId: string; title?: string };
+    }) => api.put(`/dashboards/${dashboardId}/widgets/${widgetId}`, patch as unknown as Record<string, unknown>),
     onSuccess: invalidate,
   });
 

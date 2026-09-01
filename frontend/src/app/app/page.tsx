@@ -5,6 +5,7 @@ import {
   useActiveDashboardId,
   useDashboard,
   useDashboards,
+  useDashboardWidgetsData,
 } from "@/lib/api/use-dashboards";
 import { WidgetRenderer } from "@/components/dashboard/widgets";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,8 +19,10 @@ export default function DashboardPage() {
   const { dashboards, isLoading: listLoading } = useDashboards(workspaceId);
   const { activeId, setActiveId } = useActiveDashboardId(dashboards);
   const { data: dashboard, isLoading: dashLoading } = useDashboard(activeId ?? undefined);
+  const { data: widgetsData, isLoading: widgetsLoading } = useDashboardWidgetsData(activeId ?? undefined);
 
-  if (listLoading || dashLoading) {
+  const workspacePending = workspaceId === undefined;
+  if (workspacePending || listLoading || dashLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-9 w-64 rounded-md" />
@@ -33,6 +36,11 @@ export default function DashboardPage() {
   }
 
   const widgets = dashboard?.widgets ?? [];
+  const hasWidgets = widgets.length > 0;
+  // Data rows diambil via 1 GET /dashboards/:id/widgets/data (bukan N x POST)
+  const dataWidgets = widgetsData?.widgets ?? [];
+  // Mapping id -> rows untuk render, fallback ke widgets biasa jika data belum siap
+  const dataById = new Map(dataWidgets.map((w) => [w.id, w]));
 
   return (
     <div className="space-y-6">
@@ -76,11 +84,23 @@ export default function DashboardPage() {
           isDraggable={false}
           isResizable={false}
         >
-          {widgets.map((w) => (
-            <div key={w.id}>
-              <WidgetRenderer widget={w} />
-            </div>
-          ))}
+          {widgets.map((w) => {
+            const dw = dataById.get(w.id);
+            // Selama widgetsData loading, suppress fetch per-widget — tampilkan skeleton
+            const isLoading = hasWidgets && widgetsLoading && !dw;
+            const dataProp = dw ? { rows: dw.rows } : hasWidgets && widgetsLoading ? { rows: [] } : undefined;
+            // dw.title adalah title dari template (atau override)
+            const widgetWithTitle = dw?.title ? { ...w, config: { ...(w.config as object), title: dw.title } as unknown as typeof w.config } : w;
+            const useFallback = !dw && !widgetsLoading;
+            return (
+              <div key={w.id}>
+                <WidgetRenderer
+                  widget={widgetWithTitle}
+                  {...(useFallback ? {} : { data: dataProp, isLoading })}
+                />
+              </div>
+            );
+          })}
         </ResponsiveGridLayout>
       )}
     </div>

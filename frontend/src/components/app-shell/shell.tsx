@@ -29,8 +29,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SidebarInset>
         <Topbar />
         <main
+          key={pathname}
           className={cn(
-            "min-w-0 flex-1 min-h-0 overflow-y-auto px-4 pt-6 sm:px-8 sm:pt-8",
+            "min-w-0 flex-1 min-h-0 overflow-y-auto px-4 pt-6 sm:px-8 sm:pt-8 animate-fade-in",
             isAiChat ? "pb-0" : "pb-10"
           )}
         >

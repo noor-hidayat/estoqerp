@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import type {
   Branch, Warehouse, Location, ItemGroup, Item, StockBalance,
@@ -545,11 +545,46 @@ export function useStockMovements(params?: {
   dir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
+  // cursor mode (Load More)
+  cursor?: string;
+  limit?: number;
 }) {
   return usePaginatedList<StockMovementListRow>(
     "transactions",
     params as Record<string, unknown>
   );
+}
+
+export interface StockMovementCursorPage {
+  rows: StockMovementListRow[];
+  hasNext: boolean;
+  nextCursor: string | null;
+  limit: number;
+}
+
+export function useStockMovementsInfinite(params?: {
+  query?: string;
+  typeId?: string;
+  fromWarehouseId?: string;
+  toWarehouseId?: string;
+  sort?: string;
+  dir?: "asc" | "desc";
+  limit?: number;
+}) {
+  return useInfiniteQuery({
+    queryKey: ["transactions-cursor", params],
+    queryFn: async ({ pageParam }: { pageParam?: string }) => {
+      const q = { ...params, cursor: pageParam, limit: params?.limit ?? 20 };
+      const cleaned = Object.fromEntries(Object.entries(q).filter(([, v]) => v != null && v !== "")) as Record<string, unknown>;
+      const res = await api.get<StockMovementCursorPage>(`/transactions${qs(cleaned)}`);
+      return res;
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => (lastPage.hasNext ? lastPage.nextCursor ?? undefined : undefined),
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
 }
 
 export function useStockMovement(id?: string) {
@@ -734,6 +769,9 @@ export function useWorkspaces() {
     queryKey: ["workspaces"],
     queryFn: () => api.get<import("@/types").Workspace[]>("/workspaces"),
     staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -747,17 +785,47 @@ export function useDashboardMeta() {
   return useQuery({
     queryKey: ["dashboardMeta"],
     queryFn: () => api.get<DashboardMeta>("/dashboards/meta"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 }
 
-/** Eksekusi query widget terhadap whitelist fact table (branch-scoped di server). */
+/** Eksekusi single widget (untuk builder preview & fallback). */
 export function useWidgetQuery(config: WidgetConfig | undefined) {
   return useQuery({
     queryKey: ["widgetQuery", config],
     enabled: !!config && !!config.factTable && config.measures.length > 0,
     queryFn: () =>
       api.post<{ rows: WidgetRow[] }>("/dashboards/widgets/query", config),
-    staleTime: 30_000,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/** Batch query — 1 request untuk N widget (dashboard page). Jauh lebih efisien vs N x POST. */
+export function useWidgetQueries(configs: WidgetConfig[] | undefined) {
+  const enabled =
+    !!configs &&
+    configs.length > 0 &&
+    configs.every((c) => !!c?.factTable && Array.isArray(c.measures) && c.measures.length > 0);
+  // Stabilkan key: TanStack hash deep-equal, tapi stringify mencegah flicker jika referensi array baru.
+  const key = configs ? JSON.stringify(configs) : "empty";
+  return useQuery({
+    queryKey: ["widgetQueries", key],
+    enabled,
+    queryFn: () =>
+      api.post<{ results: { rows: WidgetRow[]; error: string | null }[] }>(
+        "/dashboards/widgets/query-batch",
+        { queries: configs }
+      ),
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 }
 

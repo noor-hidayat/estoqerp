@@ -240,7 +240,7 @@ export function DataTable<T>({
   const [internalSelected, setInternalSelected] = useState<Set<string>>(new Set());
 
   const defaultSort = useMemo<SortState>(() => {
-    if (initialSort) return initialSort;
+    if (initialSort !== undefined) return initialSort;
     const dateCol = columns.find(
       (c) =>
         c.sortValue !== undefined &&

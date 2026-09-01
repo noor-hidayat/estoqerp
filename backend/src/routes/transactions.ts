@@ -789,8 +789,13 @@ async function movementScope(req: Request) {
 transactionsRouter.get("/", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "inventory.transactions", "view"))) return;
 
+  // Load More: limit (20|100|500|2500) + cursor, no COUNT, no full agg, sort lazy
+  const rawLimit = Number(req.query.limit ?? req.query.pageSize ?? DEFAULT_PAGE_SIZE);
+  const limit = Math.min(Math.max(rawLimit || DEFAULT_PAGE_SIZE, 1), 2500);
+  const cursorRaw = typeof req.query.cursor === "string" ? req.query.cursor : null;
+  // Backward compat: page/pageSize -> cursor-less offset
   const page = Math.max(Number(req.query.page) || 1, 1);
-  const pageSize = Math.min(Math.max(Number(req.query.pageSize) || DEFAULT_PAGE_SIZE, 1), 100);
+  const useCursor = !!cursorRaw;
 
   const conditions: ReturnType<typeof sql>[] = [];
   const scope = await movementScope(req);
@@ -824,41 +829,33 @@ transactionsRouter.get("/", async (req: Request, res: Response) => {
     )`);
   }
 
+  // Cursor: base64(JSON.stringify({createdAt, id})) untuk default sort createdAt DESC, id DESC
+  if (useCursor && cursorRaw) {
+    try {
+      const decoded = JSON.parse(Buffer.from(cursorRaw, "base64").toString("utf8")) as { createdAt: string; id: string };
+      if (decoded?.createdAt && decoded?.id) {
+        // Tuple comparison: (created_at, id) < (cursor) untuk DESC
+        conditions.push(sql`(${schema.stockMovements.createdAt}, ${schema.stockMovements.id}) < (${decoded.createdAt}::timestamptz, ${decoded.id}::text)`);
+      }
+    } catch {
+      // abaikan cursor invalid
+    }
+  }
+
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const s = schema;
-  const agg = db
-    .select({
-      movementId: s.stockMovementDetails.movementId,
-      detailCount: count(s.stockMovementDetails.id).as("detail_count"),
-      totalQty: sql<number>`COALESCE(SUM(${s.stockMovementDetails.qty}), 0)::float`.as("total_qty"),
-    })
-    .from(s.stockMovementDetails)
-    .groupBy(s.stockMovementDetails.movementId)
-    .as("agg");
 
-  const SORT_COLUMNS: Record<string, unknown> = {
-    id: s.stockMovements.id,
-    typeCode: s.movementTypes.code,
-    typeName: s.movementTypes.name,
-    movementDate: s.stockMovements.movementDate,
-    status: s.stockMovements.status,
-    referenceId: s.stockMovements.referenceId,
-    detailCount: agg.detailCount,
-    totalQty: agg.totalQty,
-    createdByName: s.users.name,
-    createdAt: s.stockMovements.createdAt,
-  };
-  const sortKey = typeof req.query.sort === "string" ? req.query.sort : "createdAt";
-  const sortCol = (SORT_COLUMNS[sortKey] ?? s.stockMovements.createdAt) as never;
+  // Sort lazy: hanya ORDER BY jika user klik header (sort param ada). Default: createdAt DESC, id DESC (index)
+  const rawSort = typeof req.query.sort === "string" ? req.query.sort.trim() : "";
+  const hasSort = !!rawSort;
+  // Untuk LATERAL agg, tetap perlu alias kolom sort yang join, tapi default tidak join agg jika tidak sort by agg
+  const needsAggForSort = rawSort === "detailCount" || rawSort === "totalQty";
   const sortDir = req.query.dir === "asc" ? asc : desc;
 
-  const [{ total }] = await db
-    .select({ total: count() })
-    .from(s.stockMovements)
-    .where(where);
-
-  const rows = await db
+  // LATERAL agg per 20 row (bukan global GROUP BY)
+  // Fetch 20 rows tanpa agg (no full GROUP BY) — agg diambil terpisah per 20 ids
+  let qb = db
     .select({
       id: s.stockMovements.id,
       typeId: s.stockMovements.typeId,
@@ -872,17 +869,59 @@ transactionsRouter.get("/", async (req: Request, res: Response) => {
       createdBy: s.stockMovements.createdBy,
       createdByName: s.users.name,
       createdAt: s.stockMovements.createdAt,
-      detailCount: agg.detailCount,
-      totalQty: agg.totalQty,
     })
     .from(s.stockMovements)
     .leftJoin(s.movementTypes, eq(s.movementTypes.id, s.stockMovements.typeId))
     .leftJoin(s.users, eq(s.users.id, s.stockMovements.createdBy))
-    .leftJoin(agg, eq(agg.movementId, s.stockMovements.id))
     .where(where)
-    .orderBy(sortDir(sortCol))
-    .limit(pageSize)
-    .offset((page - 1) * pageSize);
+    .$dynamic();
+
+  if (hasSort) {
+    const SORT_MAP: Record<string, unknown> = {
+      id: s.stockMovements.id,
+      typeCode: s.movementTypes.code,
+      typeName: s.movementTypes.name,
+      movementDate: s.stockMovements.movementDate,
+      status: s.stockMovements.status,
+      referenceId: s.stockMovements.referenceId,
+      createdByName: s.users.name,
+      createdAt: s.stockMovements.createdAt,
+    };
+    // detailCount/totalQty sort tidak didukung di mode no-agg — fallback ke createdAt
+    const col = (SORT_MAP[rawSort] ?? s.stockMovements.createdAt) as never;
+    qb = qb.orderBy(sortDir(col));
+  } else {
+    qb = qb.orderBy(desc(s.stockMovements.createdAt), desc(s.stockMovements.id));
+  }
+
+  const rawRows = await qb.limit(limit + 1).offset(useCursor ? 0 : (page - 1) * limit);
+
+  const hasNext = rawRows.length > limit;
+  const sliced = hasNext ? rawRows.slice(0, limit) : rawRows;
+  // Ambil agg hanya untuk 20 ids (bukan full table)
+  const ids = sliced.map((r) => r.id);
+  const aggMap = new Map<string, { cnt: number; tot: number }>();
+  if (ids.length > 0) {
+    const aggRows = await db
+      .select({
+        movementId: s.stockMovementDetails.movementId,
+        cnt: sql<number>`count(*)::int`.as("cnt"),
+        tot: sql<number>`COALESCE(SUM(${s.stockMovementDetails.qty}),0)::float`.as("tot"),
+      })
+      .from(s.stockMovementDetails)
+      .where(inArray(s.stockMovementDetails.movementId, ids))
+      .groupBy(s.stockMovementDetails.movementId);
+    for (const a of aggRows) aggMap.set(a.movementId, { cnt: Number(a.cnt), tot: Number(a.tot) });
+  }
+  const rows = sliced.map((r) => ({
+    ...r,
+    detailCount: aggMap.get(r.id)?.cnt ?? 0,
+    totalQty: aggMap.get(r.id)?.tot ?? 0,
+  }));
+
+  const nextCursor = hasNext
+    ? Buffer.from(JSON.stringify({ createdAt: sliced[sliced.length - 1].createdAt, id: sliced[sliced.length - 1].id })).toString("base64")
+    : null;
 
   res.json({
     rows: rows.map((r) => ({
@@ -890,10 +929,14 @@ transactionsRouter.get("/", async (req: Request, res: Response) => {
       detailCount: Number(r.detailCount ?? 0),
       totalQty: Number(r.totalQty ?? 0),
     })),
-    total: Number(total),
-    page,
-    pageSize,
-    totalPages: Math.max(Math.ceil(Number(total) / pageSize), 1),
+    hasNext,
+    nextCursor,
+    limit,
+    // Backward compat untuk page mode lama
+    page: useCursor ? undefined : page,
+    pageSize: limit,
+    total: undefined,
+    totalPages: undefined,
   });
 });
 

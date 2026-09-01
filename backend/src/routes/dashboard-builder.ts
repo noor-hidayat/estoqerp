@@ -4,6 +4,7 @@ import { db } from "../db/pool";
 import * as s from "../db/schema";
 import { checkPermission, hasWorkspaceAccess } from "../middleware/rbac";
 import { nextRowId } from "../lib/id";
+import { TEMPLATE_BY_ID, templatesForWorkspace, WIDGET_TEMPLATES } from "../lib/dashboard-templates";
 
 export const dashboardBuilderRouter = Router();
 
@@ -353,7 +354,7 @@ function applyFilters(
 // Endpoints
 // ---------------------------------------------------------------------------
 
-// Query (static) — harus didaftarkan SEBELUM rute /:id.
+// Query single — tetap untuk preview builder & backward compat.
 dashboardBuilderRouter.post("/dashboards/widgets/query", async (req, res, next) => {
   if (!(await checkPermission(req, res, "dashboard", "view"))) return;
   try {
@@ -362,6 +363,62 @@ dashboardBuilderRouter.post("/dashboards/widgets/query", async (req, res, next) 
   } catch (e) {
     if (e instanceof InvalidConfig)
       return res.status(400).json({ error: e.message });
+    next(e);
+  }
+});
+
+// Template registry — frontend builder ambil daftar widget jadi per workspace (GET, cacheable).
+dashboardBuilderRouter.get("/dashboard-templates", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "dashboard", "view"))) return;
+  try {
+    const workspaceId = typeof req.query.workspaceId === "string" ? req.query.workspaceId : null;
+    const list = templatesForWorkspace(workspaceId);
+    res.json(list);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Batch query — efisien untuk dashboard dengan N widget (1 round-trip vs N).
+// Body: { queries: WidgetConfig[] } atau { configs: WidgetConfig[] } atau WidgetConfig[]
+dashboardBuilderRouter.post("/dashboards/widgets/query-batch", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "dashboard", "view"))) return;
+  try {
+    const body: unknown = req.body ?? {};
+    let configs: unknown[] = [];
+    if (Array.isArray(body)) {
+      configs = body as unknown[];
+    } else if (body && typeof body === "object") {
+      const b = body as Record<string, unknown>;
+      if (Array.isArray(b.queries)) configs = b.queries as unknown[];
+      else if (Array.isArray(b.configs)) configs = b.configs as unknown[];
+      else if (Array.isArray(b.widgets)) {
+        configs = (b.widgets as unknown[]).map((w) =>
+          w && typeof w === "object" && "config" in (w as Record<string, unknown>)
+            ? (w as Record<string, unknown>).config
+            : w
+        );
+      } else {
+        return res.status(400).json({ error: "Body harus { queries: WidgetConfig[] } atau WidgetConfig[]" });
+      }
+    }
+    if (configs.length === 0) return res.json({ results: [] });
+    if (configs.length > 20) return res.status(400).json({ error: "Maksimal 20 widget per batch." });
+
+    // Eksekusi paralel — tiap buildWidgetQuery sudah ter-scope per warehouseIds user.
+    const results = await Promise.all(
+      configs.map(async (cfg) => {
+        try {
+          const { rows } = await buildWidgetQuery(cfg, req);
+          return { rows, error: null as string | null };
+        } catch (e) {
+          if (e instanceof InvalidConfig) return { rows: [] as unknown[], error: e.message };
+          throw e;
+        }
+      })
+    );
+    res.json({ results });
+  } catch (e) {
     next(e);
   }
 });
@@ -446,6 +503,62 @@ dashboardBuilderRouter.get("/dashboards/:id", async (req, res, next) => {
   }
 });
 
+// GET /dashboards/:id/widgets/data — 1 GET untuk semua widget jadi (efisien, cacheable).
+// Tidak perlu POST config bebas: server resolve templateId -> buildWidgetQuery hardcode.
+dashboardBuilderRouter.get("/dashboards/:id/widgets/data", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "dashboard", "view"))) return;
+  try {
+    const dashboardId = req.params.id;
+    const widgets = await db
+      .select()
+      .from(s.dashboardWidgets)
+      .where(eq(s.dashboardWidgets.dashboardId, dashboardId));
+    if (widgets.length === 0) return res.json({ widgets: [] });
+
+    const results = await Promise.all(
+      widgets.map(async (w) => {
+        const rawConfig: unknown = (w.config as Record<string, unknown>) ?? {};
+        // Support baru: { templateId: "tpl-..." }, dan legacy: full WidgetConfig
+        const templateId =
+          typeof rawConfig === "object" && rawConfig !== null && "templateId" in (rawConfig as Record<string, unknown>)
+            ? String((rawConfig as Record<string, unknown>).templateId)
+            : null;
+        let effectiveConfig: unknown = rawConfig;
+        let effectiveType = w.type;
+        let effectiveTitle: string | undefined;
+        if (templateId) {
+          const tpl = TEMPLATE_BY_ID.get(templateId);
+          if (!tpl) return { id: w.id, type: w.type, layout: w.layout, title: w.type, rows: [] as unknown[], error: `Template ${templateId} tidak ditemukan` };
+          effectiveConfig = tpl.config;
+          effectiveType = tpl.type;
+          effectiveTitle = tpl.title;
+        } else if (
+          rawConfig &&
+          typeof rawConfig === "object" &&
+          "title" in (rawConfig as Record<string, unknown>)
+        ) {
+          effectiveTitle = String((rawConfig as Record<string, unknown>).title ?? "");
+        }
+        // Allow title override dari config.title
+        if (rawConfig && typeof rawConfig === "object" && "title" in (rawConfig as Record<string, unknown>) && (rawConfig as Record<string, unknown>).title) {
+          effectiveTitle = String((rawConfig as Record<string, unknown>).title);
+        }
+        try {
+          // Merge title ke config untuk label, tapi buildWidgetQuery tidak butuh title
+          const { rows } = await buildWidgetQuery(effectiveConfig, req);
+          return { id: w.id, type: effectiveType, layout: w.layout, title: effectiveTitle ?? w.type, templateId, rows, error: null as string | null, config: effectiveConfig };
+        } catch (e) {
+          if (e instanceof InvalidConfig) return { id: w.id, type: effectiveType, layout: w.layout, title: effectiveTitle ?? w.type, templateId, rows: [] as unknown[], error: e.message, config: effectiveConfig };
+          throw e;
+        }
+      })
+    );
+    res.json({ widgets: results });
+  } catch (e) {
+    next(e);
+  }
+});
+
 dashboardBuilderRouter.put("/dashboards/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "dashboard", "manage"))) return;
   try {
@@ -475,16 +588,35 @@ const WIDGET_TYPES = ["bar", "line", "pie", "table", "kpi"];
 dashboardBuilderRouter.post("/dashboards/:id/widgets", async (req, res, next) => {
   if (!(await checkPermission(req, res, "dashboard", "manage"))) return;
   try {
-    const type = String(req.body?.type ?? "");
-    if (!WIDGET_TYPES.includes(type))
-      return res.status(400).json({ error: "Tipe widget tidak valid." });
+    const templateId = typeof req.body?.templateId === "string" ? String(req.body.templateId) : null;
+    let type = String(req.body?.type ?? "");
+    let config: unknown = req.body?.config;
+    const layout = req.body?.layout ?? {};
+
+    if (templateId) {
+      const tpl = TEMPLATE_BY_ID.get(templateId);
+      if (!tpl) return res.status(400).json({ error: `Template ${templateId} tidak dikenal.` });
+      type = tpl.type;
+      // Simpan minimal { templateId, title } — title boleh override
+      const titleOverride = typeof req.body?.title === "string" ? String(req.body.title).trim() : undefined;
+      config = { templateId, ...(titleOverride ? { title: titleOverride } : {}) };
+      // Validasi workspace cocok dengan dashboard
+      const [dash] = await db.select({ workspaceId: s.dashboards.workspaceId }).from(s.dashboards).where(eq(s.dashboards.id, req.params.id)).limit(1);
+      if (dash?.workspaceId && tpl.workspaceId !== dash.workspaceId) {
+        return res.status(400).json({ error: `Template ${templateId} untuk workspace ${tpl.workspaceId}, dashboard ini ${dash.workspaceId}.` });
+      }
+    } else {
+      if (!WIDGET_TYPES.includes(type)) return res.status(400).json({ error: "Tipe widget tidak valid." });
+      if (!config) config = {};
+    }
+
     const id = await nextRowId(db, s.dashboardWidgets, "wgt");
     await db.insert(s.dashboardWidgets).values({
       id,
       dashboardId: req.params.id,
       type,
-      config: req.body?.config ?? {},
-      layout: req.body?.layout ?? {},
+      config: (config ?? {}) as object,
+      layout: layout as object,
     });
     const [w] = await db
       .select()
@@ -501,12 +633,27 @@ dashboardBuilderRouter.put("/dashboards/:id/widgets/:widgetId", async (req, res,
   if (!(await checkPermission(req, res, "dashboard", "manage"))) return;
   try {
     const patch: Record<string, any> = {};
-    if (req.body?.type !== undefined) {
-      if (!WIDGET_TYPES.includes(String(req.body.type)))
-        return res.status(400).json({ error: "Tipe widget tidak valid." });
-      patch.type = String(req.body.type);
+    if (typeof req.body?.templateId === "string") {
+      const tpl = TEMPLATE_BY_ID.get(String(req.body.templateId));
+      if (!tpl) return res.status(400).json({ error: `Template ${req.body.templateId} tidak dikenal.` });
+      patch.type = tpl.type;
+      const titleOverride = typeof req.body?.title === "string" ? String(req.body.title).trim() : undefined;
+      patch.config = { templateId: tpl.id, ...(titleOverride ? { title: titleOverride } : {}) };
+    } else {
+      if (req.body?.type !== undefined) {
+        if (!WIDGET_TYPES.includes(String(req.body.type)))
+          return res.status(400).json({ error: "Tipe widget tidak valid." });
+        patch.type = String(req.body.type);
+      }
+      if (req.body?.config !== undefined) patch.config = req.body.config;
+      if (req.body?.title !== undefined && !patch.config) {
+        // Title override tanpa ganti template — patch config.title
+        const [cur] = await db.select({ config: s.dashboardWidgets.config }).from(s.dashboardWidgets).where(and(eq(s.dashboardWidgets.id, req.params.widgetId), eq(s.dashboardWidgets.dashboardId, req.params.id))).limit(1);
+        const curCfg = (cur?.config ?? {}) as Record<string, unknown>;
+        patch.config = { ...curCfg, title: String(req.body.title) };
+      }
     }
-    if (req.body?.config !== undefined) patch.config = req.body.config;
+    if (Object.keys(patch).length === 0) return res.json({ ok: true });
     await db
       .update(s.dashboardWidgets)
       .set(patch)

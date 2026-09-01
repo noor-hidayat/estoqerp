@@ -7,7 +7,7 @@ const ACTIVE_KEY = "workspace.activeId";
 
 export function useActiveWorkspace() {
   const { access, isSystem } = useSession();
-  const { data: workspaces = [] } = useWorkspaces();
+  const { data: workspaces = [], isLoading: wsLoading } = useWorkspaces();
 
   const accessible = useMemo(() => {
     if (isSystem) return workspaces;
@@ -19,16 +19,23 @@ export function useActiveWorkspace() {
     return workspaces.filter((w) => ids.has(w.id));
   }, [workspaces, access.workspaceIds, isSystem]);
 
-  const [activeId, setActiveIdState] = useState<string | null>(() => {
+  // undefined = belum siap (workspaces/access masih loading), null = siap tapi tidak ada workspace
+  const [activeId, setActiveIdState] = useState<string | null | undefined>(() => {
     try {
-      return localStorage.getItem(ACTIVE_KEY);
+      const v = localStorage.getItem(ACTIVE_KEY);
+      return v ?? undefined;
     } catch {
-      return null;
+      return undefined;
     }
   });
 
   useEffect(() => {
-    if (accessible.length === 0) return;
+    if (wsLoading) return;
+    if (accessible.length === 0) {
+      // Tidak ada workspace accessible — tandai siap dengan null agar caller bisa fetch fallback "all"
+      if (activeId === undefined) setActiveIdState(null);
+      return;
+    }
     const exists = accessible.some((w) => w.id === activeId);
     if (!exists) {
       const fallback = accessible[0]?.id ?? workspaces[0]?.id ?? null;
@@ -37,9 +44,11 @@ export function useActiveWorkspace() {
           localStorage.setItem(ACTIVE_KEY, fallback);
         } catch {}
         setActiveIdState(fallback);
+      } else if (activeId === undefined) {
+        setActiveIdState(null);
       }
     }
-  }, [accessible, activeId, workspaces]);
+  }, [accessible, activeId, workspaces, wsLoading]);
 
   const setActiveId = useCallback((id: string) => {
     try {
@@ -51,13 +60,16 @@ export function useActiveWorkspace() {
     import("@/lib/api/client").then(({ api }) => {
       api.post("/userSettings", { key: "workspace.activeId", value: { workspaceId: id } }).catch(() => {});
     });
-    // reload page to refresh sidebar, queries, and all workspace-scoped data
-    window.location.reload();
+    // tiap pindah workspace langsung arahkan ke dashboard (bukan reload halaman saat ini)
+    window.location.href = "/app";
   }, []);
 
   const active = useMemo(() => {
+    if (activeId === undefined) return null;
     return accessible.find((w) => w.id === activeId) ?? accessible[0] ?? null;
   }, [accessible, activeId]);
 
-  return { workspaces: accessible, allWorkspaces: workspaces, activeId: active?.id ?? null, active, setActiveId };
+  // activeId undefined = masih pending, jangan fetch dashboards dulu
+  const resolvedId = activeId === undefined ? undefined : (active?.id ?? null);
+  return { workspaces: accessible, allWorkspaces: workspaces, activeId: resolvedId, active, setActiveId };
 }

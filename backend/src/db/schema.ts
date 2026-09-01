@@ -480,7 +480,14 @@ export const stockMovements = pgTable("stock_movements", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => [
+  index("idx_stock_movements_created_id").on(t.createdAt.desc(), t.id.desc()),
+  index("idx_stock_movements_status").on(t.status),
+  index("idx_stock_movements_type").on(t.typeId),
+  index("idx_stock_movements_date").on(t.movementDate.desc()),
+  index("idx_stock_movements_created").on(t.createdAt.desc()),
+  index("idx_stock_movements_type_status").on(t.typeId, t.status),
+]);
 
 export const stockMovementDetails = pgTable(
   "stock_movement_details",
@@ -506,6 +513,11 @@ export const stockMovementDetails = pgTable(
   (t) => [
     index("idx_stock_movement_details_movement").on(t.movementId),
     index("idx_stock_movement_details_batch").on(t.batchId),
+    index("idx_smd_from_wh").on(t.fromWarehouseId),
+    index("idx_smd_to_wh").on(t.toWarehouseId),
+    index("idx_smd_movement_from").on(t.movementId, t.fromWarehouseId),
+    index("idx_smd_movement_to").on(t.movementId, t.toWarehouseId),
+    index("idx_smd_created").on(t.createdAt.desc()),
   ]
 );
 

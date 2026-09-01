@@ -68,8 +68,12 @@ function EmptyState() {
 // KPI
 // ---------------------------------------------------------------------------
 
-function KpiWidget({ widget, dragHandle }: WidgetProps) {
-  const { data, isLoading } = useWidgetQuery(widget.config);
+function KpiWidget({ widget, dragHandle, data: presetData, isLoading: presetLoading }: WidgetProps) {
+  const { data: queryData, isLoading: queryLoading } = useWidgetQuery(
+    presetData ? undefined : widget.config
+  );
+  const data = presetData ?? queryData;
+  const isLoading = presetData !== undefined ? !!presetLoading : queryLoading;
   const valueKey = valueKeyOf(widget.config);
   const raw = data?.rows?.[0]?.[valueKey];
   const value: ReactNode =
@@ -134,8 +138,12 @@ function ChartShell({
   );
 }
 
-function BarWidget({ widget, dragHandle }: WidgetProps) {
-  const { data, isLoading } = useWidgetQuery(widget.config);
+function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoading }: WidgetProps) {
+  const { data: queryData, isLoading: queryLoading } = useWidgetQuery(
+    presetData ? undefined : widget.config
+  );
+  const data = presetData ?? queryData;
+  const isLoading = presetData !== undefined ? !!presetLoading : queryLoading;
   const rows = data?.rows ?? [];
   const labelKey = labelKeyOf(widget.config);
   const valueKey = valueKeyOf(widget.config);
@@ -171,8 +179,12 @@ function BarWidget({ widget, dragHandle }: WidgetProps) {
   );
 }
 
-function LineWidget({ widget, dragHandle }: WidgetProps) {
-  const { data, isLoading } = useWidgetQuery(widget.config);
+function LineWidget({ widget, dragHandle, data: presetData, isLoading: presetLoading }: WidgetProps) {
+  const { data: queryData, isLoading: queryLoading } = useWidgetQuery(
+    presetData ? undefined : widget.config
+  );
+  const data = presetData ?? queryData;
+  const isLoading = presetData !== undefined ? !!presetLoading : queryLoading;
   const rows = data?.rows ?? [];
   const labelKey = labelKeyOf(widget.config);
   const valueKey = valueKeyOf(widget.config);
@@ -193,8 +205,12 @@ function LineWidget({ widget, dragHandle }: WidgetProps) {
   );
 }
 
-function PieWidget({ widget, dragHandle }: WidgetProps) {
-  const { data, isLoading } = useWidgetQuery(widget.config);
+function PieWidget({ widget, dragHandle, data: presetData, isLoading: presetLoading }: WidgetProps) {
+  const { data: queryData, isLoading: queryLoading } = useWidgetQuery(
+    presetData ? undefined : widget.config
+  );
+  const data = presetData ?? queryData;
+  const isLoading = presetData !== undefined ? !!presetLoading : queryLoading;
   const rows = data?.rows ?? [];
   const labelKey = labelKeyOf(widget.config);
   const valueKey = valueKeyOf(widget.config);
@@ -218,8 +234,12 @@ function PieWidget({ widget, dragHandle }: WidgetProps) {
   );
 }
 
-function TableWidget({ widget, dragHandle }: WidgetProps) {
-  const { data, isLoading } = useWidgetQuery(widget.config);
+function TableWidget({ widget, dragHandle, data: presetData, isLoading: presetLoading }: WidgetProps) {
+  const { data: queryData, isLoading: queryLoading } = useWidgetQuery(
+    presetData ? undefined : widget.config
+  );
+  const data = presetData ?? queryData;
+  const isLoading = presetData !== undefined ? !!presetLoading : queryLoading;
   const rows = data?.rows ?? [];
   const cols = rows.length ? Object.keys(rows[0]) : [];
   return (
@@ -277,6 +297,9 @@ function TableWidget({ widget, dragHandle }: WidgetProps) {
 export interface WidgetProps {
   widget: WidgetInstance;
   dragHandle?: ReactNode;
+  /** Jika diisi, Widget tidak akan fetch sendiri — pakai data batch dari parent (efisien). */
+  data?: { rows: WidgetRow[] };
+  isLoading?: boolean;
 }
 
 const COMPONENTS: Record<WidgetType, (p: WidgetProps) => ReactNode> = {

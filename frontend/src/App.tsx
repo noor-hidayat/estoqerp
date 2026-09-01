@@ -1,84 +1,87 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useTransition } from "react";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { SessionProvider, useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { navForPermissions } from "@/components/app-shell/nav";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { TableSkeleton, FormSkeleton, DetailSkeleton, ChatSkeleton, TableWithKpiSkeleton, HubSkeleton } from "@/components/ui/loader";
 
 import LoginPage from "@/app/login/page";
 import AppLayout from "@/app/app/layout";
 import DashboardPage from "@/app/app/page";
 
-import OpnamePage from "@/app/app/so/page";
-import NewOpnamePage from "@/app/app/so/new/page";
-import VarianceListPage from "@/app/app/so/variance/page";
-import StockOpnameWarehousePage from "@/app/app/project/warehouse/page";
-import CountPage from "@/app/app/so/count/page";
-import CountDetailPage from "@/app/app/so/count/[id]/page";
-import ProjectsPage from "@/app/app/project/page";
-import NewProjectPage from "@/app/app/project/new/page";
-import ReportsPage from "@/app/app/report/page";
-import ReportsProjectPage from "@/app/app/report/project/page";
-import ReportsHistoryPage from "@/app/app/report/history/page";
-import ReportsSummaryPage from "@/app/app/report/summary/page";
-import ReportsVariancePage from "@/app/app/report/variance/page";
-import StockBalancePage from "@/app/app/inventory/balance/page";
-import StockPage from "@/app/app/inventory/page";
-import TransactionsPage from "@/app/app/transaction/page";
-import NewTransactionPage from "@/app/app/transaction/new/page";
-import TransactionDetailPage from "@/app/app/transaction/[id]/page";
-import StockLedgerPage from "@/app/app/inventory/ledger/page";
-import BatchesPage from "@/app/app/inventory/batches/page";
-import BatchBarcodesPage from "@/app/app/inventory/batches/barcode/page";
-import StockLocationsPage from "@/app/app/setup/locations/page";
-import NewLocationPage from "@/app/app/setup/locations/new/page";
-import EditLocationPage from "@/app/app/setup/locations/[id]/page";
-import StockBranchesPage from "@/app/app/setup/branches/page";
-import NewBranchPage from "@/app/app/setup/branches/new/page";
-import EditBranchPage from "@/app/app/setup/branches/[id]/page";
-import StockWarehousesPage from "@/app/app/setup/warehouses/page";
-import NewWarehousePage from "@/app/app/setup/warehouses/new/page";
-import EditWarehousePage from "@/app/app/setup/warehouses/[id]/page";
-import ItemGroupsPage from "@/app/app/setup/item-groups/page";
-import NewItemGroupPage from "@/app/app/setup/item-groups/new/page";
-import EditItemGroupPage from "@/app/app/setup/item-groups/[id]/page";
-import UomPage from "@/app/app/setup/uom/page";
-import NewUomPage from "@/app/app/setup/uom/new/page";
-import EditUomPage from "@/app/app/setup/uom/[id]/page";
-import TransactionTypesPage from "@/app/app/setup/transaction-types/page";
-import NewTransactionTypePage from "@/app/app/setup/transaction-types/new/page";
-import EditTransactionTypePage from "@/app/app/setup/transaction-types/[id]/page";
-import ItemsPage from "@/app/app/setup/items/page";
-import NewItemPage from "@/app/app/setup/items/new/page";
-import EditItemPage from "@/app/app/setup/items/[id]/page";
-import SetupPage from "@/app/app/setup/page";
-import BarcodeFormatsPage from "@/app/app/setup/barcode-formats/page";
-import BarcodeFormatNewPage from "@/app/app/setup/barcode-formats/new/page";
-import BarcodeFormatDetailPage from "@/app/app/setup/barcode-formats/[id]/page";
-import BatchFormatsPage from "@/app/app/setup/batch-formats/page";
-import BatchFormatNewPage from "@/app/app/setup/batch-formats/new/page";
-import BatchFormatDetailPage from "@/app/app/setup/batch-formats/[id]/page";
-import UsersPage from "@/app/app/settings/users/page";
-import NewUserPage from "@/app/app/settings/users/new/page";
-import EditUserPage from "@/app/app/settings/users/[id]/page";
-import RolesPage from "@/app/app/settings/roles/page";
-import NewRolePage from "@/app/app/settings/roles/new/page";
-import EditRolePage from "@/app/app/settings/roles/[id]/page";
-import ImportDataPage from "@/app/app/settings/import/page";
-import AiSettingsPage from "@/app/app/settings/ai/page";
-import SettingsPage from "@/app/app/settings/page";
-import AiChatPage from "@/app/app/ai/page";
-import SuppliersPage from "@/app/app/suppliers/page";
-import CustomersPage from "@/app/app/customers/page";
-import PurchaseOrdersPage from "@/app/app/purchase-orders/page";
-import NewPurchaseOrderPage from "@/app/app/purchase-orders/new/page";
-import PurchaseOrderDetailPage from "@/app/app/purchase-orders/[id]/page";
-import SalesOrdersPage from "@/app/app/sales-orders/page";
-import NewSalesOrderPage from "@/app/app/sales-orders/new/page";
-import SalesOrderDetailPage from "@/app/app/sales-orders/[id]/page";
-import GoodsReceiptsPage from "@/app/app/goods-receipts/page";
-import NewGoodsReceiptPage from "@/app/app/goods-receipts/new/page";
-import GoodsReceiptDetailPage from "@/app/app/goods-receipts/[id]/page";
+// Lazy — hanya download saat menu dibuka (dashboard tetap eager + chart)
+const OpnamePage = lazy(() => import("@/app/app/so/page"));
+const NewOpnamePage = lazy(() => import("@/app/app/so/new/page"));
+const VarianceListPage = lazy(() => import("@/app/app/so/variance/page"));
+const StockOpnameWarehousePage = lazy(() => import("@/app/app/project/warehouse/page"));
+const CountPage = lazy(() => import("@/app/app/so/count/page"));
+const CountDetailPage = lazy(() => import("@/app/app/so/count/[id]/page"));
+const ProjectsPage = lazy(() => import("@/app/app/project/page"));
+const NewProjectPage = lazy(() => import("@/app/app/project/new/page"));
+const ReportsPage = lazy(() => import("@/app/app/report/page"));
+const ReportsProjectPage = lazy(() => import("@/app/app/report/project/page"));
+const ReportsHistoryPage = lazy(() => import("@/app/app/report/history/page"));
+const ReportsSummaryPage = lazy(() => import("@/app/app/report/summary/page"));
+const ReportsVariancePage = lazy(() => import("@/app/app/report/variance/page"));
+const StockBalancePage = lazy(() => import("@/app/app/inventory/balance/page"));
+const StockPage = lazy(() => import("@/app/app/inventory/page"));
+const TransactionsPage = lazy(() => import("@/app/app/transaction/page"));
+const NewTransactionPage = lazy(() => import("@/app/app/transaction/new/page"));
+const TransactionDetailPage = lazy(() => import("@/app/app/transaction/[id]/page"));
+const StockLedgerPage = lazy(() => import("@/app/app/inventory/ledger/page"));
+const BatchesPage = lazy(() => import("@/app/app/inventory/batches/page"));
+const BatchBarcodesPage = lazy(() => import("@/app/app/inventory/batches/barcode/page"));
+const StockLocationsPage = lazy(() => import("@/app/app/setup/locations/page"));
+const NewLocationPage = lazy(() => import("@/app/app/setup/locations/new/page"));
+const EditLocationPage = lazy(() => import("@/app/app/setup/locations/[id]/page"));
+const StockBranchesPage = lazy(() => import("@/app/app/setup/branches/page"));
+const NewBranchPage = lazy(() => import("@/app/app/setup/branches/new/page"));
+const EditBranchPage = lazy(() => import("@/app/app/setup/branches/[id]/page"));
+const StockWarehousesPage = lazy(() => import("@/app/app/setup/warehouses/page"));
+const NewWarehousePage = lazy(() => import("@/app/app/setup/warehouses/new/page"));
+const EditWarehousePage = lazy(() => import("@/app/app/setup/warehouses/[id]/page"));
+const ItemGroupsPage = lazy(() => import("@/app/app/setup/item-groups/page"));
+const NewItemGroupPage = lazy(() => import("@/app/app/setup/item-groups/new/page"));
+const EditItemGroupPage = lazy(() => import("@/app/app/setup/item-groups/[id]/page"));
+const UomPage = lazy(() => import("@/app/app/setup/uom/page"));
+const NewUomPage = lazy(() => import("@/app/app/setup/uom/new/page"));
+const EditUomPage = lazy(() => import("@/app/app/setup/uom/[id]/page"));
+const TransactionTypesPage = lazy(() => import("@/app/app/setup/transaction-types/page"));
+const NewTransactionTypePage = lazy(() => import("@/app/app/setup/transaction-types/new/page"));
+const EditTransactionTypePage = lazy(() => import("@/app/app/setup/transaction-types/[id]/page"));
+const ItemsPage = lazy(() => import("@/app/app/setup/items/page"));
+const NewItemPage = lazy(() => import("@/app/app/setup/items/new/page"));
+const EditItemPage = lazy(() => import("@/app/app/setup/items/[id]/page"));
+const SetupPage = lazy(() => import("@/app/app/setup/page"));
+const BarcodeFormatsPage = lazy(() => import("@/app/app/setup/barcode-formats/page"));
+const BarcodeFormatNewPage = lazy(() => import("@/app/app/setup/barcode-formats/new/page"));
+const BarcodeFormatDetailPage = lazy(() => import("@/app/app/setup/barcode-formats/[id]/page"));
+const BatchFormatsPage = lazy(() => import("@/app/app/setup/batch-formats/page"));
+const BatchFormatNewPage = lazy(() => import("@/app/app/setup/batch-formats/new/page"));
+const BatchFormatDetailPage = lazy(() => import("@/app/app/setup/batch-formats/[id]/page"));
+const UsersPage = lazy(() => import("@/app/app/settings/users/page"));
+const NewUserPage = lazy(() => import("@/app/app/settings/users/new/page"));
+const EditUserPage = lazy(() => import("@/app/app/settings/users/[id]/page"));
+const RolesPage = lazy(() => import("@/app/app/settings/roles/page"));
+const NewRolePage = lazy(() => import("@/app/app/settings/roles/new/page"));
+const EditRolePage = lazy(() => import("@/app/app/settings/roles/[id]/page"));
+const ImportDataPage = lazy(() => import("@/app/app/settings/import/page"));
+const AiSettingsPage = lazy(() => import("@/app/app/settings/ai/page"));
+const SettingsPage = lazy(() => import("@/app/app/settings/page"));
+const AiChatPage = lazy(() => import("@/app/app/ai/page"));
+const SuppliersPage = lazy(() => import("@/app/app/suppliers/page"));
+const CustomersPage = lazy(() => import("@/app/app/customers/page"));
+const PurchaseOrdersPage = lazy(() => import("@/app/app/purchase-orders/page"));
+const NewPurchaseOrderPage = lazy(() => import("@/app/app/purchase-orders/new/page"));
+const PurchaseOrderDetailPage = lazy(() => import("@/app/app/purchase-orders/[id]/page"));
+const SalesOrdersPage = lazy(() => import("@/app/app/sales-orders/page"));
+const NewSalesOrderPage = lazy(() => import("@/app/app/sales-orders/new/page"));
+const SalesOrderDetailPage = lazy(() => import("@/app/app/sales-orders/[id]/page"));
+const GoodsReceiptsPage = lazy(() => import("@/app/app/goods-receipts/page"));
+const NewGoodsReceiptPage = lazy(() => import("@/app/app/goods-receipts/new/page"));
+const GoodsReceiptDetailPage = lazy(() => import("@/app/app/goods-receipts/[id]/page"));
 
 /** Halaman pertama "/app" — Dashboard bila punya aksesnya, selain itu
  *  diarahkan ke menu pertama yang boleh dibuka role-nya. */
@@ -95,93 +98,97 @@ function HomeRoute() {
   return <Navigate to={firstHref} replace />;
 }
 
+function LazyPage({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
+  return <Suspense fallback={fallback ?? <TableSkeleton />}>{children}</Suspense>;
+}
+
 export default function App() {
   return (
     <SessionProvider>
       <TooltipProvider delayDuration={200}>
-        <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<Navigate to="/app" replace />} />
+          <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<Navigate to="/app" replace />} />
 
-        <Route path="/app" element={<AppLayout />}>
-          <Route index element={<HomeRoute />} />
-          
-          <Route path="project" element={<ProjectsPage />} />
-          <Route path="project/new" element={<NewProjectPage />} />
-          <Route path="so" element={<OpnamePage />} />
-          <Route path="so/new" element={<NewOpnamePage />} />
-          <Route path="so/variance" element={<VarianceListPage />} />
-          <Route path="project/warehouse" element={<StockOpnameWarehousePage />} />
-          <Route path="so/count" element={<CountPage />} />
-          <Route path="so/count/:id" element={<CountDetailPage />} />
-          <Route path="report" element={<ReportsPage />} />
-          <Route path="report/project" element={<ReportsProjectPage />} />
-          <Route path="report/history" element={<ReportsHistoryPage />} />
-          <Route path="report/summary" element={<ReportsSummaryPage />} />
-          <Route path="report/variance" element={<ReportsVariancePage />} />
-          <Route path="inventory" element={<StockPage />} />
-          <Route path="inventory/balance" element={<StockBalancePage />} />
-          <Route path="transaction" element={<TransactionsPage />} />
-          <Route path="transaction/new" element={<NewTransactionPage />} />
-          <Route path="transaction/:id" element={<TransactionDetailPage />} />
-          <Route path="inventory/ledger" element={<StockLedgerPage />} />
-          <Route path="inventory/batches" element={<BatchesPage />} />
-          <Route path="inventory/batches/barcode" element={<BatchBarcodesPage />} />
-          <Route path="setup/locations" element={<StockLocationsPage />} />
-          <Route path="setup/locations/new" element={<NewLocationPage />} />
-          <Route path="setup/locations/:id" element={<EditLocationPage />} />
-          <Route path="setup/branches" element={<StockBranchesPage />} />
-          <Route path="setup/branches/new" element={<NewBranchPage />} />
-          <Route path="setup/branches/:id" element={<EditBranchPage />} />
-          <Route path="setup/warehouses" element={<StockWarehousesPage />} />
-          <Route path="setup/warehouses/new" element={<NewWarehousePage />} />
-          <Route path="setup/warehouses/:id" element={<EditWarehousePage />} />
-          <Route path="setup" element={<SetupPage />} />
-          <Route path="setup/item-groups" element={<ItemGroupsPage />} />
-          <Route path="setup/item-groups/new" element={<NewItemGroupPage />} />
-          <Route path="setup/item-groups/:id" element={<EditItemGroupPage />} />
-          <Route path="setup/uom" element={<UomPage />} />
-          <Route path="setup/uom/new" element={<NewUomPage />} />
-          <Route path="setup/uom/:id" element={<EditUomPage />} />
-          <Route path="setup/transaction-types" element={<TransactionTypesPage />} />
-          <Route path="setup/transaction-types/new" element={<NewTransactionTypePage />} />
-          <Route path="setup/transaction-types/:id" element={<EditTransactionTypePage />} />
-          <Route path="setup/items" element={<ItemsPage />} />
-          <Route path="setup/items/new" element={<NewItemPage />} />
-          <Route path="setup/items/:id" element={<EditItemPage />} />
-          <Route path="setup/barcode-formats" element={<BarcodeFormatsPage />} />
-          <Route path="setup/barcode-formats/new" element={<BarcodeFormatNewPage />} />
-          <Route path="setup/barcode-formats/:id" element={<BarcodeFormatDetailPage />} />
-          <Route path="setup/batch-formats" element={<BatchFormatsPage />} />
-          <Route path="setup/batch-formats/new" element={<BatchFormatNewPage />} />
-          <Route path="setup/batch-formats/:id" element={<BatchFormatDetailPage />} />
-          {/* Legacy redirect: /app/data-library/* -> /app/setup/* */}
-          <Route path="data-library/*" element={<Navigate to="/app/setup" replace />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="settings/users" element={<UsersPage />} />
-          <Route path="settings/users/new" element={<NewUserPage />} />
-          <Route path="settings/users/:id" element={<EditUserPage />} />
-          <Route path="settings/roles" element={<RolesPage />} />
-          <Route path="settings/roles/new" element={<NewRolePage />} />
-          <Route path="settings/roles/:id" element={<EditRolePage />} />
-          <Route path="settings/import" element={<ImportDataPage />} />
-          <Route path="settings/ai" element={<AiSettingsPage />} />
-          <Route path="ai" element={<AiChatPage />} />
-          <Route path="suppliers" element={<SuppliersPage />} />
-          <Route path="customers" element={<CustomersPage />} />
-          <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
-          <Route path="purchase-orders/new" element={<NewPurchaseOrderPage />} />
-          <Route path="purchase-orders/:id" element={<PurchaseOrderDetailPage />} />
-          <Route path="sales-orders" element={<SalesOrdersPage />} />
-          <Route path="sales-orders/new" element={<NewSalesOrderPage />} />
-          <Route path="sales-orders/:id" element={<SalesOrderDetailPage />} />
-          <Route path="goods-receipts" element={<GoodsReceiptsPage />} />
-          <Route path="goods-receipts/new" element={<NewGoodsReceiptPage />} />
-          <Route path="goods-receipts/:id" element={<GoodsReceiptDetailPage />} />
-        </Route>
+          <Route path="/app" element={<AppLayout />}>
+            <Route index element={<HomeRoute />} />
+            
+            <Route path="project" element={<LazyPage fallback={<TableSkeleton columns={7} filters={0} />}><ProjectsPage /></LazyPage>} />
+            <Route path="project/new" element={<LazyPage fallback={<FormSkeleton fields={7} />}><NewProjectPage /></LazyPage>} />
+            <Route path="so" element={<LazyPage fallback={<TableSkeleton columns={6} filters={0} />}><OpnamePage /></LazyPage>} />
+            <Route path="so/new" element={<LazyPage fallback={<FormSkeleton fields={5} />}><NewOpnamePage /></LazyPage>} />
+            <Route path="so/variance" element={<LazyPage fallback={<TableSkeleton columns={5} filters={1} />}><VarianceListPage /></LazyPage>} />
+            <Route path="project/warehouse" element={<LazyPage fallback={<TableSkeleton columns={5} filters={1} />}><StockOpnameWarehousePage /></LazyPage>} />
+            <Route path="so/count" element={<LazyPage fallback={<FormSkeleton fields={8} hasTable tableColumns={7} />}><CountPage /></LazyPage>} />
+            <Route path="so/count/:id" element={<LazyPage fallback={<FormSkeleton fields={8} hasTable tableColumns={7} />}><CountDetailPage /></LazyPage>} />
+            <Route path="report" element={<LazyPage fallback={<HubSkeleton cards={4} />}><ReportsPage /></LazyPage>} />
+            <Route path="report/project" element={<LazyPage fallback={<TableSkeleton columns={8} filters={1} />}><ReportsProjectPage /></LazyPage>} />
+            <Route path="report/history" element={<LazyPage fallback={<TableSkeleton columns={7} filters={3} />}><ReportsHistoryPage /></LazyPage>} />
+            <Route path="report/summary" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} hasKpi kpiCount={4} />}><ReportsSummaryPage /></LazyPage>} />
+            <Route path="report/variance" element={<LazyPage fallback={<TableSkeleton columns={7} filters={2} />}><ReportsVariancePage /></LazyPage>} />
+            <Route path="inventory" element={<LazyPage fallback={<HubSkeleton cards={4} />}><StockPage /></LazyPage>} />
+            <Route path="inventory/balance" element={<LazyPage fallback={<TableSkeleton columns={8} filters={1} hasKpi kpiCount={3} />}><StockBalancePage /></LazyPage>} />
+            <Route path="transaction" element={<LazyPage fallback={<TableSkeleton columns={6} filters={3} />}><TransactionsPage /></LazyPage>} />
+            <Route path="transaction/new" element={<LazyPage fallback={<FormSkeleton fields={6} hasTable tableColumns={5} />}><NewTransactionPage /></LazyPage>} />
+            <Route path="transaction/:id" element={<LazyPage fallback={<DetailSkeleton />}><TransactionDetailPage /></LazyPage>} />
+            <Route path="inventory/ledger" element={<LazyPage fallback={<TableSkeleton columns={9} filters={4} />}><StockLedgerPage /></LazyPage>} />
+            <Route path="inventory/batches" element={<LazyPage fallback={<TableSkeleton columns={9} filters={3} />}><BatchesPage /></LazyPage>} />
+            <Route path="inventory/batches/barcode" element={<LazyPage fallback={<TableSkeleton columns={5} filters={3} />}><BatchBarcodesPage /></LazyPage>} />
+            <Route path="setup/locations" element={<LazyPage fallback={<TableSkeleton columns={5} filters={1} />}><StockLocationsPage /></LazyPage>} />
+            <Route path="setup/locations/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewLocationPage /></LazyPage>} />
+            <Route path="setup/locations/:id" element={<LazyPage fallback={<FormSkeleton fields={4} />}><EditLocationPage /></LazyPage>} />
+            <Route path="setup/branches" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} />}><StockBranchesPage /></LazyPage>} />
+            <Route path="setup/branches/new" element={<LazyPage fallback={<FormSkeleton fields={3} />}><NewBranchPage /></LazyPage>} />
+            <Route path="setup/branches/:id" element={<LazyPage fallback={<FormSkeleton fields={3} />}><EditBranchPage /></LazyPage>} />
+            <Route path="setup/warehouses" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} />}><StockWarehousesPage /></LazyPage>} />
+            <Route path="setup/warehouses/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewWarehousePage /></LazyPage>} />
+            <Route path="setup/warehouses/:id" element={<LazyPage fallback={<FormSkeleton fields={4} />}><EditWarehousePage /></LazyPage>} />
+            <Route path="setup" element={<LazyPage fallback={<HubSkeleton cards={9} />}><SetupPage /></LazyPage>} />
+            <Route path="setup/item-groups" element={<LazyPage fallback={<TableSkeleton columns={4} filters={0} />}><ItemGroupsPage /></LazyPage>} />
+            <Route path="setup/item-groups/new" element={<LazyPage fallback={<FormSkeleton fields={2} />}><NewItemGroupPage /></LazyPage>} />
+            <Route path="setup/item-groups/:id" element={<LazyPage fallback={<FormSkeleton fields={2} />}><EditItemGroupPage /></LazyPage>} />
+            <Route path="setup/uom" element={<LazyPage fallback={<TableSkeleton columns={3} filters={0} />}><UomPage /></LazyPage>} />
+            <Route path="setup/uom/new" element={<LazyPage fallback={<FormSkeleton fields={2} />}><NewUomPage /></LazyPage>} />
+            <Route path="setup/uom/:id" element={<LazyPage fallback={<FormSkeleton fields={2} />}><EditUomPage /></LazyPage>} />
+            <Route path="setup/transaction-types" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} />}><TransactionTypesPage /></LazyPage>} />
+            <Route path="setup/transaction-types/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewTransactionTypePage /></LazyPage>} />
+            <Route path="setup/transaction-types/:id" element={<LazyPage fallback={<FormSkeleton fields={4} />}><EditTransactionTypePage /></LazyPage>} />
+            <Route path="setup/items" element={<LazyPage fallback={<TableSkeleton columns={7} filters={1} />}><ItemsPage /></LazyPage>} />
+            <Route path="setup/items/new" element={<LazyPage fallback={<FormSkeleton fields={6} />}><NewItemPage /></LazyPage>} />
+            <Route path="setup/items/:id" element={<LazyPage fallback={<FormSkeleton fields={6} />}><EditItemPage /></LazyPage>} />
+            <Route path="setup/barcode-formats" element={<LazyPage fallback={<TableSkeleton columns={6} filters={0} />}><BarcodeFormatsPage /></LazyPage>} />
+            <Route path="setup/barcode-formats/new" element={<LazyPage fallback={<FormSkeleton fields={5} />}><BarcodeFormatNewPage /></LazyPage>} />
+            <Route path="setup/barcode-formats/:id" element={<LazyPage fallback={<FormSkeleton fields={5} />}><BarcodeFormatDetailPage /></LazyPage>} />
+            <Route path="setup/batch-formats" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} />}><BatchFormatsPage /></LazyPage>} />
+            <Route path="setup/batch-formats/new" element={<LazyPage fallback={<FormSkeleton fields={5} />}><BatchFormatNewPage /></LazyPage>} />
+            <Route path="setup/batch-formats/:id" element={<LazyPage fallback={<FormSkeleton fields={5} />}><BatchFormatDetailPage /></LazyPage>} />
+            {/* Legacy redirect: /app/data-library/* -> /app/setup/* */}
+            <Route path="data-library/*" element={<Navigate to="/app/setup" replace />} />
+            <Route path="settings" element={<LazyPage fallback={<HubSkeleton cards={4} />}><SettingsPage /></LazyPage>} />
+            <Route path="settings/users" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} />}><UsersPage /></LazyPage>} />
+            <Route path="settings/users/new" element={<LazyPage fallback={<FormSkeleton fields={5} />}><NewUserPage /></LazyPage>} />
+            <Route path="settings/users/:id" element={<LazyPage fallback={<FormSkeleton fields={5} />}><EditUserPage /></LazyPage>} />
+            <Route path="settings/roles" element={<LazyPage fallback={<TableSkeleton columns={6} filters={0} />}><RolesPage /></LazyPage>} />
+            <Route path="settings/roles/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewRolePage /></LazyPage>} />
+            <Route path="settings/roles/:id" element={<LazyPage fallback={<FormSkeleton fields={6} />}><EditRolePage /></LazyPage>} />
+            <Route path="settings/import" element={<LazyPage fallback={<TableSkeleton columns={4} filters={0} />}><ImportDataPage /></LazyPage>} />
+            <Route path="settings/ai" element={<LazyPage fallback={<FormSkeleton fields={6} />}><AiSettingsPage /></LazyPage>} />
+            <Route path="ai" element={<LazyPage fallback={<ChatSkeleton />}><AiChatPage /></LazyPage>} />
+            <Route path="suppliers" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><SuppliersPage /></LazyPage>} />
+            <Route path="customers" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><CustomersPage /></LazyPage>} />
+            <Route path="purchase-orders" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><PurchaseOrdersPage /></LazyPage>} />
+            <Route path="purchase-orders/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewPurchaseOrderPage /></LazyPage>} />
+            <Route path="purchase-orders/:id" element={<LazyPage fallback={<DetailSkeleton />}><PurchaseOrderDetailPage /></LazyPage>} />
+            <Route path="sales-orders" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><SalesOrdersPage /></LazyPage>} />
+            <Route path="sales-orders/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewSalesOrderPage /></LazyPage>} />
+            <Route path="sales-orders/:id" element={<LazyPage fallback={<DetailSkeleton />}><SalesOrderDetailPage /></LazyPage>} />
+            <Route path="goods-receipts" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><GoodsReceiptsPage /></LazyPage>} />
+            <Route path="goods-receipts/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewGoodsReceiptPage /></LazyPage>} />
+            <Route path="goods-receipts/:id" element={<LazyPage fallback={<DetailSkeleton />}><GoodsReceiptDetailPage /></LazyPage>} />
+          </Route>
 
-        <Route path="*" element={<Navigate to="/app" replace />} />
-        </Routes>
+          <Route path="*" element={<Navigate to="/app" replace />} />
+          </Routes>
       </TooltipProvider>
       <Toaster />
     </SessionProvider>

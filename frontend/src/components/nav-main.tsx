@@ -35,7 +35,8 @@ import {
   PackageCheck,
   type LucideIcon,
 } from "lucide-react"
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useTransition } from "react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -95,8 +96,30 @@ function isActive(href: string, pathname: string): boolean {
     : pathname === href || pathname.startsWith(href + "/")
 }
 
+const PREFETCH: Record<string, () => Promise<unknown>> = {
+  "/app": () => import("@/app/app/page"),
+  "/app/transaction": () => import("@/app/app/transaction/page"),
+  "/app/so": () => import("@/app/app/so/page"),
+  "/app/project": () => import("@/app/app/project/page"),
+  "/app/report": () => import("@/app/app/report/page"),
+  "/app/inventory/balance": () => import("@/app/app/inventory/balance/page"),
+  "/app/setup/items": () => import("@/app/app/setup/items/page"),
+  "/app/setup/warehouses": () => import("@/app/app/setup/warehouses/page"),
+};
+
+function prefetch(href: string) {
+  const fn = PREFETCH[href];
+  if (fn) void fn();
+  // prefetch children too
+  for (const [key, loader] of Object.entries(PREFETCH)) {
+    if (key.startsWith(href + "/")) void loader();
+  }
+}
+
 export function NavMain({ groups }: { groups: NavGroup[] }) {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const [isPending, startTransition] = useTransition()
   const { state } = useSidebar()
   const isCollapsed = state === "collapsed"
 
@@ -173,7 +196,17 @@ export function NavMain({ groups }: { groups: NavGroup[] }) {
                       isActive={isItemActive}
                       tooltip={item.label}
                     >
-                      <Link to={item.href}>
+                      <Link
+                        to={item.href}
+                        viewTransition
+                        onMouseEnter={() => prefetch(item.href)}
+                        onClick={(e) => {
+                          if (isActive(item.href, pathname)) return;
+                          e.preventDefault();
+                          startTransition(() => navigate(item.href));
+                        }}
+                        style={{ opacity: isPending ? 0.85 : 1 }}
+                      >
                         <Icon />
                         <span>{item.label}</span>
                       </Link>
@@ -217,6 +250,9 @@ function NavCollapsibleItem({
   onToggle: () => void
 }) {
   const Icon = ICONS[item.icon] ?? LayoutGrid
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const [, startTransition] = useTransition()
 
   // Mode kecil (ikon): klik parent langsung menuju halamannya
   // (mis. /app/setup), bukan membuka submenu.
@@ -224,7 +260,16 @@ function NavCollapsibleItem({
     return (
       <SidebarMenuItem>
         <SidebarMenuButton asChild isActive={isItemActive} tooltip={item.label}>
-          <Link to={item.href}>
+          <Link
+            to={item.href}
+            viewTransition
+            onMouseEnter={() => prefetch(item.href)}
+            onClick={(e) => {
+              if (isActive(item.href, pathname)) return
+              e.preventDefault()
+              startTransition(() => navigate(item.href))
+            }}
+          >
             <Icon />
             <span>{item.label}</span>
           </Link>
@@ -256,7 +301,16 @@ function NavCollapsibleItem({
                   asChild
                   isActive={activeHrefs.has(child.href)}
                 >
-                  <Link to={child.href}>
+                  <Link
+                    to={child.href}
+                    viewTransition
+                    onMouseEnter={() => prefetch(child.href)}
+                    onClick={(e) => {
+                      if (activeHrefs.has(child.href)) return
+                      e.preventDefault()
+                      startTransition(() => navigate(child.href))
+                    }}
+                  >
                     <span>{child.label}</span>
                   </Link>
                 </SidebarMenuSubButton>

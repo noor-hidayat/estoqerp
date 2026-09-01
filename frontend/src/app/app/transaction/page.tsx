@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BadgeCheck, Plus, RefreshCw, Search } from "lucide-react";
+import { BadgeCheck, Loader2, Plus, RefreshCw, Search } from "lucide-react";
 import {
-  useStockMovements,
+  useStockMovementsInfinite,
   useMovementTypes,
   useAllWarehouses,
 } from "@/lib/api/query";
@@ -16,11 +16,15 @@ import { Select } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import * as SelectPrimitive from "@radix-ui/react-select";
+import { SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const STATUS_TONE: Record<string, string> = {
   DRAFT: "neutral",
   POSTED: "emerald",
 };
+
+const LIMIT_OPTIONS = [20, 100, 500, 2500] as const;
 
 export default function TransactionsPage() {
   const navigate = useNavigate();
@@ -29,9 +33,8 @@ export default function TransactionsPage() {
   const [typeId, setTypeId] = useState("all");
   const [fromWarehouseId, setFromWarehouseId] = useState("");
   const [toWarehouseId, setToWarehouseId] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [sortId, setSortId] = useState("createdAt");
+  const [limit, setLimit] = useState<number>(20);
+  const [sortId, setSortId] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
@@ -41,19 +44,26 @@ export default function TransactionsPage() {
 
   const { data: types = [] } = useMovementTypes();
   const { data: warehouses = [] } = useAllWarehouses();
-  const { data: result, isLoading, refetch } = useStockMovements({
+
+  const infinite = useStockMovementsInfinite({
     query: debouncedQuery || undefined,
     typeId: typeId === "all" ? undefined : typeId,
     fromWarehouseId: fromWarehouseId || undefined,
     toWarehouseId: toWarehouseId || undefined,
-    sort: sortId,
+    sort: sortId ?? undefined,
     dir: sortDir,
-    page,
-    pageSize,
+    limit,
   });
 
-  const rows = result?.rows ?? [];
-  const total = result?.total ?? 0;
+  const rows = useMemo(() => {
+    const pages = (infinite.data as unknown as { pages: { rows: StockMovementListRow[] }[] } | undefined)?.pages;
+    if (!pages) return [] as StockMovementListRow[];
+    return pages.flatMap((p) => p.rows);
+  }, [infinite.data]);
+
+  const hasNext = (infinite.data as unknown as { pages: { hasNext: boolean }[] } | undefined)?.pages?.slice(-1)[0]?.hasNext ?? false;
+  const isLoading = infinite.isLoading;
+  const isFetchingNext = infinite.isFetchingNextPage;
 
   const columns: DataTableColumn<StockMovementListRow>[] = [
     {
@@ -126,8 +136,9 @@ export default function TransactionsPage() {
               variant="secondary"
               size="sm"
               className="h-7 w-7 px-0"
-              onClick={() => void refetch()}
+              onClick={() => void infinite.refetch()}
               aria-label="Reload transactions"
+              disabled={infinite.isFetching}
             >
               <RefreshCw size={14} strokeWidth={2} className="text-muted-foreground" />
             </Button>
@@ -139,11 +150,21 @@ export default function TransactionsPage() {
         }
       />
 
-        <DataTable
+      <DataTable
         columns={columns}
         data={rows}
         getRowId={(m) => m.id}
         loading={isLoading}
+        pagination="none"
+        // sort lazy: tidak kirim sort di awal (backend pakai index createdAt), hanya pas klik header
+        initialSort={null}
+        sortColumnId="createdAt"
+        onSortChange={(s) => {
+          // s null = tidak ada sort (awal) -> biarkan null, backend pakai default createdAt index
+          // s ada = user klik header -> kirim ke backend
+          setSortId(s?.id ?? null);
+          setSortDir(s?.dir ?? "desc");
+        }}
         filters={
           <>
             <div className="relative">
@@ -154,10 +175,7 @@ export default function TransactionsPage() {
               />
               <Input
                 value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by no..."
                 className="h-8 w-[240px] pl-8 text-xs shadow-none focus-visible:ring-1"
               />
@@ -165,10 +183,7 @@ export default function TransactionsPage() {
             <SearchableSelect
               compact
               value={fromWarehouseId}
-              onChange={(v) => {
-                setFromWarehouseId(v);
-                setPage(1);
-              }}
+              onChange={(v) => setFromWarehouseId(v)}
               options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
               placeholder="Source warehouse..."
               emptyLabel="Semua"
@@ -177,10 +192,7 @@ export default function TransactionsPage() {
             <SearchableSelect
               compact
               value={toWarehouseId}
-              onChange={(v) => {
-                setToWarehouseId(v);
-                setPage(1);
-              }}
+              onChange={(v) => setToWarehouseId(v)}
               options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
               placeholder="Target warehouse..."
               emptyLabel="Semua"
@@ -188,10 +200,7 @@ export default function TransactionsPage() {
             />
             <Select
               value={typeId}
-              onChange={(e) => {
-                setTypeId(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setTypeId(e.target.value)}
               className="h-8 w-56 text-xs"
             >
               <option value="all">All types</option>
@@ -203,22 +212,48 @@ export default function TransactionsPage() {
             </Select>
           </>
         }
-        pagination="server"
-        initialSort={{ id: "createdAt", dir: "desc" }}
-        sortColumnId="createdAt"
-        onSortChange={(s) => {
-          setSortId(s?.id ?? "");
-          setSortDir(s?.dir ?? "asc");
-          setPage(1);
-        }}
-        page={page}
-        pageSize={pageSize}
-        total={total}
-        onPageChange={setPage}
-        onPageSizeChange={(ps) => {
-          setPageSize(ps);
-          setPage(1);
-        }}
+        footerLeft={
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Rows per load</span>
+            <SelectPrimitive.Root
+              value={String(limit)}
+              onValueChange={(v) => setLimit(Number(v) as typeof limit)}
+            >
+              <SelectTrigger aria-label="Rows per load" className="h-7 w-[84px] px-2 text-xs shadow-none">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LIMIT_OPTIONS.map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </SelectPrimitive.Root>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {rows.length} loaded{hasNext ? "+" : ""}
+            </span>
+          </div>
+        }
+        footer={
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-3 text-xs"
+            onClick={() => void infinite.fetchNextPage()}
+            disabled={!hasNext || isFetchingNext || isLoading}
+          >
+            {isFetchingNext ? (
+              <>
+                <Loader2 size={12} className="animate-spin" /> Loading...
+              </>
+            ) : hasNext ? (
+              "Load More"
+            ) : (
+              "No more"
+            )}
+          </Button>
+        }
         minWidth={880}
         emptyIcon={<BadgeCheck size={26} strokeWidth={2} />}
         emptyTitle="No transactions yet"
@@ -228,9 +263,16 @@ export default function TransactionsPage() {
           setTypeId("all");
           setFromWarehouseId("");
           setToWarehouseId("");
-          setPage(1);
+          setSortId(null);
+          setSortDir("desc");
         }}
       />
+      {/* overlay fetching next page */}
+      {isFetchingNext && (
+        <div className="flex justify-center py-2 text-xs text-muted-foreground">
+          <Loader2 size={14} className="animate-spin mr-1.5" /> Memuat {limit} lagi...
+        </div>
+      )}
     </MenuGate>
   );
 }

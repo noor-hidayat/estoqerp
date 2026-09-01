@@ -182,6 +182,16 @@ input[type="number"] {
   animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.animate-fade-in {
+  opacity: 0;
+  animation: fade-in 0.28s ease-out forwards;
+}
+
 @keyframes pop-in {
   0% { opacity: 0; transform: translateY(18px) scale(0.98); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
@@ -195,6 +205,10 @@ input[type="number"] {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up {
+    opacity: 1;
+    animation: none;
+  }
+  .animate-fade-in {
     opacity: 1;
     animation: none;
   }

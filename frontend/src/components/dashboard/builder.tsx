@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Responsive, WidthProvider, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-import { Check, GripVertical, Pencil, Plus, X } from "lucide-react";
+import { Check, GripVertical, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,61 +15,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
-import { useDashboardMeta, useWarehouses } from "@/lib/api/query";
-import { useWidgetMutations } from "@/lib/api/use-dashboards";
+import { useWidgetMutations, useDashboard } from "@/lib/api/use-dashboards";
 import { WidgetRenderer } from "@/components/dashboard/widgets";
-import {
-  dimLabel,
-  type Aggregation,
-  type WidgetConfig,
-  type WidgetInstance,
-  type WidgetType,
-} from "@/components/dashboard/types";
+import { type WidgetInstance } from "@/components/dashboard/types";
+import { WIDGET_TEMPLATES, templatesForWorkspace } from "@/components/dashboard/widget-registry";
 import { cn } from "@/lib/utils";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
-
-const DEFAULT_SIZE: Record<WidgetType, { w: number; h: number }> = {
-  kpi: { w: 3, h: 4 },
-  bar: { w: 6, h: 8 },
-  line: { w: 6, h: 8 },
-  pie: { w: 4, h: 8 },
-  table: { w: 6, h: 8 },
-};
-
-const TYPE_LABELS: Record<WidgetType, string> = {
-  kpi: "KPI (Angka Tunggal)",
-  bar: "Bar Chart",
-  line: "Line Chart",
-  pie: "Pie Chart",
-  table: "Tabel",
-};
-
-interface DraftConfig {
-  type: WidgetType;
-  title: string;
-  factTable: string;
-  measures: { field: string; aggregation: Aggregation }[];
-  groupBy: string[];
-  dateFrom: string;
-  dateTo: string;
-  warehouseIds: string[];
-}
-
-const EMPTY_DRAFT: DraftConfig = {
-  type: "bar",
-  title: "",
-  factTable: "",
-  measures: [],
-  groupBy: [],
-  dateFrom: "",
-  dateTo: "",
-  warehouseIds: [],
-};
 
 export function DashboardBuilder({
   dashboardId,
@@ -78,22 +30,18 @@ export function DashboardBuilder({
   dashboardId: string;
   widgets: WidgetInstance[];
 }) {
+  const { data: dashboard } = useDashboard(dashboardId);
+  const workspaceId = dashboard?.workspaceId ?? null;
+  const available = useMemo(() => templatesForWorkspace(workspaceId), [workspaceId]);
+
   const [items, setItems] = useState<WidgetInstance[]>(initialWidgets);
   const originalRef = useRef<WidgetInstance[]>(initialWidgets);
   const [saving, setSaving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<DraftConfig>(EMPTY_DRAFT);
-  const [step, setStep] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [titleOverrides, setTitleOverrides] = useState<Record<string, string>>({});
 
-  const { data: meta } = useDashboardMeta();
-  const { data: warehouses } = useWarehouses();
   const mutations = useWidgetMutations(dashboardId);
-
-  const fact = useMemo(
-    () => meta?.factTables.find((f) => f.key === draft.factTable),
-    [meta, draft.factTable]
-  );
 
   function syncLayout(layout: Layout[]) {
     setItems((ws) =>
@@ -104,65 +52,71 @@ export function DashboardBuilder({
     );
   }
 
-  function resetDraft() {
-    setDraft(EMPTY_DRAFT);
-    setStep(0);
-    setEditingId(null);
-  }
-
   function openAdd() {
-    resetDraft();
-    setAddOpen(true);
-  }
-
-  function openEdit(w: WidgetInstance) {
-    setEditingId(w.id);
-    setDraft({
-      type: w.type,
-      title: w.config.title ?? "",
-      factTable: w.config.factTable,
-      measures: w.config.measures.map((m) => ({ field: m.field, aggregation: m.aggregation })),
-      groupBy: w.config.groupBy,
-      dateFrom: w.config.filters?.dateRange?.[0] ?? "",
-      dateTo: w.config.filters?.dateRange?.[1] ?? "",
-      warehouseIds: w.config.filters?.warehouseId ?? [],
-    });
-    setStep(0);
-    setAddOpen(true);
-  }
-
-  function buildConfig(): WidgetConfig {
-    const filters: WidgetConfig["filters"] = {};
-    if (draft.dateFrom && draft.dateTo) filters.dateRange = [draft.dateFrom, draft.dateTo];
-    if (draft.warehouseIds.length) filters.warehouseId = draft.warehouseIds;
-    return {
-      factTable: draft.factTable,
-      measures: draft.measures,
-      groupBy: draft.groupBy,
-      filters,
-      title: draft.title.trim() || undefined,
-    };
-  }
-
-  function commitWidget() {
-    const config = buildConfig();
-    if (editingId) {
-      setItems((ws) =>
-        ws.map((w) => (w.id === editingId ? { ...w, type: draft.type, config } : w))
-      );
-    } else {
-      const nextY = items.reduce((m, w) => Math.max(m, w.layout.y + w.layout.h), 0);
-      const size = DEFAULT_SIZE[draft.type];
-      const inst: WidgetInstance = {
-        id: `tmp_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-        type: draft.type,
-        config,
-        layout: { x: 0, y: nextY, w: size.w, h: size.h },
-      };
-      setItems((ws) => [...ws, inst]);
+    // pre-select already added templates
+    const existingTemplateIds = new Set(
+      items
+        .map((w) => (w.config as unknown as Record<string, unknown>)?.templateId as string | undefined)
+        .filter(Boolean) as string[]
+    );
+    // keep overrides for existing
+    const overrides: Record<string, string> = {};
+    for (const w of items) {
+      const cfg = w.config as unknown as Record<string, unknown>;
+      if (cfg?.templateId && cfg?.title) overrides[cfg.templateId as string] = String(cfg.title);
     }
+    setTitleOverrides(overrides);
+    setSelectedIds(new Set(existingTemplateIds));
+    setAddOpen(true);
+  }
+
+  function toggleTemplate(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function commitSelection() {
+    // Build new items from selectedIds
+    const existingByTemplate = new Map<string, WidgetInstance>();
+    for (const w of items) {
+      const tid = (w.config as unknown as Record<string, unknown>)?.templateId as string | undefined;
+      if (tid) existingByTemplate.set(tid, w);
+    }
+    const nextItems: WidgetInstance[] = [];
+    let yCursor = 0;
+    for (const tpl of WIDGET_TEMPLATES) {
+      if (!selectedIds.has(tpl.id)) continue;
+      if (!available.some((a) => a.id === tpl.id)) continue; // workspace filter
+      const existing = existingByTemplate.get(tpl.id);
+      if (existing) {
+        const title = titleOverrides[tpl.id]?.trim();
+        const newConfig: Record<string, unknown> = { templateId: tpl.id, ...(title ? { title } : {}) };
+        nextItems.push({ ...existing, config: newConfig as unknown as WidgetInstance["config"] });
+        yCursor = Math.max(yCursor, existing.layout.y + existing.layout.h);
+      } else {
+        const title = titleOverrides[tpl.id]?.trim();
+        const cfg: Record<string, unknown> = { templateId: tpl.id, ...(title ? { title } : {}) };
+        const size = tpl.defaultLayout;
+        nextItems.push({
+          id: `tmp_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}_${tpl.id}`,
+          type: tpl.type,
+          config: cfg as unknown as WidgetInstance["config"],
+          layout: { x: 0, y: yCursor, w: size.w, h: size.h },
+        });
+        yCursor += size.h;
+      }
+    }
+    // Include legacy widgets that are not template-based? Keep them as is
+    for (const w of items) {
+      const tid = (w.config as unknown as Record<string, unknown>)?.templateId as string | undefined;
+      if (!tid) nextItems.push(w);
+    }
+    setItems(nextItems);
     setAddOpen(false);
-    resetDraft();
   }
 
   function removeWidget(id: string) {
@@ -182,40 +136,68 @@ export function DashboardBuilder({
       }
       for (const w of items) {
         if (w.id.startsWith("tmp_")) {
-          await mutations.addWidget.mutateAsync({
-            type: w.type,
-            config: w.config,
-            layout: w.layout,
-          });
+          const cfg = w.config as unknown as Record<string, unknown>;
+          const templateId = cfg?.templateId as string | undefined;
+          if (templateId) {
+            await mutations.addWidget.mutateAsync({
+              templateId,
+              title: (cfg?.title as string | undefined),
+              layout: w.layout,
+            } as unknown as never);
+          } else {
+            await mutations.addWidget.mutateAsync({
+              type: w.type,
+              config: w.config,
+              layout: w.layout,
+            } as unknown as never);
+          }
         } else {
           const o = original.get(w.id);
-          if (!o || JSON.stringify(o.config) !== JSON.stringify(w.config)) {
-            await mutations.updateWidget.mutateAsync({
-              widgetId: w.id,
-              patch: { type: w.type, config: w.config },
-            });
+          const newCfg = w.config as unknown as Record<string, unknown>;
+          const oldCfg = o?.config as unknown as Record<string, unknown> | undefined;
+          if (!o || JSON.stringify(oldCfg) !== JSON.stringify(newCfg) || o.type !== w.type) {
+            const tid = newCfg?.templateId as string | undefined;
+            if (tid) {
+              await mutations.updateWidget.mutateAsync({
+                widgetId: w.id,
+                patch: { templateId: tid, title: newCfg?.title as string | undefined },
+              } as unknown as never);
+            } else {
+              await mutations.updateWidget.mutateAsync({
+                widgetId: w.id,
+                patch: { type: w.type, config: w.config },
+              } as unknown as never);
+            }
           }
         }
       }
       const layouts = items
         .filter((w) => !w.id.startsWith("tmp_"))
         .map((w) => ({ id: w.id, layout: w.layout }));
-      await mutations.saveLayout.mutateAsync(layouts);
+      if (layouts.length) await mutations.saveLayout.mutateAsync(layouts);
+      originalRef.current = items.filter((w) => !w.id.startsWith("tmp_"));
     } finally {
       setSaving(false);
     }
   }
 
   const layout: Layout[] = items.map((w) => ({ i: w.id, ...w.layout }));
-  const canCommit =
-    draft.factTable !== "" && draft.measures.length > 0 && !!meta;
+  const grouped = useMemo(() => {
+    const g: Record<string, typeof available> = {};
+    for (const tpl of available) {
+      const key = tpl.workspaceId;
+      if (!g[key]) g[key] = [];
+      g[key].push(tpl);
+    }
+    return g;
+  }, [available]);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end gap-2">
         <Button variant="outline" size="sm" onClick={openAdd}>
           <Plus size={14} strokeWidth={2} />
-          Add Widget
+          Pilih Widget
         </Button>
         <Button size="sm" onClick={handleSave} disabled={saving}>
           {saving ? "Menyimpan…" : "Save"}
@@ -224,7 +206,7 @@ export function DashboardBuilder({
 
       {items.length === 0 ? (
         <p className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-          Belum ada widget. Klik “Add Widget” untuk menyusun dashboard.
+          Belum ada widget. Klik “Pilih Widget” untuk menampilkan widget jadi sesuai workspace.
         </p>
       ) : (
         <ResponsiveGridLayout
@@ -250,14 +232,6 @@ export function DashboardBuilder({
               <div className="absolute right-1.5 top-1.5 z-20 flex gap-1">
                 <button
                   type="button"
-                  aria-label="Edit"
-                  onClick={() => openEdit(w)}
-                  className="inline-flex size-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground hover:bg-muted"
-                >
-                  <Pencil size={12} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
                   aria-label="Remove"
                   onClick={() => removeWidget(w.id)}
                   className="inline-flex size-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
@@ -271,227 +245,73 @@ export function DashboardBuilder({
         </ResponsiveGridLayout>
       )}
 
-      <Dialog open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) resetDraft(); }}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Widget" : "Add Widget"}</DialogTitle>
+            <DialogTitle>Pilih Widget</DialogTitle>
             <DialogDescription>
-              {editingId ? "Ubah konfigurasi widget." : "Susun widget dari data stok."}
+              Centang widget jadi sesuai workspace <span className="font-medium">{workspaceId ?? "global"}</span>. Dashboard sekarang tinggal pilih, tidak perlu setting factTable manual.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Stepper */}
-          <div className="flex items-center gap-1 text-xs">
-            {["Tipe", "Tabel", "Measure", "Group By", "Filter"].map((label, i) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() => setStep(i)}
-                className={cn(
-                  "rounded-full px-2.5 py-1 font-medium",
-                  step === i ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                )}
-              >
-                {i + 1}. {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="max-h-[55vh] space-y-3 overflow-auto pr-1">
-            {step === 0 && (
-              <div className="space-y-2">
-                <Label>Tipe Visualisasi</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(Object.keys(TYPE_LABELS) as WidgetType[]).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setDraft((d) => ({ ...d, type: t }))}
-                      className={cn(
-                        "rounded-md border px-3 py-2 text-sm font-medium",
-                        draft.type === t
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:bg-muted"
-                      )}
-                    >
-                      {TYPE_LABELS[t]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {step === 1 && (
-              <div className="space-y-2">
-                <Label>Fact Table</Label>
-                <NativeSelect
-                  value={draft.factTable}
-                  onChange={(e) => setDraft((d) => ({ ...d, factTable: e.target.value, measures: [], groupBy: [] }))}
-                >
-                  <NativeSelectOption value="">— pilih —</NativeSelectOption>
-                  {meta?.factTables.map((f) => (
-                    <NativeSelectOption key={f.key} value={f.key}>
-                      {f.label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </div>
-            )}
-
-            {step === 2 && (
-              <div className="space-y-2">
-                <Label>Measure (minimal 1)</Label>
-                {!fact && <p className="text-sm text-muted-foreground">Pilih fact table dulu.</p>}
-                {fact?.measures.map((m) => {
-                  const selected = draft.measures.find((x) => x.field === m);
-                  return (
-                    <div key={m} className="flex items-center gap-2 rounded-md border p-2">
-                      <Checkbox
-                        checked={!!selected}
-                        onCheckedChange={(c) =>
-                          setDraft((d) => ({
-                            ...d,
-                            measures: c
-                              ? [
-                                  ...d.measures.filter((x) => x.field !== m),
-                                  { field: m, aggregation: "sum" as Aggregation },
-                                ]
-                              : d.measures.filter((x) => x.field !== m),
-                          }))
-                        }
-                      />
-                      <span className="flex-1 text-sm font-medium">{m}</span>
-                      {selected && (
-                        <NativeSelect
-                          className="w-28"
-                          value={selected.aggregation}
-                          onChange={(e) =>
-                            setDraft((d) => ({
-                              ...d,
-                              measures: d.measures.map((x) =>
-                                x.field === m ? { ...x, aggregation: e.target.value as Aggregation } : x
-                              ),
-                            }))
-                          }
-                        >
-                          {(meta?.aggregations ?? ["sum", "count", "avg", "min", "max"]).map((a) => (
-                            <NativeSelectOption key={a} value={a}>
-                              {a}
-                            </NativeSelectOption>
-                          ))}
-                        </NativeSelect>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {step === 3 && (
-              <div className="space-y-2">
-                <Label>Group By (opsional)</Label>
-                {!fact && <p className="text-sm text-muted-foreground">Pilih fact table dulu.</p>}
-                {fact?.dims.map((dim) => (
-                  <label key={dim} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                    <Checkbox
-                      checked={draft.groupBy.includes(dim)}
-                      onCheckedChange={(c) =>
-                        setDraft((d) => ({
-                          ...d,
-                          groupBy: c
-                            ? [...d.groupBy, dim]
-                            : d.groupBy.filter((x) => x !== dim),
-                        }))
-                      }
-                    />
-                    {dimLabel(dim)}
-                  </label>
-                ))}
-                <p className="pt-1 text-xs font-medium text-muted-foreground">Berdasarkan Waktu</p>
-                {(meta?.periodGrains ?? ["day", "week", "month"]).map((g) => (
-                  <label key={g} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                    <Checkbox
-                      checked={draft.groupBy.includes(g)}
-                      onCheckedChange={(c) =>
-                        setDraft((d) => ({
-                          ...d,
-                          groupBy: c
-                            ? [...d.groupBy, g]
-                            : d.groupBy.filter((x) => x !== g),
-                        }))
-                      }
-                    />
-                    Tanggal · {g === "day" ? "Hari" : g === "week" ? "Minggu" : "Bulan"}
-                  </label>
-                ))}
-              </div>
-            )}
-
-            {step === 4 && (
-              <div className="space-y-3">
-                <Label>Filter (opsional)</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-xs">Dari</Label>
-                    <Input type="date" value={draft.dateFrom} onChange={(e) => setDraft((d) => ({ ...d, dateFrom: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Sampai</Label>
-                    <Input type="date" value={draft.dateTo} onChange={(e) => setDraft((d) => ({ ...d, dateTo: e.target.value }))} />
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs">Warehouse</Label>
-                  <div className="mt-1 max-h-40 space-y-1 overflow-auto rounded-md border p-2">
-                    {(warehouses ?? []).map((wh) => (
-                      <label key={wh.id} className="flex items-center gap-2 text-sm">
+          <div className="flex-1 overflow-auto space-y-6 pr-1">
+            {Object.entries(grouped).map(([wsId, tpls]) => (
+              <div key={wsId} className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {wsId === "wsp-stockopname" ? "Stock Opname" : wsId === "wsp-warehouse" ? "Warehouse" : wsId === "wsp-purchasing" ? "Purchasing" : wsId === "wsp-marketing" ? "Marketing" : wsId}
+                </h4>
+                <div className="grid gap-2">
+                  {tpls.map((tpl) => {
+                    const checked = selectedIds.has(tpl.id);
+                    return (
+                      <label
+                        key={tpl.id}
+                        className={cn(
+                          "flex gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
+                          checked ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                        )}
+                      >
                         <Checkbox
-                          checked={draft.warehouseIds.includes(wh.id)}
-                          onCheckedChange={(c) =>
-                            setDraft((d) => ({
-                              ...d,
-                              warehouseIds: c
-                                ? [...d.warehouseIds, wh.id]
-                                : d.warehouseIds.filter((x) => x !== wh.id),
-                            }))
-                          }
+                          checked={checked}
+                          onCheckedChange={() => toggleTemplate(tpl.id)}
+                          className="mt-1"
                         />
-                        {wh.name}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{tpl.title}</span>
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{tpl.type}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{tpl.description}</p>
+                          {checked && (
+                            <div className="mt-2">
+                              <Label className="text-xs">Judul custom (opsional)</Label>
+                              <Input
+                                className="mt-1 h-8"
+                                placeholder={tpl.title}
+                                value={titleOverrides[tpl.id] ?? ""}
+                                onChange={(e) => setTitleOverrides((prev) => ({ ...prev, [tpl.id]: e.target.value }))}
+                              />
+                            </div>
+                          )}
+                        </div>
                       </label>
-                    ))}
-                    {(warehouses ?? []).length === 0 && (
-                      <p className="text-xs text-muted-foreground">Memuat warehouse…</p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs">Judul (opsional)</Label>
-                  <Input
-                    value={draft.title}
-                    onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
-                    placeholder="Nama widget"
-                  />
+                    );
+                  })}
                 </div>
               </div>
+            ))}
+            {available.length === 0 && (
+              <p className="text-sm text-muted-foreground py-8 text-center">Tidak ada template untuk workspace ini.</p>
             )}
           </div>
 
-          <DialogFooter className="flex items-center justify-between gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => setStep((s) => Math.max(0, s - 1))}
-              disabled={step === 0}
-            >
-              Kembali
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAddOpen(false)}>
+              Batal
             </Button>
-            {step < 4 ? (
-              <Button onClick={() => setStep((s) => Math.min(4, s + 1))}>Lanjut</Button>
-            ) : (
-              <Button onClick={commitWidget} disabled={!canCommit}>
-                {editingId ? "Simpan" : "Tambah"}
-                {!editingId && <Check size={14} strokeWidth={2} className="ml-1" />}
-              </Button>
-            )}
+            <Button onClick={commitSelection}>
+              Terapkan <Check size={14} strokeWidth={2} className="ml-1" />
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
