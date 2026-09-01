@@ -61,6 +61,8 @@ export default function StockLedgerPage() {
     { key: "qtyIn" as const, header: "In", format: (v: unknown) => formatNumber(Number(v)) },
     { key: "qtyOut" as const, header: "Out", format: (v: unknown) => formatNumber(Number(v)) },
     { key: "qtyBalance" as const, header: "Balance", format: (v: unknown) => formatNumber(Number(v)) },
+    { key: "valuationRate" as const, header: "Valuation Rate", format: (v: unknown) => `Rp ${formatNumber(Number(v))}` },
+    { key: "stockValue" as const, header: "Stock Value", format: (v: unknown) => `Rp ${formatNumber(Number(v))}` },
     { key: "transactionId" as const, header: "Movement No" },
   ];
 
@@ -180,6 +182,28 @@ export default function StockLedgerPage() {
       ),
     },
     {
+      id: "valuationRate",
+      header: "Valuation Rate",
+      align: "right",
+      sortValue: (r) => r.valuationRate ?? 0,
+      cell: (r) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {r.valuationRate ? `Rp ${formatNumber(r.valuationRate)}` : "—"}
+        </span>
+      ),
+    },
+    {
+      id: "stockValue",
+      header: "Stock Value",
+      align: "right",
+      sortValue: (r) => r.stockValue ?? 0,
+      cell: (r) => (
+        <span className="font-mono text-xs font-semibold tabular-nums">
+          {r.stockValue ? `Rp ${formatNumber(r.stockValue)}` : "—"}
+        </span>
+      ),
+    },
+    {
       id: "movementNo",
       header: "Movement No",
       sortValue: (r) => r.transactionId,
@@ -289,7 +313,7 @@ export default function StockLedgerPage() {
           setPageSize(ps);
           setPage(1);
         }}
-        minWidth={1040}
+        minWidth={1280}
         emptyIcon={<NotebookText size={26} strokeWidth={2} />}
         emptyTitle="No ledger entries"
         emptyDescription="Post a transaction to start recording stock movements."

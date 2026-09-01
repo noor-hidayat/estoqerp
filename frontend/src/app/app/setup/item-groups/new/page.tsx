@@ -11,7 +11,6 @@ import {
   FormPage,
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
@@ -19,15 +18,16 @@ export default function NewItemGroupPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ code: "", name: "" });
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
   useErrorToast(error);
 
   const { data: itemGroupsRaw = [] } = useItemGroups();
   const insertItemGroup = useInsert("itemGroups");
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.code.trim() || !form.name.trim()) {
       setError("Code and item group name are required.");
-      return;
+      return false;
     }
     if (
       itemGroupsRaw.some(
@@ -35,14 +35,20 @@ export default function NewItemGroupPage() {
       )
     ) {
       setError("Item group code already in use.");
-      return;
+      return false;
     }
     try {
       await insertItemGroup.mutateAsync({ ...form });
-      navigate("/app/setup/item-groups");
-    } catch (e: unknown) {
+      setSaved(true);
+      return true;    } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
+      return false;
     }
+  };
+
+  const handleSubmit = async () => {
+    const ok = await save();
+    if (ok) navigate("/app/setup/item-groups");
   };
 
   useSaveShortcut(save, true);
@@ -51,6 +57,19 @@ export default function NewItemGroupPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["master.itemGroups"]}>
       <FormPage
         title="Add Item Group"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/setup/item-groups")}>
+              Cancel
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save}>
+              Save
+            </Button>
+            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit}>
+              Submit
+            </Button>
+          </div>
+        }
       >
         <FormSection>
           <FormGrid>
@@ -68,17 +87,6 @@ export default function NewItemGroupPage() {
             />
           </FormGrid>
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/setup/item-groups")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={save}>
-            <Plus size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

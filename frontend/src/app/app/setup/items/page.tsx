@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, Plus, Trash2 } from "lucide-react";
+import {Package, Plus, Trash2, Pencil} from "lucide-react";
 import {
   useItems,
   useItemGroups,
@@ -68,7 +68,15 @@ export default function ItemsPage() {
     {
       id: "name",
       header: "Item Name",
-      cell: (item) => <span className="font-medium text-foreground">{item.name}</span>,
+      cell: (item) => (
+        <button
+          onClick={() => navigate(`/app/setup/items/${item.id}`)}
+          className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
+          title="Edit item"
+        >
+          {item.name}
+        </button>
+      ),
       className: "min-w-[220px]",
     },
     {
@@ -109,9 +117,48 @@ export default function ItemsPage() {
       ),
     },
     {
+      id: "standardCost",
+      header: "Standard Cost",
+      align: "right",
+      cell: (item) => (
+        <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+          {item.standardCost != null && Number(item.standardCost) !== 0 ? `Rp ${formatNumber(Number(item.standardCost))}` : "—"}
+        </span>
+      ),
+    },
+    {
+      id: "valuationRate",
+      header: "Valuation Rate",
+      align: "right",
+      cell: (item) => (
+        <span className="whitespace-nowrap font-mono text-xs font-medium">
+          {item.valuationRate != null && Number(item.valuationRate) !== 0 ? `Rp ${formatNumber(Number(item.valuationRate))}` : "—"}
+        </span>
+      ),
+    },
+    {
       id: "created",
       header: "Created",
       cell: (item) => <span className="whitespace-nowrap text-xs text-muted-foreground">{timeAgo(item.createdAt)}</span>,
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (item) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/app/setup/items/${item.id}`);
+          }}
+        >
+          <Pencil size={12} strokeWidth={2} />
+          Edit
+        </Button>
+      ),
+      className: "w-[90px] text-right",
     },
   ];
 
@@ -135,6 +182,7 @@ export default function ItemsPage() {
         columns={columns}
         data={items}
         getRowId={(item) => item.id}
+        onRowClick={(item) => navigate(`/app/setup/items/${item.id}`)}
         loading={itemsLoading || itemGroupsLoading}
         searchPlaceholder="Search any field..."
         searchValue={query}
@@ -184,7 +232,7 @@ export default function ItemsPage() {
           setPageSize(ps);
           setPage(1);
         }}
-        minWidth={1000}
+        minWidth={1200}
         emptyIcon={<Package size={26} strokeWidth={2} />}
         emptyTitle="No items"
         emptyDescription="Add a new item or adjust your search filters."

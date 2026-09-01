@@ -11,7 +11,6 @@ import {
   FormPage,
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
@@ -23,11 +22,12 @@ export default function NewBranchPage() {
 
   const { data: branches = [] } = useBranches();
   const insertBranch = useInsert("branches");
+  const [saved, setSaved] = useState(false);
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.code.trim() || !form.name.trim()) {
       setError("Code and branch name are required.");
-      return;
+      return false;
     }
     if (
       branches.some(
@@ -35,14 +35,21 @@ export default function NewBranchPage() {
       )
     ) {
       setError("Branch code already in use.");
-      return;
+      return false;
     }
     try {
       await insertBranch.mutateAsync({ ...form });
-      navigate("/app/setup/branches");
+      setSaved(true);
+      return true;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
+      return false;
     }
+  };
+
+  const handleSubmit = async () => {
+    const ok = await save();
+    if (ok) navigate("/app/setup/branches");
   };
 
   useSaveShortcut(save, true);
@@ -51,6 +58,19 @@ export default function NewBranchPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.branches"]}>
       <FormPage
         title="Add Branch"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/setup/branches")}>
+              Cancel
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={insertBranch.isPending}>
+              Save
+            </Button>
+            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit}>
+              Submit
+            </Button>
+          </div>
+        }
       >
         <FormSection>
           <FormGrid>
@@ -75,17 +95,6 @@ export default function NewBranchPage() {
             </div>
           </FormGrid>
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/setup/branches")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={save}>
-            <Plus size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

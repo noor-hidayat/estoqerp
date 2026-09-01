@@ -12,7 +12,6 @@ import {
   FormPage,
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
@@ -26,18 +25,19 @@ export default function NewTransactionTypePage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", kind: "RECEIPT", series: "SMV" });
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
   useErrorToast(error);
 
   const insertType = useInsert("movementTypes");
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.name.trim()) {
       setError("Name is required.");
-      return;
+      return false;
     }
     if (!form.series.trim()) {
       setError("Series (prefix penomoran) wajib diisi.");
-      return;
+      return false;
     }
     try {
       await insertType.mutateAsync({
@@ -45,9 +45,10 @@ export default function NewTransactionTypePage() {
         kind: form.kind,
         series: form.series.trim().toUpperCase(),
       });
-      navigate("/app/setup/transaction-types");
-    } catch (e: unknown) {
+      setSaved(true);
+      return true;    } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
+      return false;
     }
   };
 
@@ -93,17 +94,6 @@ export default function NewTransactionTypePage() {
             </div>
           </FormGrid>
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/setup/transaction-types")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={save}>
-            <Plus size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

@@ -13,7 +13,6 @@ import {
   FormPage,
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { Link } from "react-router-dom";
 import { useErrorToast } from "@/hooks/use-error-toast";
@@ -28,6 +27,7 @@ export default function EditLocationPage() {
 
   const [form, setForm] = useState({ code: "", name: "", warehouseId: "" });
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
   useErrorToast(error);
 
   useEffect(() => {
@@ -36,10 +36,10 @@ export default function EditLocationPage() {
     }
   }, [location]);
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.code.trim() || !form.warehouseId) {
       setError("Location code and warehouse are required.");
-      return;
+      return false;
     }
     if (
       allLocations.some(
@@ -49,15 +49,21 @@ export default function EditLocationPage() {
       )
     ) {
       setError("Location code already in use.");
-      return;
+      return false;
     }
-    if (!id) return;
+    if (!id) return false;
     try {
       await updateLocation.mutateAsync({ id, patch: { ...form } });
-      navigate("/app/setup/locations");
-    } catch (e: unknown) {
+      setSaved(true);
+      return true;    } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
+      return false;
     }
+  };
+
+  const handleSubmit = async () => {
+    const ok = await save();
+    if (ok) navigate("/app/setup/locations");
   };
 
   useSaveShortcut(save, true);
@@ -87,6 +93,19 @@ export default function EditLocationPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.locations"]}>
       <FormPage
         title="Edit Location"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/setup/locations")}>
+              Cancel
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save}>
+              Save
+            </Button>
+            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit}>
+              Submit
+            </Button>
+          </div>
+        }
       >
         <FormSection>
           <FormGrid>
@@ -117,17 +136,6 @@ export default function EditLocationPage() {
             </div>
           </FormGrid>
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/setup/locations")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={save}>
-            <Save size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

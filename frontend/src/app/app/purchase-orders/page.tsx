@@ -59,6 +59,12 @@ export default function PurchaseOrdersPage() {
       sortValue: (o) => o.orderDate,
     },
     {
+      id: "purchaser",
+      header: "Purchaser",
+      cell: (o) => <span className="text-xs text-muted-foreground">{(o as unknown as { createdByName?: string }).createdByName ?? "—"}</span>,
+      sortValue: (o) => (o as unknown as { createdByName?: string }).createdByName ?? "",
+    },
+    {
       id: "status",
       header: "Status",
       cell: (o) => <DocStatusBadge status={o.status} />,

@@ -76,6 +76,7 @@ interface DetailDraft {
   toWarehouseId: string;
   qty: string;
   uomId: string;
+  incomingRate?: string;
   barcode?: string;
   serialNumber?: string;
   /** Barcode/serial per unit saat baris hasil gabungan beberapa scan. */
@@ -93,18 +94,19 @@ const detailKeyOf = (d: {
   batchNumber?: string | null;
   fromWarehouseId?: string | null;
   toWarehouseId?: string | null;
+  incomingRate?: number | null;
 }) =>
-  [d.itemId, d.batchNumber ?? "", d.fromWarehouseId ?? "", d.toWarehouseId ?? ""].join("|");
+  [d.itemId, d.batchNumber ?? "", d.fromWarehouseId ?? "", d.toWarehouseId ?? "", String(d.incomingRate ?? "")].join("|");
 
 /** Gabung detail yang item + batch + gudang asal/tujuan sama menjadi satu baris,
  *  dengan qty dijumlahkan dan barcode/serial tiap unit tetap disimpan. */
 function mergeDetails(
-  details: { itemId: string; batchNumber?: string | null; fromWarehouseId?: string | null; toWarehouseId?: string | null; qty: number; uomId?: string | null; barcode?: string | null; serialNumber?: string | null }[]
+  details: { itemId: string; batchNumber?: string | null; fromWarehouseId?: string | null; toWarehouseId?: string | null; qty: number; uomId?: string | null; barcode?: string | null; serialNumber?: string | null; incomingRate?: number | null }[]
 ): DetailDraft[] {
   const out: DetailDraft[] = [];
   const map = new Map<string, DetailDraft>();
   for (const d of details) {
-    const k = detailKeyOf(d);
+    const k = detailKeyOf(d as any);
     const qty = Number(d.qty) || 0;
     let row = map.get(k);
     if (!row) {
@@ -116,6 +118,7 @@ function mergeDetails(
         toWarehouseId: d.toWarehouseId ?? "",
         qty: "0",
         uomId: d.uomId ?? "",
+        incomingRate: d.incomingRate != null ? String(d.incomingRate) : "",
         barcode: d.barcode ?? undefined,
         serialNumber: d.serialNumber ?? undefined,
         units: [],
@@ -139,6 +142,7 @@ const SCAN_TABLE_COLUMNS = [
   { id: "itemCode", label: "Item Code" },
   { id: "qty", label: "Qty" },
   { id: "batch", label: "Batch" },
+  { id: "rate", label: "Rate" },
 ] as const;
 
 function todayISO(): string {
@@ -438,6 +442,7 @@ export function MovementForm({
     itemCode: true,
     qty: true,
     batch: false,
+    rate: true,
   });
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
@@ -458,6 +463,7 @@ export function MovementForm({
       ...(visibleCols.itemCode ? ["itemCode"] : []),
       ...(visibleCols.qty ? ["qty"] : []),
       ...(visibleCols.batch ? ["batch"] : []),
+      ...(visibleCols.rate && kind === "RECEIPT" ? ["rate"] : []),
     ];
     const idx = cols.indexOf(col);
     if (idx < cols.length - 1) {
@@ -475,6 +481,7 @@ export function MovementForm({
         toWarehouseId: kind === "ISSUE" ? "" : toDefault,
         qty: "",
         uomId: "",
+        incomingRate: "",
       },
     ]);
     focusCell(`${newKey}:${cols[0]}`);
@@ -807,6 +814,7 @@ export function MovementForm({
         batchNumber: string | null;
         barcode: string | null;
         serialNumber: string | null;
+        incomingRate: number | null;
       }[] => {
         const base = {
           itemId: r.itemId,
@@ -814,6 +822,7 @@ export function MovementForm({
           toWarehouseId: r.toWarehouseId || null,
           uomId: r.uomId || null,
           batchNumber: r.batchNumber.trim() || null,
+          incomingRate: r.incomingRate && String(r.incomingRate).trim() !== "" ? Number(r.incomingRate) : null,
         };
         const units = r.units ?? [];
         const unitSum = units.reduce((a, u) => a + u.qty, 0);
@@ -1185,6 +1194,7 @@ export function MovementForm({
                     {visibleCols.itemCode && <TableHead className="px-4">Item Code</TableHead>}
                     {visibleCols.qty && <TableHead className="w-[150px] px-4 text-right">Qty</TableHead>}
                     {visibleCols.batch && <TableHead className="w-[150px] px-4">Batch</TableHead>}
+                    {visibleCols.rate && kind === "RECEIPT" && <TableHead className="w-[140px] px-4 text-right">Rate</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1292,6 +1302,27 @@ export function MovementForm({
                           )}
                         </TableCell>
                       )}
+                      {visibleCols.rate && kind === "RECEIPT" && (
+                        <TableCell className="px-4 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={r.incomingRate ?? ""}
+                            placeholder="0.00"
+                            disabled={readOnly}
+                            ref={registerCell(`${r.key}:rate`)}
+                            onChange={(e) => setRow(r.key, { incomingRate: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === "Tab") {
+                                e.preventDefault();
+                                tabNext(r.key, "rate");
+                              }
+                            }}
+                            className="h-8 w-full min-w-[90px] border-none bg-transparent px-1 text-right font-mono text-sm text-foreground focus:outline-none focus:ring-0 disabled:opacity-100"
+                          />
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1325,6 +1356,7 @@ export function MovementForm({
                     toWarehouseId: kind === "ISSUE" ? "" : toDefault,
                     qty: "",
                     uomId: "",
+                    incomingRate: "",
                   })
                 }
               >

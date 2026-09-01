@@ -23,7 +23,6 @@ import { Toggle } from "@/components/ui/toggle";
 import {
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { cx } from "@/lib/utils";
 import { nextSegId } from "@/lib/segment-id";
@@ -274,6 +273,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
   const [saveError, setSaveError] = useState("");
   useErrorToast(saveError);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const issues = useMemo(
     () => segments.flatMap((s) => segmentIssues(s, segments).map((i) => i.msg)),
@@ -331,8 +331,8 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
     setSegments(segments.filter((s) => s.id !== id));
   };
 
-  const save = async () => {
-    if (!name.trim() || !valid || saving) return;
+  const save = async (): Promise<boolean> => {
+    if (!name.trim() || !valid || saving) return false;
     setSaving(true);
     setSaveError("");
     const next: Omit<BatchFormat, "id"> = {
@@ -348,11 +348,19 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
       } else {
         await update.mutateAsync({ id: format.id, patch: next });
       }
-      router.push("/app/setup/batch-formats");
+      setSaved(true);
+      setSaving(false);
+      return true;
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
       setSaving(false);
+      return false;
     }
+  };
+
+  const handleSubmit = async () => {
+    const ok = await save();
+    if (ok) router.push("/app/setup/batch-formats");
   };
 
   useSaveShortcut(save, !saving);
@@ -361,6 +369,14 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
 
   return (
     <div>
+      <div className="flex justify-end gap-2 mb-4">
+        <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={!canSave}>
+          Save
+        </Button>
+        <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit} disabled={!name.trim() || !valid}>
+          Submit
+        </Button>
+      </div>
       {/* INFORMASI FORMAT */}
       <FormSection title="Format information">
         <FormGrid>
@@ -488,19 +504,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
         )}
       </FormSection>
 
-      {/* ACTION FOOTER */}
-      <FormActions>
-        <Button
-          variant="ghost"
-          onClick={() => router.push("/app/setup/batch-formats")}
-          disabled={saving}
-        >
-          Batal
-        </Button>
-        <Button variant="primary" disabled={!canSave} onClick={save}>
-          {saving ? "Menyimpan..." : isNew ? "Simpan Format" : "Simpan Changes"}
-        </Button>
-      </FormActions>
+
     </div>
   );
 }

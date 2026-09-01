@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Tags } from "lucide-react";
+import {Plus, Tags, Pencil} from "lucide-react";
 import { useMovementTypes } from "@/lib/api/query";
 import type { MovementType } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -65,7 +65,15 @@ export default function TransactionTypesPage() {
       id: "name",
       header: "Name",
       sortValue: (t) => t.name,
-      cell: (t) => <span className="font-medium text-foreground">{t.name}</span>,
+      cell: (t) => (
+        <button
+          onClick={() => navigate(`/app/setup/transaction-types/${t.id}`)}
+          className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
+          title="Edit transaction type"
+        >
+          {t.name}
+        </button>
+      ),
       className: "min-w-[220px]",
     },
     {
@@ -73,6 +81,25 @@ export default function TransactionTypesPage() {
       header: "Created",
       sortValue: (t) => t.createdAt ?? "",
       cell: (t) => <span className="text-xs text-muted-foreground">{timeAgo(t.createdAt)}</span>,
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (t) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/app/setup/transaction-types/${t.id}`);
+          }}
+        >
+          <Pencil size={12} strokeWidth={2} />
+          Edit
+        </Button>
+      ),
+      className: "w-[90px] text-right",
     },
   ];
 
@@ -96,6 +123,7 @@ export default function TransactionTypesPage() {
         columns={columns}
         data={types}
         getRowId={(t) => t.id}
+        onRowClick={(t) => navigate(`/app/setup/transaction-types/${t.id}`)}
         searchPlaceholder="Search transaction types..."
         getSearchText={(t) => `${t.code} ${t.name} ${t.kind} ${t.series}`}
         minWidth={640}

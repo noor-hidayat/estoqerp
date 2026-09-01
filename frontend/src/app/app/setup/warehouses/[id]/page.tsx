@@ -13,7 +13,6 @@ import {
   FormPage,
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { Link } from "react-router-dom";
 import { useErrorToast } from "@/hooks/use-error-toast";
@@ -28,6 +27,7 @@ export default function EditWarehousePage() {
 
   const [form, setForm] = useState({ code: "", name: "", branchId: "" });
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
   useErrorToast(error);
 
   useEffect(() => {
@@ -36,10 +36,10 @@ export default function EditWarehousePage() {
     }
   }, [warehouse]);
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.code.trim() || !form.name.trim() || !form.branchId) {
       setError("Code, warehouse name, and branch are required.");
-      return;
+      return false;
     }
     if (
       warehouses.some(
@@ -49,15 +49,21 @@ export default function EditWarehousePage() {
       )
     ) {
       setError("Warehouse code already in use.");
-      return;
+      return false;
     }
-    if (!id) return;
+    if (!id) return false;
     try {
       await updateWarehouse.mutateAsync({ id, patch: { ...form } });
-      navigate("/app/setup/warehouses");
-    } catch (e: unknown) {
+      setSaved(true);
+      return true;    } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
+      return false;
     }
+  };
+
+  const handleSubmit = async () => {
+    const ok = await save();
+    if (ok) navigate("/app/setup/warehouses");
   };
 
   useSaveShortcut(save, true);
@@ -87,6 +93,19 @@ export default function EditWarehousePage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.warehouses"]}>
       <FormPage
         title="Edit Warehouse"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/setup/warehouses")}> 
+              Cancel
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save}>
+              Save
+            </Button>
+            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit}>
+              Submit
+            </Button>
+          </div>
+        }
       >
         <FormSection>
           <FormGrid>
@@ -116,17 +135,6 @@ export default function EditWarehousePage() {
             </div>
           </FormGrid>
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/setup/warehouses")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={save}>
-            <Save size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

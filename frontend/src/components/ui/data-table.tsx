@@ -136,6 +136,10 @@ interface DataTableProps<T> {
   /** Class tambahan untuk elemen <table> (mis. border-separate utk sticky). */
   tableClassName?: string;
 
+  // Row click ----------------------------------------------------------------
+  /** Called when a row is clicked. Row becomes clickable (cursor-pointer). */
+  onRowClick?: (row: T) => void;
+
   // Column visibility --------------------------------------------------------
   /** localStorage key for column visibility. Defaults to a key derived from column ids. */
   columnVisibilityKey?: string;
@@ -230,6 +234,7 @@ export function DataTable<T>({
   columnVisibilityKey,
   fixedLayout = false,
   tableClassName,
+  onRowClick,
 }: DataTableProps<T>) {
   const isClient = pagination === "client";
 
@@ -684,8 +689,15 @@ export function DataTable<T>({
               return (
                 <TableRow
                   key={id}
+                  onClick={(e) => {
+                    if (!onRowClick) return;
+                    const target = e.target as HTMLElement;
+                    if (target.closest('button, a, input, [role="checkbox"], [role="switch"], [data-no-row-click]')) return;
+                    onRowClick(row);
+                  }}
                   className={cn(
                     "border-border/70 transition-colors hover:bg-muted/40",
+                    onRowClick && "cursor-pointer",
                     isSelected && "bg-muted/50 hover:bg-muted/60",
                     rowClassName?.(row)
                   )}

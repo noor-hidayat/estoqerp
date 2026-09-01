@@ -130,6 +130,7 @@ function POBody({
       unitPrice: l.unitPrice ?? "",
       batchNumber: l.batchNumber ?? "",
       note: l.note ?? "",
+      deliveryDate: (l as unknown as { deliveryDate?: string | null }).deliveryDate ?? "",
     }))
   );
 
@@ -151,6 +152,7 @@ function POBody({
             unitPrice: l.unitPrice || null,
             batchNumber: l.batchNumber || null,
             note: l.note || null,
+            deliveryDate: l.deliveryDate || null,
           })),
         },
       });
@@ -240,6 +242,7 @@ function POBody({
         <div className="space-y-6">
           <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
             <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+              <Input label="Purchaser" value={(po as unknown as { createdByName?: string }).createdByName ?? "—"} disabled />
               <SearchableSelect
                 label="Supplier"
                 placeholder="Select supplier..."
@@ -255,7 +258,7 @@ function POBody({
                 onChange={(v) => setForm({ ...form, warehouseId: v })}
               />
               <DatePicker label="Order Date" value={form.orderDate} onChange={(v) => setForm({ ...form, orderDate: v })} />
-              <DatePicker label="Expected Date" value={form.expectedDate} onChange={(v) => setForm({ ...form, expectedDate: v })} />
+              <DatePicker label="Tgl Kirim (Expected Date)" value={form.expectedDate} onChange={(v) => setForm({ ...form, expectedDate: v })} />
               <div className="sm:col-span-2">
                 <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
                 <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
@@ -271,10 +274,11 @@ function POBody({
         <div className="space-y-6">
           <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
             <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+              <Detail label="Purchaser" value={(po as unknown as { createdByName?: string }).createdByName ?? "—"} />
               <Detail label="Supplier" value={supplierName(po.supplierId)} />
               <Detail label="Warehouse" value={warehouseName(po.warehouseId)} />
               <Detail label="Order Date" value={po.orderDate?.slice(0, 10) ?? "—"} />
-              <Detail label="Expected Date" value={po.expectedDate?.slice(0, 10) ?? "—"} />
+              <Detail label="Tgl Kirim" value={po.expectedDate?.slice(0, 10) ?? "—"} />
               <Detail label="Notes" value={po.notes || "—"} />
             </dl>
           </div>

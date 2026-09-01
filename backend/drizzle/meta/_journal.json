@@ -204,6 +204,27 @@
       "when": 1788170000000,
       "tag": "0030_ledger_incremental_index",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788200000000,
+      "tag": "0031_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788300000000,
+      "tag": "0032_item_valuation",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788400000000,
+      "tag": "0033_po_line_delivery_date",
+      "breakpoints": true
     }
   ]
 }

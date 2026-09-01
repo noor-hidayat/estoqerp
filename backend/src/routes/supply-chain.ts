@@ -32,9 +32,21 @@ async function poLines(tx: any, poId: string) {
   return tx.select().from(s.purchaseOrderLines).where(eq(s.purchaseOrderLines.purchaseOrderId, poId));
 }
 
+function validateRequireUnitPrice(lines: any[], context: string) {
+  for (let i = 0; i < lines.length; i++) {
+    const v = lines[i]?.unitPrice;
+    const n = v != null && String(v).trim() !== "" ? Number(v) : NaN;
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new Error(`${context} baris ${i + 1}: Harga (unitPrice) wajib diisi dan > 0.`);
+    }
+  }
+}
+
 async function replacePoLines(tx: any, poId: string, lines: any[]) {
+  validateRequireUnitPrice(lines, "PO");
   await tx.delete(s.purchaseOrderLines).where(eq(s.purchaseOrderLines.purchaseOrderId, poId));
   for (const l of lines) {
+    const deliveryDate = l.deliveryDate ?? l.expectedDate ?? l.tanggalKirim ?? null;
     await tx.insert(s.purchaseOrderLines).values({
       id: await nextRowId(tx, s.purchaseOrderLines, "pol"),
       purchaseOrderId: poId,
@@ -44,6 +56,7 @@ async function replacePoLines(tx: any, poId: string, lines: any[]) {
       unitPrice: l.unitPrice != null ? String(l.unitPrice) : null,
       batchNumber: l.batchNumber ?? null,
       note: l.note ?? null,
+      deliveryDate: deliveryDate ? String(deliveryDate).slice(0, 10) : null,
     });
   }
 }
@@ -54,6 +67,9 @@ supplyChainRouter.post("/purchase-orders", async (req, res, next) => {
     const b = req.body ?? {};
     if (!b.supplierId || !b.warehouseId || !b.orderDate)
       return res.status(400).json({ error: "supplierId, warehouseId, orderDate wajib." });
+    if (Array.isArray(b.lines) && b.lines.length > 0) {
+      try { validateRequireUnitPrice(b.lines, "PO"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); }
+    }
     const id = await nextRowId(db, s.purchaseOrders, "po");
     await db.insert(s.purchaseOrders).values({
       id,
@@ -82,11 +98,57 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
     if (req.query.warehouseId) conds.push(eq(s.purchaseOrders.warehouseId, String(req.query.warehouseId)));
     if (req.query.supplierId) conds.push(eq(s.purchaseOrders.supplierId, String(req.query.supplierId)));
     const rows = await db
-      .select()
+      .select({
+        id: s.purchaseOrders.id,
+        poNo: s.purchaseOrders.poNo,
+        supplierId: s.purchaseOrders.supplierId,
+        warehouseId: s.purchaseOrders.warehouseId,
+        orderDate: s.purchaseOrders.orderDate,
+        expectedDate: s.purchaseOrders.expectedDate,
+        status: s.purchaseOrders.status,
+        notes: s.purchaseOrders.notes,
+        createdBy: s.purchaseOrders.createdBy,
+        createdByName: s.users.name,
+        branchId: s.purchaseOrders.branchId,
+        createdAt: s.purchaseOrders.createdAt,
+        updatedAt: s.purchaseOrders.updatedAt,
+      })
       .from(s.purchaseOrders)
+      .leftJoin(s.users, eq(s.users.id, s.purchaseOrders.createdBy))
       .where(conds.length ? and(...conds) : undefined)
       .orderBy(desc(s.purchaseOrders.orderDate));
     res.json(rows);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET last purchase price per item (global)
+supplyChainRouter.get("/purchase-orders/last-price", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
+  try {
+    const itemId = String(req.query.itemId ?? "").trim();
+    const itemIdsRaw = String(req.query.itemIds ?? "").trim();
+    const ids = itemId ? [itemId] : itemIdsRaw ? itemIdsRaw.split(",").map((v) => v.trim()).filter(Boolean) : [];
+    if (ids.length === 0) return res.json({});
+    const rows = await db
+      .select({
+        itemId: s.purchaseOrderLines.itemId,
+        unitPrice: s.purchaseOrderLines.unitPrice,
+        orderDate: s.purchaseOrders.orderDate,
+      })
+      .from(s.purchaseOrderLines)
+      .innerJoin(s.purchaseOrders, eq(s.purchaseOrders.id, s.purchaseOrderLines.purchaseOrderId))
+      .where(inArray(s.purchaseOrderLines.itemId, ids))
+      .orderBy(desc(s.purchaseOrders.orderDate), desc(s.purchaseOrders.createdAt));
+    const map: Record<string, string | null> = {};
+    for (const r of rows) {
+      if (!(r.itemId in map)) map[r.itemId] = r.unitPrice != null ? String(r.unitPrice) : null;
+    }
+    // fill missing
+    for (const id of ids) if (!(id in map)) map[id] = null;
+    if (itemId) return res.json({ itemId, unitPrice: map[itemId] });
+    return res.json(map);
   } catch (e) {
     next(e);
   }
@@ -96,8 +158,23 @@ supplyChainRouter.get("/purchase-orders/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
   try {
     const [row] = await db
-      .select()
+      .select({
+        id: s.purchaseOrders.id,
+        poNo: s.purchaseOrders.poNo,
+        supplierId: s.purchaseOrders.supplierId,
+        warehouseId: s.purchaseOrders.warehouseId,
+        orderDate: s.purchaseOrders.orderDate,
+        expectedDate: s.purchaseOrders.expectedDate,
+        status: s.purchaseOrders.status,
+        notes: s.purchaseOrders.notes,
+        createdBy: s.purchaseOrders.createdBy,
+        createdByName: s.users.name,
+        branchId: s.purchaseOrders.branchId,
+        createdAt: s.purchaseOrders.createdAt,
+        updatedAt: s.purchaseOrders.updatedAt,
+      })
       .from(s.purchaseOrders)
+      .leftJoin(s.users, eq(s.users.id, s.purchaseOrders.createdBy))
       .where(eq(s.purchaseOrders.id, req.params.id))
       .limit(1);
     if (!row) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
@@ -124,6 +201,9 @@ supplyChainRouter.put("/purchase-orders/:id", async (req, res, next) => {
     if (cur.status !== "DRAFT")
       return res.status(400).json({ error: "Hanya PO berstatus DRAFT yang dapat diubah." });
     const b = req.body ?? {};
+    if (Array.isArray(b.lines) && b.lines.length > 0) {
+      try { validateRequireUnitPrice(b.lines, "PO"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); }
+    }
     const patch: Record<string, any> = {};
     if (b.supplierId !== undefined) patch.supplierId = b.supplierId;
     if (b.warehouseId !== undefined) patch.warehouseId = b.warehouseId;
@@ -464,6 +544,7 @@ async function grLines(tx: any, grId: string) {
 }
 
 async function replaceGrLines(tx: any, grId: string, lines: any[]) {
+  validateRequireUnitPrice(lines, "GR");
   await tx.delete(s.goodsReceiptLines).where(eq(s.goodsReceiptLines.goodsReceiptId, grId));
   for (const l of lines) {
     await tx.insert(s.goodsReceiptLines).values({
@@ -485,6 +566,9 @@ supplyChainRouter.post("/goods-receipts", async (req, res, next) => {
     const b = req.body ?? {};
     if (!b.purchaseOrderId || !b.warehouseId || !b.receiptDate)
       return res.status(400).json({ error: "purchaseOrderId, warehouseId, receiptDate wajib." });
+    if (Array.isArray(b.lines) && b.lines.length > 0) {
+      try { validateRequireUnitPrice(b.lines, "GR"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); }
+    }
     const [po] = await db
       .select({ supplierId: s.purchaseOrders.supplierId, branchId: s.purchaseOrders.branchId })
       .from(s.purchaseOrders)
@@ -557,6 +641,9 @@ supplyChainRouter.put("/goods-receipts/:id", async (req, res, next) => {
     if (cur.status !== "DRAFT")
       return res.status(400).json({ error: "Hanya GR berstatus DRAFT yang dapat diubah." });
     const b = req.body ?? {};
+    if (Array.isArray(b.lines) && b.lines.length > 0) {
+      try { validateRequireUnitPrice(b.lines, "GR"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); }
+    }
     const patch: Record<string, any> = {};
     if (b.warehouseId !== undefined) patch.warehouseId = b.warehouseId;
     if (b.receiptDate !== undefined) patch.receiptDate = b.receiptDate;
@@ -596,6 +683,8 @@ supplyChainRouter.post("/goods-receipts/:id/post", async (req, res, next) => {
     if (gr.status === "POSTED")
       return res.status(400).json({ error: "GR sudah diposting." });
     const lines = await grLines(db, req.params.id);
+    // GR wajib harga: validasi sebelum posting
+    validateRequireUnitPrice(lines, "GR");
     const typeId = await getMovementTypeId("RECEIPT");
     const details: DetailInput[] = lines.map((l: any) => ({
       itemId: l.itemId,
@@ -604,6 +693,7 @@ supplyChainRouter.post("/goods-receipts/:id/post", async (req, res, next) => {
       qty: Number(l.qty),
       uomId: l.uomId,
       batchNumber: l.batchNumber ?? null,
+      incomingRate: l.unitPrice != null ? Number(l.unitPrice) : null,
     }));
     const input: MovementInput = {
       typeId,

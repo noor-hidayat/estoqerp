@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Building2, Plus, Trash2 } from "lucide-react";
+import {Building2, Plus, Trash2, Pencil} from "lucide-react";
 import { useBranches, useAllWarehouses, useRemove } from "@/lib/api/query";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
@@ -44,7 +44,15 @@ export default function BranchesPage() {
       id: "name",
       header: "Branch Name",
       sortValue: (b) => b.name,
-      cell: (b) => <span className="font-medium text-foreground">{b.name}</span>,
+      cell: (b) => (
+        <button
+          onClick={() => navigate(`/app/setup/branches/${b.id}`)}
+          className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
+          title="Edit branch"
+        >
+          {b.name}
+        </button>
+      ),
       className: "min-w-[200px]",
     },
     {
@@ -69,6 +77,25 @@ export default function BranchesPage() {
       sortValue: (b) => b.createdAt ?? "",
       cell: (b) => <span className="text-xs text-muted-foreground">{timeAgo(b.createdAt)}</span>,
     },
+    {
+      id: "actions",
+      header: "",
+      cell: (b) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/app/setup/branches/${b.id}`);
+          }}
+        >
+          <Pencil size={12} strokeWidth={2} />
+          Edit
+        </Button>
+      ),
+      className: "w-[90px] text-right",
+    },
   ];
 
   return (
@@ -91,6 +118,7 @@ export default function BranchesPage() {
         columns={columns}
         data={branches}
         getRowId={(b) => b.id}
+        onRowClick={(b) => navigate(`/app/setup/branches/${b.id}`)}
         searchPlaceholder="Search branches..."
         getSearchText={(b) => `${b.code} ${b.name} ${b.city}`}
         selectable

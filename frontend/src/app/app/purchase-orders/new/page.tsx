@@ -7,6 +7,7 @@ import {
   useUoms,
   useCreatePurchaseOrder,
 } from "@/lib/api/query";
+import { useSession } from "@/lib/session";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ function todayISO() {
 
 export default function NewPurchaseOrderPage() {
   const navigate = useNavigate();
+  const { user } = useSession();
   const { data: suppliers = [], isLoading: suppliersLoading } = useSuppliers();
   const { data: warehouses = [], isLoading: warehousesLoading } = useAllWarehouses();
   const { isLoading: uomsLoading } = useUoms();
@@ -63,6 +65,7 @@ export default function NewPurchaseOrderPage() {
           unitPrice: l.unitPrice || null,
           batchNumber: l.batchNumber || null,
           note: l.note || null,
+          deliveryDate: l.deliveryDate || null,
         })),
       });
       navigate(`/app/purchase-orders/${res.id}`);
@@ -84,6 +87,7 @@ export default function NewPurchaseOrderPage() {
       <FormPage title="New Purchase Order">
         <FormSection>
           <FormGrid>
+            <Input label="Purchaser" value={user?.name ?? "—"} disabled placeholder="Auto dari akun" />
             <SearchableSelect
               label="Supplier"
               placeholder="Select supplier..."
@@ -104,7 +108,7 @@ export default function NewPurchaseOrderPage() {
               onChange={(v) => setForm({ ...form, orderDate: v })}
             />
             <DatePicker
-              label="Expected Date"
+              label="Tgl Kirim (Expected Date)"
               value={form.expectedDate}
               onChange={(v) => setForm({ ...form, expectedDate: v })}
             />

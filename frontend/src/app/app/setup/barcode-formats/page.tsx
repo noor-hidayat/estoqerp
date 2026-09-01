@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Barcode, Plus } from "lucide-react";
-import { useBarcodeFormats, useUpdate } from "@/lib/api/query";
+import {Plus, Trash2, Pencil} from "lucide-react";
+import { useBarcodeFormats, useRemove, useUpdate } from "@/lib/api/query";
 import { formatDate, timeAgo } from "@/lib/utils";
 import { sortSegments } from "@/lib/barcode/parser";
 import { PageHeader } from "@/components/ui/page-header";
@@ -45,6 +45,20 @@ export default function BarcodeFormatsPage() {
   const navigate = useNavigate();
   const { data: formats = [], isLoading } = useBarcodeFormats();
   const update = useUpdate("barcodeFormats");
+  const removeFormat = useRemove("barcodeFormats");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const handleBulkRemove = async () => {
+    const n = selected.size;
+    if (n === 0) return;
+    if (!confirm(`Delete ${n} selected format${n > 1 ? "s" : ""}?`)) return;
+    try {
+      await Promise.all([...selected].map((id) => removeFormat.mutateAsync(id)));
+      setSelected(new Set());
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to delete");
+    }
+  };
 
   const sorted = useMemo(
     () => [...formats].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")),
@@ -73,18 +87,13 @@ export default function BarcodeFormatsPage() {
       header: "Format",
       sortValue: (f) => f.name,
       cell: (f) => (
-        <div className="flex items-center gap-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
-            <Barcode size={15} strokeWidth={2} />
-          </span>
-          <button
-            onClick={() => navigate(`/app/setup/barcode-formats/${f.id}`)}
-            className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
-            title="Buka format"
-          >
-            {f.name}
-          </button>
-        </div>
+        <button
+          onClick={() => navigate(`/app/setup/barcode-formats/${f.id}`)}
+          className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
+          title="Buka format"
+        >
+          {f.name}
+        </button>
       ),
       className: "min-w-[180px]",
     },
@@ -135,6 +144,25 @@ export default function BarcodeFormatsPage() {
         </span>
       ),
     },
+    {
+      id: "actions",
+      header: "",
+      cell: (f) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/app/setup/barcode-formats/${f.id}`);
+          }}
+        >
+          <Pencil size={12} strokeWidth={2} />
+          Edit
+        </Button>
+      ),
+      className: "w-[90px] text-right",
+    },
   ];
 
   return (
@@ -157,10 +185,27 @@ export default function BarcodeFormatsPage() {
         columns={columns}
         data={sorted}
         getRowId={(f) => f.id}
+        onRowClick={(f) => navigate(`/app/setup/barcode-formats/${f.id}`)}
         searchPlaceholder="Search formats..."
-        getSearchText={(f) => f.name}
+        getSearchText={(f) => `${f.name} ${f.description ?? ""}`}
+        selectable
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        toolbarRight={
+          selected.size > 0 ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={handleBulkRemove}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete ({selected.size})
+            </Button>
+          ) : null
+        }
         minWidth={900}
-        emptyIcon={<Barcode size={26} strokeWidth={2} />}
+        emptyIcon={null}
         emptyTitle="No barcode formats yet"
         emptyDescription="Create your first format to define how barcodes are parsed into data segments."
       />

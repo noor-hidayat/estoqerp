@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Tag, Trash2 } from "lucide-react";
+import {Plus, Tag, Trash2, Pencil} from "lucide-react";
 import { useItemGroups, useItemGroupCounts, useRemove } from "@/lib/api/query";
 import type { ItemGroup } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -50,7 +50,15 @@ export default function ItemGroupsPage() {
       id: "name",
       header: "Item Group Name",
       sortValue: (c) => c.name,
-      cell: (c) => <span className="font-medium text-foreground">{c.name}</span>,
+      cell: (c) => (
+        <button
+          onClick={() => navigate(`/app/setup/item-groups/${c.id}`)}
+          className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
+          title="Edit item group"
+        >
+          {c.name}
+        </button>
+      ),
       className: "min-w-[220px]",
     },
     {
@@ -64,6 +72,25 @@ export default function ItemGroupsPage() {
       header: "Created",
       sortValue: (c) => c.createdAt ?? "",
       cell: (c) => <span className="text-xs text-muted-foreground">{timeAgo(c.createdAt)}</span>,
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (c) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/app/setup/item-groups/${c.id}`);
+          }}
+        >
+          <Pencil size={12} strokeWidth={2} />
+          Edit
+        </Button>
+      ),
+      className: "w-[90px] text-right",
     },
   ];
 
@@ -87,6 +114,7 @@ export default function ItemGroupsPage() {
         columns={columns}
         data={itemGroups}
         getRowId={(c) => c.id}
+        onRowClick={(c) => navigate(`/app/setup/item-groups/${c.id}`)}
         searchPlaceholder="Search item groups..."
         getSearchText={(c) => `${c.code} ${c.name}`}
         selectable

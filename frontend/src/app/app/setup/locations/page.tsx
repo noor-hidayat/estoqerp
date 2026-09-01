@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Plus, Trash2 } from "lucide-react";
+import {MapPin, Plus, Trash2, Pencil} from "lucide-react";
 import { useLocations, useAllWarehouses, useBranches, useRemove } from "@/lib/api/query";
 import type { Location } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -57,7 +57,15 @@ export default function LocationsPage() {
       id: "name",
       header: "Name",
       sortValue: (l) => l.name,
-      cell: (l) => <span className="text-foreground">{l.name}</span>,
+      cell: (l) => (
+        <button
+          onClick={() => navigate(`/app/setup/locations/${l.id}`)}
+          className="truncate text-left text-foreground transition-colors hover:text-primary"
+          title="Edit location"
+        >
+          {l.name}
+        </button>
+      ),
       className: "min-w-[180px]",
     },
     {
@@ -81,6 +89,25 @@ export default function LocationsPage() {
       sortValue: (l) => l.createdAt ?? "",
       cell: (l) => <span className="text-xs text-muted-foreground">{timeAgo(l.createdAt)}</span>,
     },
+    {
+      id: "actions",
+      header: "",
+      cell: (l) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/app/setup/locations/${l.id}`);
+          }}
+        >
+          <Pencil size={12} strokeWidth={2} />
+          Edit
+        </Button>
+      ),
+      className: "w-[90px] text-right",
+    },
   ];
 
   return (
@@ -103,6 +130,7 @@ export default function LocationsPage() {
         columns={columns}
         data={locations}
         getRowId={(l) => l.id}
+        onRowClick={(l) => navigate(`/app/setup/locations/${l.id}`)}
         searchPlaceholder="Search locations..."
         getSearchText={(l) => `${l.code} ${l.name}`}
         filters={

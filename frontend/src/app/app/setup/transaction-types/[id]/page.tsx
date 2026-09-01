@@ -13,7 +13,6 @@ import {
   FormPage,
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
@@ -35,6 +34,7 @@ export default function EditTransactionTypePage() {
     series: "",
   });
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
   useErrorToast(error);
 
   const type = typesRaw.find((t) => t.id === id);
@@ -49,16 +49,16 @@ export default function EditTransactionTypePage() {
     }
   }, [type]);
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.name.trim()) {
       setError("Name is required.");
-      return;
+      return false;
     }
     if (!form.series.trim()) {
       setError("Series (prefix penomoran) wajib diisi.");
-      return;
+      return false;
     }
-    if (!id) return;
+    if (!id) return false;
     try {
       await updateType.mutateAsync({
         id,
@@ -68,9 +68,10 @@ export default function EditTransactionTypePage() {
           series: form.series.trim().toUpperCase(),
         },
       });
-      navigate("/app/setup/transaction-types");
-    } catch (e: unknown) {
+      setSaved(true);
+      return true;    } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
+      return false;
     }
   };
 
@@ -141,17 +142,6 @@ export default function EditTransactionTypePage() {
             />
           </FormGrid>
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/setup/transaction-types")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={save}>
-            <Save size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

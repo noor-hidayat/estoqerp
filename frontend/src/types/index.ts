@@ -96,6 +96,8 @@ export interface Item {
   alternativeCode?: string;
   uomQty?: number;
   description?: string;
+  standardCost?: string | number | null;
+  valuationRate: string | number;
   isActive?: boolean;
   createdAt?: string;
 }
@@ -376,6 +378,7 @@ export interface StockMovementDetailRow {
   toWarehouseCode?: string;
   toWarehouseName?: string;
   qty: number;
+  incomingRate?: number | null;
   uomId?: string;
   uomCode?: string;
   uomName?: string;
@@ -423,6 +426,8 @@ export type StockLedgerRow = {
   qtyIn: number;
   qtyOut: number;
   qtyBalance: number;
+  valuationRate: number;
+  stockValue: number;
   referenceType?: string;
   referenceId?: string;
   batchId?: string;
@@ -479,6 +484,7 @@ export interface MovementInput {
     qty: number;
     uomId?: string | null;
     batchNumber?: string | null;
+    incomingRate?: number | null;
   }[];
 }
 
@@ -514,6 +520,7 @@ export interface PurchaseOrderLine {
   unitPrice?: string | null;
   batchNumber?: string | null;
   note?: string | null;
+  deliveryDate?: string | null;
 }
 
 export interface PurchaseOrder {
@@ -526,6 +533,8 @@ export interface PurchaseOrder {
   expectedDate?: string | null;
   notes?: string | null;
   status: DocStatus;
+  createdBy?: string | null;
+  createdByName?: string | null;
   createdAt?: string;
   updatedAt?: string;
   lines?: PurchaseOrderLine[];

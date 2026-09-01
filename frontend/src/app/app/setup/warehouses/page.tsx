@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Trash2, Warehouse as WarehouseIcon } from "lucide-react";
+import {Plus, Trash2, Warehouse as WarehouseIcon, Pencil} from "lucide-react";
 import { useAllWarehouses, useBranches, useLocations, useRemove } from "@/lib/api/query";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
@@ -47,7 +47,15 @@ export default function WarehousesPage() {
       id: "name",
       header: "Warehouse Name",
       sortValue: (w) => w.name,
-      cell: (w) => <span className="font-medium text-foreground">{w.name}</span>,
+      cell: (w) => (
+        <button
+          onClick={() => navigate(`/app/setup/warehouses/${w.id}`)}
+          className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
+          title="Edit warehouse"
+        >
+          {w.name}
+        </button>
+      ),
       className: "min-w-[200px]",
     },
     {
@@ -67,6 +75,25 @@ export default function WarehousesPage() {
       header: "Created",
       sortValue: (w) => w.createdAt ?? "",
       cell: (w) => <span className="text-xs text-muted-foreground">{timeAgo(w.createdAt)}</span>,
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (w) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/app/setup/warehouses/${w.id}`);
+          }}
+        >
+          <Pencil size={12} strokeWidth={2} />
+          Edit
+        </Button>
+      ),
+      className: "w-[90px] text-right",
     },
   ];
 
@@ -90,6 +117,7 @@ export default function WarehousesPage() {
         columns={columns}
         data={warehouses}
         getRowId={(w) => w.id}
+        onRowClick={(w) => navigate(`/app/setup/warehouses/${w.id}`)}
         searchPlaceholder="Search warehouses..."
         getSearchText={(w) => `${w.code} ${w.name}`}
         selectable

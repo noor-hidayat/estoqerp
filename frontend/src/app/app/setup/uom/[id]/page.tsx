@@ -12,7 +12,6 @@ import {
   FormPage,
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { Link } from "react-router-dom";
 import { useErrorToast } from "@/hooks/use-error-toast";
@@ -26,6 +25,7 @@ export default function EditUomPage() {
 
   const [form, setForm] = useState({ code: "", name: "" });
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
   useErrorToast(error);
 
   useEffect(() => {
@@ -34,10 +34,10 @@ export default function EditUomPage() {
     }
   }, [uom]);
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.code.trim() || !form.name.trim()) {
       setError("Code and UOM name are required.");
-      return;
+      return false;
     }
     if (
       uomsRaw.some(
@@ -45,15 +45,21 @@ export default function EditUomPage() {
       )
     ) {
       setError("UOM code already in use.");
-      return;
+      return false;
     }
-    if (!id) return;
+    if (!id) return false;
     try {
       await updateUom.mutateAsync({ id, patch: { ...form } });
-      navigate("/app/setup/uom");
-    } catch (e: unknown) {
+      setSaved(true);
+      return true;    } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
+      return false;
     }
+  };
+
+  const handleSubmit = async () => {
+    const ok = await save();
+    if (ok) navigate("/app/setup/uom");
   };
 
   useSaveShortcut(save, true);
@@ -98,17 +104,6 @@ export default function EditUomPage() {
             />
           </FormGrid>
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/setup/uom")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={save}>
-            <Save size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

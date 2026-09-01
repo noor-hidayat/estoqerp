@@ -42,6 +42,7 @@ export interface DetailInput {
   batchNumber?: string | null;
   barcode?: string | null;
   serialNumber?: string | null;
+  incomingRate?: number | null;
 }
 
 interface EffectDetail {
@@ -50,6 +51,7 @@ interface EffectDetail {
   toWarehouseId: string | null;
   qty: number;
   batchId: string | null;
+  incomingRate?: number | null;
 }
 
 export interface MovementInput {
@@ -77,6 +79,8 @@ function validateKindDirection(kind: string, details: DetailInput[]): void {
     if (kind === "RECEIPT") {
       if (d.fromWarehouseId) msgs.push(`Baris ${i + 1}: Receipt tidak boleh punya gudang asal.`);
       if (!d.toWarehouseId) msgs.push(`Baris ${i + 1}: Receipt wajib punya gudang tujuan.`);
+      const r = d.incomingRate;
+      if (r == null || !Number.isFinite(r) || r <= 0) msgs.push(`Baris ${i + 1}: Receipt wajib ada harga (incomingRate > 0).`);
     } else if (kind === "ISSUE") {
       if (d.toWarehouseId) msgs.push(`Baris ${i + 1}: Issue tidak boleh punya gudang tujuan.`);
       if (!d.fromWarehouseId) msgs.push(`Baris ${i + 1}: Issue wajib punya gudang asal.`);
@@ -86,7 +90,7 @@ function validateKindDirection(kind: string, details: DetailInput[]): void {
       }
     }
   }
-  if (msgs.length > 0) throw new Error(msgs.join(" "));
+  if (msgs.length > 0) throw new StockError(msgs.join(" "));
 }
 
 function param(req: Request, name: string): string {
@@ -138,6 +142,12 @@ function parseBody(body: unknown): { ok: true; value: MovementInput } | { ok: fa
         typeof d.serialNumber === "string" && d.serialNumber.trim()
           ? d.serialNumber.trim()
           : null,
+      incomingRate:
+        d.incomingRate != null && String(d.incomingRate).trim() !== ""
+          ? Number(d.incomingRate)
+          : d.unitPrice != null && String(d.unitPrice).trim() !== ""
+            ? Number(d.unitPrice)
+            : null,
     });
   }
   if (details.length === 0) return { ok: false, error: "Minimal 1 baris detail diperlukan." };
@@ -419,6 +429,50 @@ async function applyMovementEffect(
       aggSeen.set(k, (aggSeen.get(k) ?? 0) + d.qty);
     }
   }
+  // --- Valuation BEFORE stock_balances update so totalBefore is before movement
+  const itemValuation = new Map<string, number>(); // itemId -> newRate
+  const distinctItemIds = [...new Set(details.map((d) => d.itemId))];
+  for (const itemId of distinctItemIds) {
+    const [itemRow] = await tx
+      .select({ valuationRate: schema.items.valuationRate })
+      .from(schema.items)
+      .where(eq(schema.items.id, itemId))
+      .for("update")
+      .limit(1);
+    const curRate = Number(itemRow?.valuationRate ?? 0);
+    const curRateNum = Number.isFinite(curRate) ? curRate : 0;
+    const [qtyRow] = await tx
+      .select({ totalQty: sql<string>`COALESCE(SUM(${schema.stockBalances.closingQty}),0)::text` })
+      .from(schema.stockBalances)
+      .where(eq(schema.stockBalances.itemId, itemId));
+    const totalQtyBefore = Number(qtyRow?.totalQty ?? 0);
+    let incomingQty = 0;
+    let incomingValue = 0;
+    let outgoingQty = 0;
+    for (const d of details) {
+      if (d.itemId !== itemId) continue;
+      if (d.toWarehouseId) {
+        incomingQty += d.qty;
+        if (d.incomingRate != null && Number.isFinite(d.incomingRate)) incomingValue += d.qty * d.incomingRate;
+      }
+      if (d.fromWarehouseId) outgoingQty += d.qty;
+    }
+    const newTotalQty = totalQtyBefore + incomingQty - outgoingQty;
+    let newRate = curRateNum;
+    if (incomingQty > 0) {
+      const curValue = curRateNum * totalQtyBefore;
+      const newValue = curValue + incomingValue - outgoingQty * curRateNum;
+      if (newTotalQty > 0) newRate = newValue / newTotalQty;
+      else newRate = curRateNum;
+      newRate = Math.round(newRate * 100) / 100;
+      if (newRate < 0) newRate = 0;
+      if (newRate !== curRateNum) {
+        await tx.update(schema.items).set({ valuationRate: String(newRate) }).where(eq(schema.items.id, itemId));
+      }
+    }
+    itemValuation.set(itemId, newRate);
+  }
+
   if (aggSeen.size > 0) {
     const aggKeys = [...aggSeen.keys()];
     const aggValues = sql.join(
@@ -583,6 +637,7 @@ async function applyMovementEffect(
       .filter(({ qtyIn, qtyOut }) => qtyIn !== 0 || qtyOut !== 0)
       .map(({ itemId, warehouseId, qtyIn, qtyOut, batchId }) => {
         const ledgerId = `${base}${String(nextN++).padStart(4, "0")}`;
+        const vRate = itemValuation.get(itemId) ?? 0;
         return {
           id: ledgerId,
           transactionId: movement.id,
@@ -593,6 +648,8 @@ async function applyMovementEffect(
           qtyIn: String(qtyIn),
           qtyOut: String(qtyOut),
           qtyBalance: "0",
+          valuationRate: String(vRate),
+          stockValue: "0",
           referenceType: movement.referenceType ?? "STOCK_MOVEMENT",
           referenceId: movement.referenceId ?? movement.id,
           batchId,
@@ -645,6 +702,11 @@ async function recomputeLedgerBalances(
       )
       UPDATE stock_ledger l SET qty_balance = c.new_balance FROM calc c WHERE l.id = c.id
     `);
+    await tx.execute(sql`
+      UPDATE stock_ledger l SET stock_value = (l.qty_balance * l.valuation_rate)::numeric(15,2)
+      FROM (VALUES ${values}) AS k(warehouse_id, item_id)
+      WHERE l.warehouse_id = k.warehouse_id AND l.item_id = k.item_id
+    `);
     return;
   }
   const pd = postingDate.toISOString();
@@ -673,6 +735,12 @@ async function recomputeLedgerBalances(
       LEFT JOIN prev p ON p.warehouse_id = s.warehouse_id AND p.item_id = s.item_id
     )
     UPDATE stock_ledger l SET qty_balance = c.new_balance FROM calc c WHERE l.id = c.id
+  `);
+  await tx.execute(sql`
+    UPDATE stock_ledger l SET stock_value = (l.qty_balance * l.valuation_rate)::numeric(15,2)
+    FROM (VALUES ${values}) AS k(warehouse_id, item_id)
+    WHERE l.warehouse_id = k.warehouse_id AND l.item_id = k.item_id
+      AND l.transaction_date >= ${pd}::timestamptz
   `);
 }
 
@@ -736,6 +804,7 @@ export async function insertMovementWithDetails(
       batchId,
       barcode: d.barcode,
       serialNumber: d.serialNumber,
+      incomingRate: d.incomingRate != null ? String(d.incomingRate) : null,
     });
     effectDetails.push({
       itemId: d.itemId,
@@ -743,6 +812,7 @@ export async function insertMovementWithDetails(
       toWarehouseId: d.toWarehouseId ?? null,
       qty: d.qty,
       batchId,
+      incomingRate: d.incomingRate ?? null,
     });
   }
   if (detailRows.length > 0) {
@@ -1133,6 +1203,7 @@ transactionsRouter.get("/:id", async (req: Request, res: Response) => {
       toWarehouseCode: toWh.code,
       toWarehouseName: toWh.name,
       qty: s.stockMovementDetails.qty,
+      incomingRate: s.stockMovementDetails.incomingRate,
       uomId: s.stockMovementDetails.uomId,
       uomCode: s.uom.code,
       uomName: s.uom.name,
@@ -1156,6 +1227,7 @@ transactionsRouter.get("/:id", async (req: Request, res: Response) => {
     details: details.map((d) => ({
       ...d,
       qty: Number(d.qty),
+      incomingRate: d.incomingRate != null ? Number(d.incomingRate) : null,
       fromWarehouseCode: d.fromWarehouseCode ?? null,
       fromWarehouseName: d.fromWarehouseName ?? null,
       toWarehouseCode: d.toWarehouseCode ?? null,
@@ -1283,6 +1355,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
           batchId,
           barcode: d.barcode,
           serialNumber: d.serialNumber,
+          incomingRate: d.incomingRate != null ? String(d.incomingRate) : null,
         });
         effectDetails.push({
           itemId: d.itemId,
@@ -1290,6 +1363,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
           toWarehouseId: d.toWarehouseId ?? null,
           qty: d.qty,
           batchId,
+          incomingRate: d.incomingRate ?? null,
         });
       }
       if (detailRowsPatch.length > 0) {
@@ -1660,6 +1734,8 @@ stockLedgerRouter.get("/", async (req: Request, res: Response) => {
       qtyIn: s.stockLedger.qtyIn,
       qtyOut: s.stockLedger.qtyOut,
       qtyBalance: s.stockLedger.qtyBalance,
+      valuationRate: s.stockLedger.valuationRate,
+      stockValue: s.stockLedger.stockValue,
       referenceType: s.stockLedger.referenceType,
       referenceId: s.stockLedger.referenceId,
       batchId: s.stockLedger.batchId,
@@ -1686,6 +1762,8 @@ stockLedgerRouter.get("/", async (req: Request, res: Response) => {
       qtyIn: Number(r.qtyIn),
       qtyOut: Number(r.qtyOut),
       qtyBalance: Number(r.qtyBalance),
+      valuationRate: Number(r.valuationRate ?? 0),
+      stockValue: Number(r.stockValue ?? 0),
     })),
     total: Number(total),
     page,

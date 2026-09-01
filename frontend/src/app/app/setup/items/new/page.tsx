@@ -13,7 +13,6 @@ import {
   FormPage,
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
@@ -25,26 +24,28 @@ const EMPTY = {
   alternativeCode: "",
   uomQty: undefined as number | undefined,
   description: "",
+  standardCost: undefined as number | undefined,
 };
 
 export default function NewItemPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
   useErrorToast(error);
 
   const { data: itemGroups, isLoading: itemGroupsLoading } = useItemGroups();
   const { data: uoms = [], isLoading: uomsLoading } = useUoms();
   const insertItem = useInsert("items");
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.code.trim() || !form.name.trim() || !form.itemGroupId) {
       setError("Code, name, and item group are required.");
-      return;
+      return false;
     }
     if (!form.uomId) {
       setError("UOM is required.");
-      return;
+      return false;
     }
     try {
       await insertItem.mutateAsync({
@@ -54,12 +55,19 @@ export default function NewItemPage() {
         uomId: form.uomId,
         alternativeCode: form.alternativeCode.trim() || null,
         description: form.description.trim() || null,
+        standardCost: form.standardCost != null ? String(form.standardCost) : null,
         hue: Math.floor(Math.random() * 360),
       });
-      navigate("/app/setup/items");
-    } catch (e) {
+      setSaved(true);
+      return true;    } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save item.");
+      return false;
     }
+  };
+
+  const handleSubmit = async () => {
+    const ok = await save();
+    if (ok) navigate("/app/setup/items");
   };
 
   useSaveShortcut(save, true);
@@ -80,6 +88,19 @@ export default function NewItemPage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["master.items"]}>
       <FormPage
         title="Add Item"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/setup/items")}>
+              Cancel
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save}>
+              Save
+            </Button>
+            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit}>
+              Submit
+            </Button>
+          </div>
+        }
       >
         <FormSection>
           <FormGrid>
@@ -129,6 +150,20 @@ export default function NewItemPage() {
                 })
               }
             />
+            <Input
+              label="Standard cost"
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="e.g.: 10000"
+              value={form.standardCost ?? ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  standardCost: e.target.value === "" ? undefined : Math.max(0, Number(e.target.value) || 0),
+                })
+              }
+            />
             <div className="sm:col-span-2">
               <Input
                 label="Description"
@@ -140,17 +175,6 @@ export default function NewItemPage() {
           </FormGrid>
 
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/setup/items")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={save}>
-            <Plus size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

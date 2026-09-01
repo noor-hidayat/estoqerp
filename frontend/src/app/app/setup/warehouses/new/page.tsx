@@ -13,7 +13,6 @@ import {
   FormPage,
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
@@ -26,11 +25,12 @@ export default function NewWarehousePage() {
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: branches = [], isLoading: branchesLoading } = useBranches();
   const insertWarehouse = useInsert("warehouses");
+  const [saved, setSaved] = useState(false);
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.code.trim() || !form.name.trim() || !form.branchId) {
       setError("Code, warehouse name, and branch are required.");
-      return;
+      return false;
     }
     if (
       warehouses.some(
@@ -38,14 +38,21 @@ export default function NewWarehousePage() {
       )
     ) {
       setError("Warehouse code already in use.");
-      return;
+      return false;
     }
     try {
       await insertWarehouse.mutateAsync({ ...form });
-      navigate("/app/setup/warehouses");
+      setSaved(true);
+      return true;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
+      return false;
     }
+  };
+
+  const handleSubmit = async () => {
+    const ok = await save();
+    if (ok) navigate("/app/setup/warehouses");
   };
 
   useSaveShortcut(save, true);
@@ -64,6 +71,19 @@ export default function NewWarehousePage() {
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.warehouses"]}>
       <FormPage
         title="Add Warehouse"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/setup/warehouses")}>
+              Cancel
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={insertWarehouse.isPending}>
+              Save
+            </Button>
+            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit}>
+              Submit
+            </Button>
+          </div>
+        }
       >
         <FormSection>
           <FormGrid>
@@ -94,17 +114,6 @@ export default function NewWarehousePage() {
             </div>
           </FormGrid>
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/setup/warehouses")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={save}>
-            <Plus size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

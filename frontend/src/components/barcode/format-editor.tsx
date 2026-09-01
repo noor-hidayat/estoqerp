@@ -20,7 +20,6 @@ import { Toggle } from "@/components/ui/toggle";
 import {
   FormSection,
   FormGrid,
-  FormActions,
 } from "@/components/ui/form-page";
 import { SegmentBar, fieldColor, fieldLabelShort } from "./segment-visualizer";
 import { cx } from "@/lib/utils";
@@ -248,6 +247,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
   const [saveError, setSaveError] = useState("");
   useErrorToast(saveError);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [focusSegmentId, setFocusSegmentId] = useState<string | null>(null);
 
   const initialLength = useRef(
@@ -311,8 +311,8 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
     setSegments(segments.filter((s) => s.id !== id));
   };
 
-  const save = async () => {
-    if (!name.trim() || !validation.valid || saving) return;
+  const save = async (): Promise<boolean> => {
+    if (!name.trim() || !validation.valid || saving) return false;
     setSaving(true);
     setSaveError("");
     const next: Omit<BarcodeFormat, "id"> = {
@@ -330,11 +330,19 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
       } else {
         await update.mutateAsync({ id: format.id, patch: next });
       }
-      router.push("/app/setup/barcode-formats");
+      setSaved(true);
+      setSaving(false);
+      return true;
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
       setSaving(false);
+      return false;
     }
+  };
+
+  const handleSubmit = async () => {
+    const ok = await save();
+    if (ok) router.push("/app/setup/barcode-formats");
   };
 
   useSaveShortcut(save, !saving);
@@ -343,6 +351,14 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
 
   return (
     <div>
+      <div className="flex justify-end gap-2 mb-4">
+        <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={!canSave}>
+          Save
+        </Button>
+        <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit} disabled={!name.trim() || !validation.valid}>
+          Submit
+        </Button>
+      </div>
       {/* INFORMASI FORMAT */}
       <FormSection title="Format information">
         <FormGrid>
@@ -451,23 +467,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
         )}
       </FormSection>
 
-      {/* ACTION FOOTER */}
-      <FormActions>
-        <Button
-          variant="ghost"
-          onClick={() => router.push("/app/setup/barcode-formats")}
-          disabled={saving}
-        >
-          Batal
-        </Button>
-        <Button
-          variant="primary"
-          disabled={!canSave}
-          onClick={save}
-        >
-          {saving ? "Menyimpan..." : isNew ? "Simpan Format" : "Simpan Changes"}
-        </Button>
-      </FormActions>
+
     </div>
   );
 }

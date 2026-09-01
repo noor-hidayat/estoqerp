@@ -293,6 +293,10 @@ export const items = pgTable("items", {
   alternativeCode: text("alternative_code"),
   uomQty: numeric("uom_qty", { precision: 15, scale: 3 }),
   description: text("description"),
+  standardCost: numeric("standard_cost", { precision: 15, scale: 2 }),
+  valuationRate: numeric("valuation_rate", { precision: 15, scale: 2 })
+    .notNull()
+    .default("0"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -506,6 +510,7 @@ export const stockMovementDetails = pgTable(
     batchId: text("batch_id").references(() => batches.id),
     barcode: text("barcode"),
     serialNumber: text("serial_number"),
+    incomingRate: numeric("incoming_rate", { precision: 15, scale: 2 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -540,6 +545,8 @@ export const stockLedger = pgTable(
     qtyIn: numeric("qty_in", { precision: 15, scale: 3 }).notNull().default("0"),
     qtyOut: numeric("qty_out", { precision: 15, scale: 3 }).notNull().default("0"),
     qtyBalance: numeric("qty_balance", { precision: 15, scale: 3 }).notNull().default("0"),
+    valuationRate: numeric("valuation_rate", { precision: 15, scale: 2 }).notNull().default("0"),
+    stockValue: numeric("stock_value", { precision: 15, scale: 2 }).notNull().default("0"),
     referenceType: text("reference_type"),
     referenceId: text("reference_id"),
     batchId: text("batch_id").references(() => batches.id),
@@ -805,6 +812,7 @@ export const purchaseOrderLines = pgTable(
     unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
     batchNumber: text("batch_number"),
     note: text("note"),
+    deliveryDate: date("delivery_date"),
   },
   (t) => [index("idx_pol_po").on(t.purchaseOrderId)]
 );

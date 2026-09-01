@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Ruler, Trash2 } from "lucide-react";
+import {Plus, Ruler, Trash2, Pencil} from "lucide-react";
 import { useUoms, useRemove } from "@/lib/api/query";
 import type { Uom } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -47,7 +47,15 @@ export default function UomPage() {
       id: "name",
       header: "UOM Name",
       sortValue: (u) => u.name,
-      cell: (u) => <span className="font-medium text-foreground">{u.name}</span>,
+      cell: (u) => (
+        <button
+          onClick={() => navigate(`/app/setup/uom/${u.id}`)}
+          className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
+          title="Edit UOM"
+        >
+          {u.name}
+        </button>
+      ),
       className: "min-w-[220px]",
     },
     {
@@ -55,6 +63,25 @@ export default function UomPage() {
       header: "Created",
       sortValue: (u) => u.createdAt ?? "",
       cell: (u) => <span className="text-xs text-muted-foreground">{timeAgo(u.createdAt)}</span>,
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (u) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/app/setup/uom/${u.id}`);
+          }}
+        >
+          <Pencil size={12} strokeWidth={2} />
+          Edit
+        </Button>
+      ),
+      className: "w-[90px] text-right",
     },
   ];
 
@@ -78,6 +105,7 @@ export default function UomPage() {
         columns={columns}
         data={uoms}
         getRowId={(u) => u.id}
+        onRowClick={(u) => navigate(`/app/setup/uom/${u.id}`)}
         searchPlaceholder="Search UOM..."
         getSearchText={(u) => `${u.code} ${u.name}`}
         selectable

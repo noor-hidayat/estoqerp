@@ -1,6 +1,6 @@
 {
-  "id": "26276c32-6045-4ab9-89fd-d341c98e7840",
-  "prevId": "2bd9dc38-1354-4ce5-ba77-e1c8f435ead3",
+  "id": "dbdb07c2-fbcc-4588-9633-cf17f9e9527f",
+  "prevId": "d71257d7-3e8a-4ea4-8b6e-f6a2df3abbe5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -630,6 +630,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "standard_cost": {
+          "name": "standard_cost",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "valuation_rate": {
+          "name": "valuation_rate",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
         }
       },
       "indexes": {},
@@ -2591,6 +2604,20 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "valuation_rate": {
+          "name": "valuation_rate",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "stock_value": {
+          "name": "stock_value",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
         }
       },
       "indexes": {
@@ -2789,6 +2816,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "incoming_rate": {
+          "name": "incoming_rate",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {

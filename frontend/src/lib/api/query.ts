@@ -313,6 +313,25 @@ export function usePurchaseOrder(id?: string) {
   return useResourceOne<PurchaseOrder>("purchase-orders", id);
 }
 
+export function useItemLastPrice(itemId?: string) {
+  return useQuery({
+    queryKey: ["purchase-orders", "last-price", itemId],
+    queryFn: () => api.get<{ itemId: string; unitPrice: string | null }>(`/purchase-orders/last-price${qs({ itemId: itemId! })}`),
+    enabled: !!itemId,
+    staleTime: 60_000,
+  });
+}
+
+export function useLastPurchasePrices(itemIds: string[]) {
+  const key = [...itemIds].sort().join(",");
+  return useQuery({
+    queryKey: ["purchase-orders", "last-price", "batch", key],
+    queryFn: () => api.get<Record<string, string | null>>(`/purchase-orders/last-price${qs({ itemIds: key })}`),
+    enabled: itemIds.length > 0,
+    staleTime: 60_000,
+  });
+}
+
 export function useCreatePurchaseOrder() {
   const qc = useQueryClient();
   return useMutation({
