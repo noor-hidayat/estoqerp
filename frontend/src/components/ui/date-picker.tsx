@@ -73,6 +73,10 @@ export function DatePicker({
 
   const handleBlur = () => {
     setFocused(false)
+    if (!text.trim()) {
+      onChange("")
+      return
+    }
     const d = parseDateInput(text)
     if (d) applyDate(d)
   }
@@ -80,6 +84,10 @@ export function DatePicker({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault()
+      if (!text.trim()) {
+        onChange("")
+        return
+      }
       const d = parseDateInput(text)
       if (d) applyDate(d)
     }

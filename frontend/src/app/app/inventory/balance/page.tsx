@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { accessibleWarehouseIds } from "@/lib/permissions";
-import { formatNumber } from "@/lib/utils";
+import { formatDate, formatNumber } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
 import {
   useStockBalanceLedger,
@@ -24,6 +24,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 
 export default function StockBalancePage() {
@@ -32,6 +33,8 @@ export default function StockBalancePage() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [warehouseId, setWarehouseId] = useState("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [exporting, setExporting] = useState(false);
@@ -65,6 +68,8 @@ export default function StockBalancePage() {
   const ledgerParams = {
     itemId: selectedItem?.id,
     warehouseId: warehouseId === "all" ? undefined : warehouseId,
+    from: from || undefined,
+    to: to || undefined,
     page,
     pageSize,
   };
@@ -94,6 +99,7 @@ export default function StockBalancePage() {
     { key: "name" as const, header: "Item Name" },
     { key: "itemGroup" as const, header: "Item Group" },
     { key: "warehouse" as const, header: "Warehouse" },
+    { key: "balanceDate" as const, header: "Date", format: (v: unknown) => (v ? formatDate(String(v)) : "—") },
     { key: "openingQty" as const, header: "Opening Stock", format: (v: unknown) => formatNumber(Number(v)) },
     { key: "inQty" as const, header: "In Qty", format: (v: unknown) => formatNumber(Number(v)) },
     { key: "outQty" as const, header: "Out Qty", format: (v: unknown) => formatNumber(Number(v)) },
@@ -106,6 +112,8 @@ export default function StockBalancePage() {
       const sp = new URLSearchParams();
       if (selectedItem) sp.set("itemId", selectedItem.id);
       if (warehouseId !== "all") sp.set("warehouseId", warehouseId);
+      if (from) sp.set("from", from);
+      if (to) sp.set("to", to);
       sp.set("pageSize", String(total || 500));
       const res = await api.get<{ rows: StockBalanceLedgerRow[] }>(
         `/stock-balances/ledger?${sp.toString()}`
@@ -171,6 +179,17 @@ export default function StockBalancePage() {
         </span>
       ),
       className: "min-w-[140px]",
+    },
+    {
+      id: "balanceDate",
+      header: "Date",
+      sortValue: (r) => r.balanceDate,
+      cell: (r) => (
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
+          {r.balanceDate ? formatDate(r.balanceDate) : "—"}
+        </span>
+      ),
+      className: "whitespace-nowrap",
     },
     {
       id: "openingQty",
@@ -319,6 +338,25 @@ export default function StockBalancePage() {
                 </option>
               ))}
             </Select>
+            <div className="w-40 [&>div]:gap-0 [&_input]:h-8 [&_input]:text-xs">
+              <DatePicker
+                value={from}
+                onChange={(v) => {
+                  setFrom(v);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">s.d.</span>
+            <div className="w-40 [&>div]:gap-0 [&_input]:h-8 [&_input]:text-xs">
+              <DatePicker
+                value={to}
+                onChange={(v) => {
+                  setTo(v);
+                  setPage(1);
+                }}
+              />
+            </div>
           </>
         }
         toolbarRight={
@@ -354,7 +392,7 @@ export default function StockBalancePage() {
           setPageSize(ps);
           setPage(1);
         }}
-        minWidth={760}
+        minWidth={900}
         emptyIcon={<Boxes size={26} strokeWidth={2} />}
         emptyTitle="No stock data"
         emptyDescription="No item data yet or adjust filters."
@@ -362,6 +400,8 @@ export default function StockBalancePage() {
           setSelectedItem(null);
           setItemQuery("");
           setWarehouseId("all");
+          setFrom("");
+          setTo("");
           setPage(1);
         }}
       />

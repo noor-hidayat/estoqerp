@@ -12,12 +12,16 @@ export const MENU_CHILDREN: Record<string, string[]> = {
     "master.batchFormats",
     "master.batchFormats.new",
     "master.batchFormats.edit",
+    "master.movementTypes",
   ],
   inventory: [
     "inventory.stockBalance",
     "inventory.branches",
     "inventory.warehouses",
     "inventory.locations",
+    "inventory.transactions",
+    "inventory.batches",
+    "inventory.stockLedger",
   ],
   opname: [
     "opname.new",
@@ -53,6 +57,7 @@ export const ALL_MENUS: string[] = [
 // Menu yang punya tombol Export/Import (mirip actionsFor di role form).
 export const EXPORT_MENUS = new Set([
   "inventory.stockBalance",
+  "inventory.stockLedger",
   "reports.project",
   "reports.summary",
   "reports.history",

@@ -630,7 +630,9 @@ async function applyMovementEffect(
       .where(sql`${schema.stockLedger.id} LIKE ${base + "%"}`)
       .orderBy(desc(schema.stockLedger.id))
       .limit(1);
-    let nextN = lastLedger ? Number(String(lastLedger.id).split("-").pop()) + 1 : 1;
+    let nextN = lastLedger
+      ? (Number(String(lastLedger.id).slice(base.length).split("-")[0]) || 0) + 1
+      : 1;
     // Acquire advisory lock once per movement for sld YYMM (instead of per row)
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${base.slice(0, -1)}::text)::bigint)`);
     const ledgerRows = [...ledAgg.values()]
@@ -787,7 +789,9 @@ export async function insertMovementWithDetails(
     .where(sql`${schema.stockMovementDetails.id} LIKE ${baseSmd + "%"}`)
     .orderBy(desc(schema.stockMovementDetails.id))
     .limit(1);
-  let nextSmdN = lastSmd ? Number(String(lastSmd.id).split("-").pop()) + 1 : 1;
+  let nextSmdN = lastSmd
+    ? (Number(String(lastSmd.id).slice(baseSmd.length).split("-")[0]) || 0) + 1
+    : 1;
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${baseSmd.slice(0, -1)}::text)::bigint)`);
   const detailRows: typeof schema.stockMovementDetails.$inferInsert[] = [];
   for (const d of input.details) {
@@ -1338,7 +1342,9 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
         .where(sql`${schema.stockMovementDetails.id} LIKE ${baseSmdPatch + "%"}`)
         .orderBy(desc(schema.stockMovementDetails.id))
         .limit(1);
-      let nextSmdPatchN = lastSmdPatch ? Number(String(lastSmdPatch.id).split("-").pop()) + 1 : 1;
+      let nextSmdPatchN = lastSmdPatch
+        ? (Number(String(lastSmdPatch.id).slice(baseSmdPatch.length).split("-")[0]) || 0) + 1
+        : 1;
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${baseSmdPatch.slice(0, -1)}::text)::bigint)`);
       const detailRowsPatch: typeof schema.stockMovementDetails.$inferInsert[] = [];
       for (const d of input.details) {

@@ -18,7 +18,9 @@
     "db:backfill-ids": "tsx src/db/migrate-opname.ts",
     "db:backfill-movement-ids": "tsx src/db/backfill-movement-ids.ts",
     "db:migrate-rbac": "tsx src/db/migrate-rbac.ts",
-    "db:migrate-opname": "tsx src/db/migrate-opname.ts"
+    "db:migrate-opname": "tsx src/db/migrate-opname.ts",
+    "db:seed-all-1000": "tsx src/db/seed-all-1000.ts",
+    "db:seed-warehouse-dashboard": "tsx src/db/seed-warehouse-dashboard.ts"
 
   },
   "dependencies": {

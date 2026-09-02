@@ -43,11 +43,12 @@ function measureAlias(m: { field: string; aggregation: string; alias?: string })
 }
 
 function labelKeyOf(config: WidgetConfig): string | null {
-  return config.groupBy[0] ?? null;
+  return (config as unknown as { groupBy?: string[] })?.groupBy?.[0] ?? null;
 }
 
 function valueKeyOf(config: WidgetConfig): string {
-  const m = config.measures[0];
+  const m = (config as unknown as { measures?: { field: string; aggregation: string; alias?: string }[] })?.measures?.[0];
+  if (!m) return "value";
   return measureAlias(m);
 }
 
@@ -310,7 +311,7 @@ const COMPONENTS: Record<WidgetType, (p: WidgetProps) => ReactNode> = {
   table: TableWidget,
 };
 
-export function WidgetRenderer({ widget, dragHandle }: WidgetProps) {
+export function WidgetRenderer({ widget, dragHandle, data, isLoading }: WidgetProps) {
   const Comp = COMPONENTS[widget.type] ?? KpiWidget;
-  return <Comp widget={widget} dragHandle={dragHandle} />;
+  return <Comp widget={widget} dragHandle={dragHandle} data={data} isLoading={isLoading} />;
 }

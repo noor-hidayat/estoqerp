@@ -65,7 +65,7 @@ export default function NewPurchaseOrderPage() {
           unitPrice: l.unitPrice || null,
           batchNumber: l.batchNumber || null,
           note: l.note || null,
-          deliveryDate: l.deliveryDate || null,
+          deliveryDate: (l.deliveryDate || form.expectedDate) || null,
         })),
       });
       navigate(`/app/purchase-orders/${res.id}`);
@@ -124,7 +124,7 @@ export default function NewPurchaseOrderPage() {
         </FormSection>
 
         <FormSection title="Lines">
-          <OrderLineTable value={lines} onChange={setLines} />
+          <OrderLineTable value={lines} onChange={setLines} headerDeliveryDate={form.expectedDate} />
         </FormSection>
 
         <FormActions>

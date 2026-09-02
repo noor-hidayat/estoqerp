@@ -200,6 +200,7 @@ export type StockBalanceLedgerRow = {
   name: string;
   itemGroup: string | null;
   warehouse: string;
+  balanceDate: string;
   openingQty: number;
   inQty: number;
   outQty: number;
@@ -210,6 +211,8 @@ export function useStockBalanceLedger(params?: {
   query?: string;
   warehouseId?: string;
   itemId?: string;
+  from?: string;
+  to?: string;
   page?: number;
   pageSize?: number;
 }) {
@@ -229,6 +232,8 @@ export function useStockBalanceSummary(params?: {
   query?: string;
   warehouseId?: string;
   itemId?: string;
+  from?: string;
+  to?: string;
 }) {
   return useQuery({
     queryKey: ["stock-balances/summary", params],

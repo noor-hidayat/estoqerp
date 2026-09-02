@@ -89,13 +89,17 @@ export default function DashboardPage() {
             // Selama widgetsData loading, suppress fetch per-widget — tampilkan skeleton
             const isLoading = hasWidgets && widgetsLoading && !dw;
             const dataProp = dw ? { rows: dw.rows } : hasWidgets && widgetsLoading ? { rows: [] } : undefined;
-            // dw.title adalah title dari template (atau override)
-            const widgetWithTitle = dw?.title ? { ...w, config: { ...(w.config as object), title: dw.title } as unknown as typeof w.config } : w;
+            // Jika batch data ada, pakai config lengkap dari server (dw.config) yang sudah di-expand dari templateId
+            const widgetEffective = dw?.config
+              ? ({ ...w, type: dw.type as typeof w.type, config: dw.config as unknown as typeof w.config } as typeof w)
+              : dw?.title
+                ? ({ ...w, config: { ...(w.config as object), title: dw.title } as unknown as typeof w.config } as typeof w)
+                : w;
             const useFallback = !dw && !widgetsLoading;
             return (
               <div key={w.id}>
                 <WidgetRenderer
-                  widget={widgetWithTitle}
+                  widget={widgetEffective}
                   {...(useFallback ? {} : { data: dataProp, isLoading })}
                 />
               </div>

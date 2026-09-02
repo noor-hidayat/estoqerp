@@ -41,7 +41,9 @@ export async function nextRowId(
     .orderBy(desc(idCol))
     .limit(1)) as { id: string }[];
   const last = rows[0]?.id;
-  const n = last ? (Number(String(last).split("-").pop()) || 0) + 1 : 1;
+  const n = last
+    ? (Number(String(last).slice(base.length).split("-")[0]) || 0) + 1
+    : 1;
   return `${base}${String(n).padStart(4, "0")}`;
 }
 
@@ -69,7 +71,9 @@ export async function nextSocId(
     .orderBy(desc(idCol))
     .limit(1)) as { id: string }[];
   const last = rows[0]?.id;
-  const n = last ? (Number(String(last).split("-").pop()) || 0) + 1 : 1;
+  const n = last
+    ? (Number(String(last).slice(base.length).split("-")[0]) || 0) + 1
+    : 1;
   return `${base}${String(n).padStart(4, "0")}`;
 }
 

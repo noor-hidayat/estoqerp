@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { Pencil, X } from "lucide-react";
@@ -38,6 +38,33 @@ export default function GoodsReceiptDetailPage() {
 
   const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "—";
 
+  const [form, setForm] = useState({
+    warehouseId: "",
+    receiptDate: todayISO(),
+    notes: "",
+  });
+  const [lines, setLines] = useState<OrderLineInput[]>([]);
+
+  useEffect(() => {
+    if (gr) {
+      setForm({
+        warehouseId: gr.warehouseId,
+        receiptDate: gr.receiptDate?.slice(0, 10) ?? todayISO(),
+        notes: gr.notes ?? "",
+      });
+      setLines(
+        (gr.lines ?? []).map((l) => ({
+          itemId: l.itemId,
+          uomId: l.uomId,
+          qty: String(l.qty),
+          unitPrice: l.unitPrice ?? "",
+          batchNumber: l.batchNumber ?? "",
+          note: l.note ?? "",
+        }))
+      );
+    }
+  }, [gr]);
+
   if (isLoading) {
     return (
       <RoleGuard roles={[]} menus={["supply.goodsReceipts"]}>
@@ -52,22 +79,6 @@ export default function GoodsReceiptDetailPage() {
       </RoleGuard>
     );
   }
-
-  const [form, setForm] = useState({
-    warehouseId: gr.warehouseId,
-    receiptDate: gr.receiptDate?.slice(0, 10) ?? todayISO(),
-    notes: gr.notes ?? "",
-  });
-  const [lines, setLines] = useState<OrderLineInput[]>(
-    (gr.lines ?? []).map((l) => ({
-      itemId: l.itemId,
-      uomId: l.uomId,
-      qty: String(l.qty),
-      unitPrice: l.unitPrice ?? "",
-      batchNumber: l.batchNumber ?? "",
-      note: l.note ?? "",
-    }))
-  );
 
   const saveEdit = async () => {
     const valid = lines.filter((l) => l.itemId);

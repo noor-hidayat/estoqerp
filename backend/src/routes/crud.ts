@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import type { AnyPgColumn, AnyPgTable } from "drizzle-orm/pg-core";
 import { db } from "../db/pool";
 import * as schema from "../db/schema";
@@ -707,7 +707,8 @@ crudRouter.get("/:table", async (req, res) => {
 });
 
 // Kondisi WHERE umum untuk stock balances: filter scope entitas, warehouse,
-// item, dan pencarian teks lintas kolom (termasuk nama hasil join).
+// item, tanggal balance (from/to), dan pencarian teks lintas kolom
+// (termasuk nama hasil join).
 async function stockBalanceConds(req: Request): Promise<ReturnType<typeof sql> | undefined> {
   const conds: ReturnType<typeof sql>[] = [];
   const scope = await applyEntityScope(req, "stockBalances");
@@ -716,6 +717,13 @@ async function stockBalanceConds(req: Request): Promise<ReturnType<typeof sql> |
   if (warehouseId) conds.push(eq(schema.stockBalances.warehouseId, warehouseId));
   const itemId = queryStr(req, "itemId");
   if (itemId) conds.push(eq(schema.stockBalances.itemId, itemId));
+  // Filter tanggal between pada balanceDate (inclusive). Param `from` & `to`
+  // mengikuti pola /stock-ledger (YYYY-MM-DD). Alias dateFrom/dateTo/startDate/endDate
+  // juga diterima untuk fleksibilitas.
+  const from = queryStr(req, "from") ?? queryStr(req, "dateFrom") ?? queryStr(req, "startDate");
+  if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) conds.push(gte(schema.stockBalances.balanceDate, from));
+  const to = queryStr(req, "to") ?? queryStr(req, "dateTo") ?? queryStr(req, "endDate");
+  if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) conds.push(lte(schema.stockBalances.balanceDate, to));
   const q = queryStr(req, "query");
   if (q) {
     const p = `%${q}%`;
@@ -741,9 +749,9 @@ async function stockBalanceConds(req: Request): Promise<ReturnType<typeof sql> |
   return conds.length > 0 ? and(...conds) : undefined;
 }
 
-// GET /stock-balances/ledger?page=&pageSize=&query=&warehouseId=&itemId=
+// GET /stock-balances/ledger?page=&pageSize=&query=&warehouseId=&itemId=&from=&to=
 // Join stockBalances × items × warehouses × item_groups dengan pagination
-// server-side (dipakai halaman Stock Balance).
+// server-side (dipakai halaman Stock Balance). `from` & `to` filter balanceDate (YYYY-MM-DD, inclusive).
 crudRouter.get("/stock-balances/ledger", async (req, res) => {
   if (!(await checkTablePermission(req, res, "stockBalances", "view"))) return;
   try {
@@ -768,6 +776,7 @@ crudRouter.get("/stock-balances/ledger", async (req, res) => {
         name: schema.items.name,
         itemGroup: schema.itemGroups.name,
         warehouse: schema.warehouses.name,
+        balanceDate: schema.stockBalances.balanceDate,
         openingQty: schema.stockBalances.openingQty,
         inQty: schema.stockBalances.inQty,
         outQty: schema.stockBalances.outQty,
@@ -797,9 +806,9 @@ crudRouter.get("/stock-balances/ledger", async (req, res) => {
   }
 });
 
-// GET /stock-balances/summary?query=&warehouseId=&itemId=
+// GET /stock-balances/summary?query=&warehouseId=&itemId=&from=&to=
 // Ringkasan untuk summary card halaman Stock Balance: total item, total qty
-// (closing stock), dan jumlah baris — mengikuti filter & scope yang sama.
+// (closing stock), dan jumlah baris — mengikuti filter & scope yang sama (termasuk from/to tanggal).
 crudRouter.get("/stock-balances/summary", async (req, res) => {
   if (!(await checkTablePermission(req, res, "stockBalances", "view"))) return;
   try {

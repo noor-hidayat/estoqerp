@@ -152,7 +152,7 @@ function POBody({
             unitPrice: l.unitPrice || null,
             batchNumber: l.batchNumber || null,
             note: l.note || null,
-            deliveryDate: l.deliveryDate || null,
+            deliveryDate: (l.deliveryDate || form.expectedDate) || null,
           })),
         },
       });
@@ -267,7 +267,7 @@ function POBody({
           </div>
           <div>
             <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Lines</h2>
-            <OrderLineTable value={lines} onChange={setLines} />
+            <OrderLineTable value={lines} onChange={setLines} headerDeliveryDate={form.expectedDate} />
           </div>
         </div>
       ) : (
@@ -285,7 +285,7 @@ function POBody({
 
           <div>
             <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Lines</h2>
-            <OrderLineTable value={lines} onChange={() => {}} readOnly />
+            <OrderLineTable value={lines} onChange={() => {}} readOnly headerDeliveryDate={po.expectedDate ?? undefined} />
           </div>
 
           {po.receipts && po.receipts.length > 0 && (
