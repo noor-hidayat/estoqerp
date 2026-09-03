@@ -8,6 +8,8 @@ import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import {
   FormPage,
@@ -34,6 +36,7 @@ export default function EditItemPage() {
     uomQty: undefined as number | undefined,
     description: "",
     standardCost: undefined as number | undefined,
+    isFinishGood: false,
   });
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -50,6 +53,7 @@ export default function EditItemPage() {
         uomQty: item.uomQty,
         description: item.description ?? "",
         standardCost: item.standardCost != null ? Number(item.standardCost) : undefined,
+        isFinishGood: (item as any).isFinishGood ?? false,
       });
     }
   }, [item]);
@@ -75,6 +79,7 @@ export default function EditItemPage() {
           alternativeCode: form.alternativeCode.trim() || null,
           description: form.description.trim() || null,
           standardCost: form.standardCost != null ? String(form.standardCost) : null,
+          isFinishGood: form.isFinishGood,
         },
       });
       setSaved(true);
@@ -208,6 +213,12 @@ export default function EditItemPage() {
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
+            </div>
+            <div className="sm:col-span-2 flex items-center gap-2 pt-2">
+              <Checkbox id="isFinishGoodEdit" checked={form.isFinishGood} onCheckedChange={(v) => setForm({ ...form, isFinishGood: v === true })} />
+              <Label htmlFor="isFinishGoodEdit" className="text-sm font-medium leading-none cursor-pointer">
+                Finish Good (bisa di-return customer)
+              </Label>
             </div>
           </FormGrid>
 

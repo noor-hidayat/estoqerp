@@ -171,6 +171,12 @@ export const NAV: NavGroup[] = [
         icon: "PackageCheck",
         menu: "supply.goodsReceipts",
       },
+      {
+        label: "Deliveries",
+        href: "/app/deliveries",
+        icon: "Truck",
+        menu: "supply.deliveries",
+      },
     ],
   },
   {
@@ -271,9 +277,9 @@ export const NAV: NavGroup[] = [
 
 export const WORKSPACE_MENU_MAP: Record<string, string[]> = {
   "wsp-stockopname": ["dashboard", "opname", "reports", "ai"],
-  "wsp-warehouse": ["dashboard", "inventory", "master", "ai", "inventory.transactions", "inventory.stockBalance", "inventory.stockLedger", "inventory.batches", "inventory.warehouses", "inventory.locations", "inventory.branches"],
-  "wsp-purchasing": ["dashboard", "supply.suppliers", "supply.purchaseOrders", "supply.goodsReceipts", "ai"],
-  "wsp-marketing": ["dashboard", "supply.customers", "supply.salesOrders", "ai"],
+  "wsp-warehouse": ["dashboard", "inventory", "master", "ai", "inventory.transactions", "inventory.stockBalance", "inventory.stockLedger", "inventory.batches", "inventory.warehouses", "inventory.locations", "inventory.branches", "supply.deliveries"],
+  "wsp-purchasing": ["dashboard", "supply.suppliers", "supply.purchaseOrders", "supply.goodsReceipts", "supply.deliveries", "ai"],
+  "wsp-marketing": ["dashboard", "supply.customers", "supply.salesOrders", "supply.deliveries", "ai"],
 };
 
 function menuAllowedForWorkspace(menu: string, workspaceId: string | null): boolean {

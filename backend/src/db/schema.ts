@@ -276,8 +276,9 @@ export const stockBalances = pgTable(
       .defaultNow(),
   },
   (t) => [
-    uniqueIndex("uq_stock_balances_wh_item").on(t.warehouseId, t.itemId),
+    uniqueIndex("uq_stock_balances_wh_item_date").on(t.warehouseId, t.itemId, t.balanceDate),
     index("idx_stock_balances_item").on(t.itemId),
+    index("idx_stock_balances_date").on(t.balanceDate),
   ]
 );
 
@@ -298,6 +299,7 @@ export const items = pgTable("items", {
     .notNull()
     .default("0"),
   isActive: boolean("is_active").notNull().default(true),
+  isFinishGood: boolean("is_finish_good").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -477,6 +479,7 @@ export const stockMovements = pgTable("stock_movements", {
   referenceType: text("reference_type"),
   referenceId: text("reference_id"),
   description: text("description"),
+  customerId: text("customer_id").references(() => customers.id),
   createdBy: text("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -923,4 +926,58 @@ export const goodsReceiptLines = pgTable(
     note: text("note"),
   },
   (t) => [index("idx_grl_gr").on(t.goodsReceiptId)]
+);
+
+export const deliveries = pgTable(
+  "deliveries",
+  {
+    id: text("id").primaryKey(),
+    deliveryNo: text("delivery_no").notNull().unique(),
+    salesOrderId: text("sales_order_id").references(() => salesOrders.id),
+    customerId: text("customer_id").references(() => customers.id),
+    warehouseId: text("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id),
+    deliveryDate: date("delivery_date").notNull(),
+    status: text("status", { enum: docStatuses })
+      .notNull()
+      .default("DRAFT"),
+    notes: text("notes"),
+    createdBy: text("created_by").references(() => users.id),
+    branchId: text("branch_id").references(() => branches.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_deliveries_so").on(t.salesOrderId),
+    index("idx_deliveries_wh").on(t.warehouseId),
+    index("idx_deliveries_customer").on(t.customerId),
+    index("idx_deliveries_status").on(t.status),
+    index("idx_deliveries_date").on(t.deliveryDate),
+  ]
+);
+
+export const deliveryLines = pgTable(
+  "delivery_lines",
+  {
+    id: text("id").primaryKey(),
+    deliveryId: text("delivery_id")
+      .notNull()
+      .references(() => deliveries.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => items.id),
+    uomId: text("uom_id")
+      .notNull()
+      .references(() => uom.id),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
+    batchNumber: text("batch_number"),
+    note: text("note"),
+  },
+  (t) => [index("idx_dll_delivery").on(t.deliveryId)]
 );

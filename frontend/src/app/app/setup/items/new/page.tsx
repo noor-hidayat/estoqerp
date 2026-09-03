@@ -8,6 +8,8 @@ import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import {
   FormPage,
@@ -25,6 +27,7 @@ const EMPTY = {
   uomQty: undefined as number | undefined,
   description: "",
   standardCost: undefined as number | undefined,
+  isFinishGood: false,
 };
 
 export default function NewItemPage() {
@@ -56,6 +59,7 @@ export default function NewItemPage() {
         alternativeCode: form.alternativeCode.trim() || null,
         description: form.description.trim() || null,
         standardCost: form.standardCost != null ? String(form.standardCost) : null,
+        isFinishGood: form.isFinishGood,
         hue: Math.floor(Math.random() * 360),
       });
       setSaved(true);
@@ -171,6 +175,12 @@ export default function NewItemPage() {
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
+            </div>
+            <div className="sm:col-span-2 flex items-center gap-2 pt-2">
+              <Checkbox id="isFinishGood" checked={form.isFinishGood} onCheckedChange={(v) => setForm({ ...form, isFinishGood: v === true })} />
+              <Label htmlFor="isFinishGood" className="text-sm font-medium leading-none cursor-pointer">
+                Finish Good (bisa di-return customer)
+              </Label>
             </div>
           </FormGrid>
 

@@ -11,6 +11,7 @@ import type {
   ScanHistoryRow,
   Supplier, Customer, PurchaseOrder, PurchaseOrderLine,
   SalesOrder, SalesOrderLine, GoodsReceipt, GoodsReceiptLine,
+  Delivery, DeliveryLine,
 } from "@/types";
 import type { DashboardMeta, WidgetConfig, WidgetRow } from "@/components/dashboard/types";
 
@@ -530,6 +531,77 @@ export function useCancelGoodsReceipt() {
     onSuccess: (_d, id) => {
       qc.invalidateQueries({ queryKey: ["goods-receipts"] });
       qc.invalidateQueries({ queryKey: ["goods-receipts", id] });
+    },
+  });
+}
+
+// ---- Supply Chain: Deliveries (outbound from SO) ----
+
+export function useDeliveries(params?: Record<string, unknown>) {
+  return useResourceList<Delivery>("deliveries", params);
+}
+
+export function useDelivery(id?: string) {
+  return useResourceOne<Delivery>("deliveries", id);
+}
+
+export function useCreateDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => api.post<{ id: string }>("/deliveries", body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["deliveries"] }); },
+  });
+}
+
+export function useUpdateDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/deliveries/${id}`, patch),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ["deliveries"] });
+      qc.invalidateQueries({ queryKey: ["deliveries", id] });
+    },
+  });
+}
+
+export function useRemoveDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/deliveries/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["deliveries"] }); },
+  });
+}
+
+export function usePostDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/deliveries/${id}/post`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["deliveries"] });
+      qc.invalidateQueries({ queryKey: ["deliveries", id] });
+    },
+  });
+}
+
+export function useCancelDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/deliveries/${id}/cancel`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["deliveries"] });
+      qc.invalidateQueries({ queryKey: ["deliveries", id] });
+    },
+  });
+}
+
+export function useCreateDeliveryFromSo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, deliveryDate }: { id: string; deliveryDate: string }) =>
+      api.post<{ id: string }>(`/sales-orders/${id}/create-delivery`, { deliveryDate }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["deliveries"] });
+      qc.invalidateQueries({ queryKey: ["sales-orders"] });
     },
   });
 }

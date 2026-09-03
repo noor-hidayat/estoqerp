@@ -99,6 +99,7 @@ export interface Item {
   standardCost?: string | number | null;
   valuationRate: string | number;
   isActive?: boolean;
+  isFinishGood?: boolean;
   createdAt?: string;
 }
 
@@ -477,6 +478,7 @@ export interface MovementInput {
   referenceType?: string | null;
   referenceId?: string | null;
   description?: string | null;
+  customerId?: string | null;
   details: {
     itemId: string;
     fromWarehouseId?: string | null;
@@ -590,6 +592,31 @@ export interface GoodsReceipt {
   createdAt?: string;
   updatedAt?: string;
   lines?: GoodsReceiptLine[];
+}
+
+export interface DeliveryLine {
+  id: string;
+  deliveryId?: string;
+  itemId: string;
+  uomId: string;
+  qty: string;
+  unitPrice?: string | null;
+  batchNumber?: string | null;
+  note?: string | null;
+}
+
+export interface Delivery {
+  id: string;
+  deliveryNo: string | number;
+  salesOrderId?: string | null;
+  customerId?: string | null;
+  warehouseId: string;
+  deliveryDate: string;
+  notes?: string | null;
+  status: DocStatus;
+  createdAt?: string;
+  updatedAt?: string;
+  lines?: DeliveryLine[];
 }
 
 

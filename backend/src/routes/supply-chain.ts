@@ -769,3 +769,241 @@ supplyChainRouter.post("/goods-receipts/:id/cancel", async (req, res, next) => {
     next(e);
   }
 });
+
+// ---------------------------------------------------------------------------
+// DELIVERIES (Outbound) — dari Sales Order
+// ---------------------------------------------------------------------------
+
+async function deliveryLines(tx: any, deliveryId: string) {
+  return tx.select().from(s.deliveryLines).where(eq(s.deliveryLines.deliveryId, deliveryId));
+}
+
+async function replaceDeliveryLines(tx: any, deliveryId: string, lines: any[]) {
+  await tx.delete(s.deliveryLines).where(eq(s.deliveryLines.deliveryId, deliveryId));
+  for (const l of lines) {
+    await tx.insert(s.deliveryLines).values({
+      id: await nextRowId(tx, s.deliveryLines, "dll"),
+      deliveryId,
+      itemId: l.itemId,
+      uomId: l.uomId,
+      qty: String(l.qty),
+      unitPrice: l.unitPrice != null ? String(l.unitPrice) : null,
+      batchNumber: l.batchNumber ?? null,
+      note: l.note ?? null,
+    });
+  }
+}
+
+supplyChainRouter.post("/deliveries", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
+  try {
+    const b = req.body ?? {};
+    if (!b.warehouseId || !b.deliveryDate)
+      return res.status(400).json({ error: "warehouseId, deliveryDate wajib." });
+    // salesOrderId optional tapi jika ada validasi
+    if (b.salesOrderId) {
+      const [so] = await db.select({ id: s.salesOrders.id }).from(s.salesOrders).where(eq(s.salesOrders.id, b.salesOrderId)).limit(1);
+      if (!so) return res.status(400).json({ error: "Sales Order tidak ditemukan." });
+    }
+    const id = await nextRowId(db, s.deliveries, "dlv");
+    // ambil customerId dari SO jika tidak diisi
+    let customerId = b.customerId ?? null;
+    let salesOrderId = b.salesOrderId ?? null;
+    if (salesOrderId && !customerId) {
+      const [so] = await db.select({ customerId: s.salesOrders.customerId }).from(s.salesOrders).where(eq(s.salesOrders.id, salesOrderId)).limit(1);
+      if (so) customerId = so.customerId;
+    }
+    await db.insert(s.deliveries).values({
+      id,
+      deliveryNo: id,
+      salesOrderId,
+      customerId,
+      warehouseId: b.warehouseId,
+      deliveryDate: b.deliveryDate,
+      status: "DRAFT",
+      notes: b.notes ?? b.remarks ?? null,
+      createdBy: (req as any).user?.id ?? null,
+      branchId: b.branchId ?? null,
+    });
+    if (Array.isArray(b.lines)) await replaceDeliveryLines(db, id, b.lines);
+    res.status(201).json({ id });
+  } catch (e) {
+    next(e);
+  }
+});
+
+supplyChainRouter.get("/deliveries", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.deliveries", "view"))) return;
+  try {
+    const conds: any[] = [];
+    if (req.query.status) conds.push(eq(s.deliveries.status as any, String(req.query.status)));
+    if (req.query.warehouseId) conds.push(eq(s.deliveries.warehouseId, String(req.query.warehouseId)));
+    if (req.query.salesOrderId) conds.push(eq(s.deliveries.salesOrderId, String(req.query.salesOrderId)));
+    if (req.query.customerId) conds.push(eq(s.deliveries.customerId, String(req.query.customerId)));
+    const rows = await db
+      .select()
+      .from(s.deliveries)
+      .where(conds.length ? and(...conds) : undefined)
+      .orderBy(desc(s.deliveries.deliveryDate));
+    res.json(rows);
+  } catch (e) {
+    next(e);
+  }
+});
+
+supplyChainRouter.get("/deliveries/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.deliveries", "view"))) return;
+  try {
+    const [row] = await db.select().from(s.deliveries).where(eq(s.deliveries.id, req.params.id)).limit(1);
+    if (!row) return res.status(404).json({ error: "Delivery tidak ditemukan." });
+    const lines = await deliveryLines(db, req.params.id);
+    res.json({ ...row, lines });
+  } catch (e) {
+    next(e);
+  }
+});
+
+supplyChainRouter.put("/deliveries/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
+  try {
+    const [cur] = await db.select({ status: s.deliveries.status }).from(s.deliveries).where(eq(s.deliveries.id, req.params.id)).limit(1);
+    if (!cur) return res.status(404).json({ error: "Delivery tidak ditemukan." });
+    if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya delivery DRAFT yang dapat diubah." });
+    const b = req.body ?? {};
+    const patch: Record<string, any> = {};
+    if (b.warehouseId !== undefined) patch.warehouseId = b.warehouseId;
+    if (b.deliveryDate !== undefined) patch.deliveryDate = b.deliveryDate;
+    if (b.notes !== undefined) patch.notes = b.notes ?? null;
+    if (b.salesOrderId !== undefined) patch.salesOrderId = b.salesOrderId ?? null;
+    if (b.customerId !== undefined) patch.customerId = b.customerId ?? null;
+    patch.updatedAt = new Date();
+    await db.update(s.deliveries).set(patch).where(eq(s.deliveries.id, req.params.id));
+    if (Array.isArray(b.lines)) await replaceDeliveryLines(db, req.params.id, b.lines);
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+supplyChainRouter.delete("/deliveries/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
+  try {
+    await db.delete(s.deliveries).where(eq(s.deliveries.id, req.params.id));
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+supplyChainRouter.post("/deliveries/:id/post", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
+  try {
+    const [dlv] = await db.select().from(s.deliveries).where(eq(s.deliveries.id, req.params.id)).limit(1);
+    if (!dlv) return res.status(404).json({ error: "Delivery tidak ditemukan." });
+    if (dlv.status === "CANCELED") return res.status(400).json({ error: "Delivery dibatalkan tidak dapat diposting." });
+    if (dlv.status === "POSTED") return res.status(400).json({ error: "Delivery sudah diposting." });
+    const lines = await deliveryLines(db, req.params.id);
+    if (lines.length === 0) return res.status(400).json({ error: "Delivery tanpa lines." });
+    const typeId = await getMovementTypeId("ISSUE");
+    const details: DetailInput[] = lines.map((l: any) => ({
+      itemId: l.itemId,
+      fromWarehouseId: dlv.warehouseId,
+      toWarehouseId: null,
+      qty: Number(l.qty),
+      uomId: l.uomId,
+      batchNumber: l.batchNumber ?? null,
+    }));
+    const input: MovementInput = {
+      typeId,
+      movementDate: dlv.deliveryDate,
+      status: "POSTED",
+      referenceType: "DELIVERY",
+      referenceId: dlv.id,
+      description: `Delivery ${dlv.deliveryNo}`,
+      details,
+    };
+    await db.transaction(async (tx) => {
+      await insertMovementWithDetails(tx, input, (req as any).user?.id ?? "system");
+    });
+    await db.update(s.deliveries).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.deliveries.id, req.params.id));
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+supplyChainRouter.post("/deliveries/:id/cancel", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
+  try {
+    const [cur] = await db.select({ status: s.deliveries.status }).from(s.deliveries).where(eq(s.deliveries.id, req.params.id)).limit(1);
+    if (!cur) return res.status(404).json({ error: "Delivery tidak ditemukan." });
+    if (cur.status === "CANCELED") return res.status(400).json({ error: "Delivery sudah dibatalkan." });
+    if (cur.status === "POSTED") {
+      const dlv = await db.select().from(s.deliveries).where(eq(s.deliveries.id, req.params.id)).limit(1).then((r) => r[0]);
+      const lines = await deliveryLines(db, req.params.id);
+      const typeId = await getMovementTypeId("RECEIPT");
+      const details: DetailInput[] = lines.map((l: any) => ({
+        itemId: l.itemId,
+        fromWarehouseId: null,
+        toWarehouseId: dlv.warehouseId,
+        qty: Number(l.qty),
+        uomId: l.uomId,
+        batchNumber: l.batchNumber ?? null,
+      }));
+      const input: MovementInput = {
+        typeId,
+        movementDate: dlv.deliveryDate,
+        status: "POSTED",
+        referenceType: "DELIVERY_CANCEL",
+        referenceId: dlv.id,
+        description: `Batal Delivery ${dlv.deliveryNo}`,
+        details,
+      };
+      await db.transaction(async (tx) => {
+        await insertMovementWithDetails(tx, input, (req as any).user?.id ?? "system");
+      });
+    }
+    await db.update(s.deliveries).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.deliveries.id, req.params.id));
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Buat Delivery dari SO — copy lines SO
+supplyChainRouter.post("/sales-orders/:id/create-delivery", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
+  try {
+    const [so] = await db.select().from(s.salesOrders).where(eq(s.salesOrders.id, req.params.id)).limit(1);
+    if (!so) return res.status(404).json({ error: "Sales Order tidak ditemukan." });
+    const lines = await soLines(db, req.params.id);
+    const id = await nextRowId(db, s.deliveries, "dlv");
+    await db.insert(s.deliveries).values({
+      id,
+      deliveryNo: id,
+      salesOrderId: so.id,
+      customerId: so.customerId,
+      warehouseId: so.warehouseId,
+      deliveryDate: (req.body?.deliveryDate as string) || new Date().toISOString().slice(0, 10),
+      status: "DRAFT",
+      notes: req.body?.notes ?? null,
+      createdBy: (req as any).user?.id ?? null,
+      branchId: so.branchId,
+    });
+    for (const l of lines) {
+      await db.insert(s.deliveryLines).values({
+        id: await nextRowId(db, s.deliveryLines, "dll"),
+        deliveryId: id,
+        itemId: l.itemId,
+        uomId: l.uomId,
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        batchNumber: l.batchNumber,
+        note: l.note,
+      });
+    }
+    res.status(201).json({ id });
+  } catch (e) {
+    next(e);
+  }
+});

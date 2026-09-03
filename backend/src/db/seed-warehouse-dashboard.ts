@@ -39,20 +39,23 @@ async function main() {
       await db.delete(dashboardWidgets).where(eq(dashboardWidgets.dashboardId, dashboardId));
     }
     await db.update(dashboards).set({ isGlobal: false }).where(eq(dashboards.id, dashboardId));
-    // Isi ulang dengan 5 KPI baru
+    // Isi ulang dengan template warehouse terbaru (6 KPI + charts)
     const templates = WIDGET_TEMPLATES.filter((t) => t.workspaceId === ws.id);
     console.log(`Templates warehouse (baru): ${templates.map((t) => t.id).join(", ")}`);
     let cursorY = 0;
     let cursorX = 0;
+    let rowMaxH = 0;
     for (const tpl of templates) {
       const w = tpl.defaultLayout.w;
       const h = tpl.defaultLayout.h;
       if (cursorX + w > 12 + 1e-9) {
         cursorX = 0;
-        cursorY += 4;
+        cursorY += rowMaxH;
+        rowMaxH = 0;
       }
       const layout = { x: Math.round(cursorX * 10) / 10, y: cursorY, w, h };
       cursorX = Math.round((cursorX + w) * 10) / 10;
+      rowMaxH = Math.max(rowMaxH, h);
       const wId = await nextRowId(db, dashboardWidgets, "wgt", new Date());
       await db.insert(dashboardWidgets).values({
         id: wId,
@@ -82,21 +85,21 @@ async function main() {
   const templates = WIDGET_TEMPLATES.filter((t) => t.workspaceId === ws.id);
   console.log(`Templates warehouse: ${templates.length}`);
 
-  // Layout sederhana: grid 12 kolom, susun berurutan
-  // Row1: kpi w3 + bar w6 + pie w4 = 13 -> wrap, jadi row1: kpi(0,0,3,4) bar(3,0,6,8) pie(9,0,3,8) truncated? pakai default
-  // Simpler: pakai layout per template dengan y = cumulative
+  // Layout grid 12 kolom, packing per baris dengan rowMaxH
   let cursorY = 0;
   let cursorX = 0;
+  let rowMaxH = 0;
   for (const tpl of templates) {
     const w = tpl.defaultLayout.w;
     const h = tpl.defaultLayout.h;
     if (cursorX + w > 12 + 1e-9) {
       cursorX = 0;
-      cursorY += 8; // tinggi baris default
+      cursorY += rowMaxH;
+      rowMaxH = 0;
     }
     const layout = { x: Math.round(cursorX * 10) / 10, y: cursorY, w, h };
     cursorX = Math.round((cursorX + w) * 10) / 10;
-    // Jika row penuh, next iteration akan wrap
+    rowMaxH = Math.max(rowMaxH, h);
 
     const wId = await nextRowId(db, dashboardWidgets, "wgt", new Date());
     await db.insert(dashboardWidgets).values({

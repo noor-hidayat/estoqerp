@@ -82,6 +82,9 @@ const SalesOrderDetailPage = lazy(() => import("@/app/app/sales-orders/[id]/page
 const GoodsReceiptsPage = lazy(() => import("@/app/app/goods-receipts/page"));
 const NewGoodsReceiptPage = lazy(() => import("@/app/app/goods-receipts/new/page"));
 const GoodsReceiptDetailPage = lazy(() => import("@/app/app/goods-receipts/[id]/page"));
+const DeliveriesPage = lazy(() => import("@/app/app/deliveries/page"));
+const NewDeliveryPage = lazy(() => import("@/app/app/deliveries/new/page"));
+const DeliveryDetailPage = lazy(() => import("@/app/app/deliveries/[id]/page"));
 
 /** Halaman pertama "/app" — Dashboard bila punya aksesnya, selain itu
  *  diarahkan ke menu pertama yang boleh dibuka role-nya. */
@@ -185,6 +188,9 @@ export default function App() {
             <Route path="goods-receipts" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><GoodsReceiptsPage /></LazyPage>} />
             <Route path="goods-receipts/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewGoodsReceiptPage /></LazyPage>} />
             <Route path="goods-receipts/:id" element={<LazyPage fallback={<DetailSkeleton />}><GoodsReceiptDetailPage /></LazyPage>} />
+            <Route path="deliveries" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><DeliveriesPage /></LazyPage>} />
+            <Route path="deliveries/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewDeliveryPage /></LazyPage>} />
+            <Route path="deliveries/:id" element={<LazyPage fallback={<DetailSkeleton />}><DeliveryDetailPage /></LazyPage>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/app" replace />} />

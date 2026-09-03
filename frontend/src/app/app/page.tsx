@@ -9,7 +9,6 @@ import {
 } from "@/lib/api/use-dashboards";
 import { WidgetRenderer } from "@/components/dashboard/widgets";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 import { useActiveWorkspace } from "@/hooks/use-workspace";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
@@ -17,7 +16,7 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 export default function DashboardPage() {
   const { activeId: workspaceId } = useActiveWorkspace();
   const { dashboards, isLoading: listLoading } = useDashboards(workspaceId);
-  const { activeId, setActiveId } = useActiveDashboardId(dashboards, workspaceId);
+  const { activeId } = useActiveDashboardId(dashboards, workspaceId);
   const { data: dashboard, isLoading: dashLoading } = useDashboard(activeId ?? undefined);
   const { data: widgetsData, isLoading: widgetsLoading } = useDashboardWidgetsData(activeId ?? undefined);
 
@@ -44,29 +43,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {dashboards.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2">
-          {dashboards.map((d) => (
-            <button
-              key={d.id}
-              onClick={() => setActiveId(d.id)}
-              className={cn(
-                "rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
-                d.id === activeId
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border text-muted-foreground hover:bg-muted"
-              )}
-            >
-              {d.name}
-              {d.isGlobal && (
-                <span className="ml-1.5 text-[10px] uppercase tracking-wide opacity-70">
-                  global
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
 
       {widgets.length === 0 ? (
         <p className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { and, desc, eq, inArray, or, sql, sum, count, avg, min, max } from "drizzle-orm";
-import { db } from "../db/pool";
+import { db, pool } from "../db/pool";
 import * as s from "../db/schema";
 import { checkPermission, hasWorkspaceAccess } from "../middleware/rbac";
 import { nextRowId } from "../lib/id";
@@ -110,6 +110,54 @@ const FACT_TABLES: Record<string, FactDef> = {
       "branch",
     ],
   },
+  purchase_order_lines: {
+    label: "Purchase Order Lines",
+    table: s.purchaseOrderLines,
+    warehouseCol: s.purchaseOrders.warehouseId,
+    itemCol: s.purchaseOrderLines.itemId,
+    locationCol: null,
+    batchCol: null,
+    dateColumn: s.purchaseOrders.orderDate,
+    dateJoin: {
+      key: "po",
+      table: s.purchaseOrders,
+      on: eq(s.purchaseOrderLines.purchaseOrderId, s.purchaseOrders.id),
+    },
+    measures: ["qty", "lineValue"],
+    dims: ["warehouse", "warehouseId", "itemGroup", "itemId"],
+  },
+  delivery_lines: {
+    label: "Delivery Lines",
+    table: s.deliveryLines,
+    warehouseCol: s.deliveries.warehouseId,
+    itemCol: s.deliveryLines.itemId,
+    locationCol: null,
+    batchCol: null,
+    dateColumn: s.deliveries.deliveryDate,
+    dateJoin: {
+      key: "dlv",
+      table: s.deliveries,
+      on: eq(s.deliveryLines.deliveryId, s.deliveries.id),
+    },
+    measures: ["qty", "lineValue"],
+    dims: ["warehouse", "warehouseId", "itemGroup", "itemId"],
+  },
+  goods_receipt_lines: {
+    label: "Goods Receipt Lines",
+    table: s.goodsReceiptLines,
+    warehouseCol: s.goodsReceipts.warehouseId,
+    itemCol: s.goodsReceiptLines.itemId,
+    locationCol: null,
+    batchCol: null,
+    dateColumn: s.goodsReceipts.receiptDate,
+    dateJoin: {
+      key: "gr",
+      table: s.goodsReceipts,
+      on: eq(s.goodsReceiptLines.goodsReceiptId, s.goodsReceipts.id),
+    },
+    measures: ["qty", "lineValue"],
+    dims: ["warehouse", "warehouseId", "itemGroup", "itemId"],
+  },
 };
 
 const ALLOWED_FILTERS = [
@@ -126,9 +174,11 @@ const ALLOWED_FILTERS = [
   "closingQtyLt",
   "closingQtyLte",
   "closingQtyEq",
+  "movementTypeCode",
+  "isFinishGood",
 ] as const;
 
-const PERIOD_KEYS = ["day", "week", "month"] as const;
+const PERIOD_KEYS = ["day", "week", "month", "quarter", "year"] as const;
 
 class InvalidConfig extends Error {}
 
@@ -226,8 +276,15 @@ function resolveDim(
 
 function resolvePeriod(fact: FactDef, gran: string) {
   if (!fact.dateColumn) throw new InvalidConfig("fact table ini tidak punya dimensi tanggal");
-  const fmt = gran === "day" ? "YYYY-MM-DD" : gran === "week" ? "IYYY-WW" : "YYYY-MM";
-  const granLit = sql.raw(`'${gran}'`);
+  let granSql = gran;
+  let fmt = "YYYY-MM-DD";
+  if (gran === "day") { granSql = "day"; fmt = "YYYY-MM-DD"; }
+  else if (gran === "week") { granSql = "week"; fmt = "IYYY-WW"; }
+  else if (gran === "month") { granSql = "month"; fmt = "YYYY-MM"; }
+  else if (gran === "quarter") { granSql = "quarter"; fmt = "YYYY-\"Q\"Q"; }
+  else if (gran === "year") { granSql = "year"; fmt = "YYYY"; }
+  else throw new InvalidConfig(`granularitas tidak valid: ${gran}`);
+  const granLit = sql.raw(`'${granSql}'`);
   const fmtLit = sql.raw(`'${fmt}'`);
   const selectExpr = sql`to_char(date_trunc(${granLit}::text, ${fact.dateColumn}), ${fmtLit})`;
   return { alias: "date", selectExpr, groupExpr: selectExpr };
@@ -278,6 +335,11 @@ async function runQuery(config: any, req: Request): Promise<{ rows: any[] }> {
     }
   };
 
+  // Untuk purchase_order_lines / delivery_lines / goods_receipt_lines yang warehouseCol berasal dari join table, pastikan join sudah ada sebelum scoping
+  if (factKey === "purchase_order_lines" && fact.dateJoin) addJoin(fact.dateJoin.key, fact.dateJoin.table, fact.dateJoin.on);
+  if (factKey === "delivery_lines" && fact.dateJoin) addJoin(fact.dateJoin.key, fact.dateJoin.table, fact.dateJoin.on);
+  if (factKey === "goods_receipt_lines" && fact.dateJoin) addJoin(fact.dateJoin.key, fact.dateJoin.table, fact.dateJoin.on);
+
   const selectObj: Record<string, any> = {};
   const groupExprs: any[] = [];
 
@@ -287,6 +349,11 @@ async function runQuery(config: any, req: Request): Promise<{ rows: any[] }> {
     if (factKey === "stock_balances" && m.field === "stockValue") {
       addJoin("it_stockValue", s.items, eq(fact.itemCol, s.items.id));
       col = sql`(${s.stockBalances.closingQty}::numeric * COALESCE(${s.items.valuationRate}::numeric, 0))`;
+    } else if ((factKey === "purchase_order_lines" || factKey === "delivery_lines" || factKey === "goods_receipt_lines") && m.field === "lineValue") {
+      // value = qty * unitPrice
+      const qtyCol = (fact.table as any).qty;
+      const priceCol = (fact.table as any).unitPrice;
+      col = sql`(${qtyCol}::numeric * COALESCE(${priceCol}::numeric, 0))`;
     } else {
       col = (fact.table as any)[m.field];
     }
@@ -320,6 +387,14 @@ async function runQuery(config: any, req: Request): Promise<{ rows: any[] }> {
 
   applyFilters(config?.filters ?? {}, fact, conditions, addJoin);
 
+  // Untuk stock_balances KPI tanpa dateRange (snapshot), hanya hitung balance terbaru per warehouse+item
+  // agar historis harian tidak double-count. Stock Level Trend punya groupBy period + dateRange jadi tidak kena.
+  const _filtersForLatest = config?.filters ?? {};
+  if (factKey === "stock_balances" && groupBy.length === 0 && !Array.isArray((_filtersForLatest as any).dateRange)) {
+    // filter ke MAX(balance_date) per (warehouse_id, item_id) — closing stock terkini per lokasi
+    conditions.push(sql`(warehouse_id, item_id, balance_date) IN (SELECT warehouse_id, item_id, MAX(balance_date) FROM stock_balances GROUP BY warehouse_id, item_id)`);
+  }
+
   if (conditions.length) q = q.where(and(...conditions));
   if (groupExprs.length) q = q.groupBy(...groupExprs);
   if (groupExprs.length) q = q.orderBy(groupExprs[0]);
@@ -333,6 +408,288 @@ async function buildWidgetQuery(
   config: any,
   req: Request
 ): Promise<{ rows: any[]; previousValue?: number | null; percentChange?: number | null; periodLabel?: string | null }> {
+  // Special combined fact: receiving_vs_delivery / purchase_vs_delivery -> merge 2 queries by period
+  if (config?.factTable === "receiving_vs_delivery" || config?.factTable === "purchase_vs_delivery") {
+    const gran = Array.isArray(config?.groupBy) && config.groupBy.length > 0 ? String(config.groupBy[0]) : "month";
+    const allowedGran = ["day", "week", "month", "quarter", "year"];
+    const groupBy = allowedGran.includes(gran) ? [gran] : ["month"];
+    const isReceiving = config?.factTable === "receiving_vs_delivery";
+    const receivingFact = isReceiving ? "goods_receipt_lines" : "purchase_order_lines";
+    const receivingAlias = isReceiving ? "receivingValue" : "purchaseValue";
+    const purchaseConfig = {
+      factTable: receivingFact,
+      measures: [{ field: "lineValue", aggregation: "sum", alias: receivingAlias }],
+      groupBy,
+      filters: config?.filters ?? {},
+    };
+    const deliveryConfig = {
+      factTable: "delivery_lines",
+      measures: [{ field: "lineValue", aggregation: "sum", alias: "deliveryValue" }],
+      groupBy,
+      filters: config?.filters ?? {},
+    };
+    const [pRes, dRes] = await Promise.all([runQuery(purchaseConfig as any, req), runQuery(deliveryConfig as any, req)]);
+    // Merge by date
+    const map = new Map<string, any>();
+    for (const r of pRes.rows) {
+      const date = (r as any).date ?? "";
+      if (!date) continue;
+      const val = Number((r as any)[receivingAlias] ?? (r as any).lineValue_sum ?? 0);
+      if (isReceiving) map.set(date, { date, receivingValue: val, deliveryValue: 0 });
+      else map.set(date, { date, purchaseValue: val, deliveryValue: 0 });
+    }
+    for (const r of dRes.rows) {
+      const date = (r as any).date ?? "";
+      if (!date) continue;
+      const dVal = Number((r as any).deliveryValue ?? (r as any).lineValue_sum ?? 0);
+      const existing = map.get(date) ?? (isReceiving ? { date, receivingValue: 0, deliveryValue: 0 } : { date, purchaseValue: 0, deliveryValue: 0 });
+      existing.deliveryValue = dVal;
+      map.set(date, existing);
+    }
+    const merged = Array.from(map.values()).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    return { rows: merged as any[], previousValue: null, percentChange: null, periodLabel: null };
+  }
+  // Special Top10 Most Returned Items — single-color bar, sorted DESC, finish good only, all warehouses
+  if (
+    config?.factTable === "stock_movement_details" &&
+    (config as any)?.filters?.movementTypeCode === "RETURN_CUSTOMER" &&
+    Array.isArray(config?.groupBy) &&
+    (config as any).groupBy[0] === "itemId"
+  ) {
+    const isAdmin = !req.user || (req as any).user?.role === "role_sys_admin";
+    const whIds: string[] = (req as any).accessibleWarehouseIds ?? [];
+    // Build Top10 query manually for proper sorting & item name
+    const whereConds: string[] = [];
+    const params: any[] = [];
+    let pIdx = 1;
+    // Movement type filter
+    whereConds.push(`mt.code = $${pIdx++}`);
+    params.push("RETURN_CUSTOMER");
+    // Status POSTED only (if filter says POSTED, respect)
+    const statusFilter = (config as any)?.filters?.status ?? "POSTED";
+    if (statusFilter) {
+      whereConds.push(`sm.status = $${pIdx++}`);
+      params.push(statusFilter);
+    }
+    // isFinishGood
+    if ((config as any)?.filters?.isFinishGood) {
+      whereConds.push(`it.is_finish_good = true`);
+    }
+    // Warehouse scope
+    if (!isAdmin && whIds.length) {
+      const placeholders = whIds.map((_, i) => `$${pIdx + i}`).join(", ");
+      whereConds.push(`smd.to_warehouse_id IN (${placeholders})`);
+      params.push(...whIds);
+      pIdx += whIds.length;
+    }
+    // Date range if any
+    const dr = (config as any)?.filters?.dateRange;
+    if (Array.isArray(dr) && dr.length === 2) {
+      whereConds.push(`sm.movement_date >= $${pIdx++}::date`);
+      params.push(String(dr[0]));
+      whereConds.push(`sm.movement_date <= $${pIdx++}::date`);
+      params.push(String(dr[1]));
+    }
+    const whereSql = whereConds.length ? `WHERE ${whereConds.join(" AND ")}` : "";
+    // Use item name + code for display, but alias as itemId to match frontend labelKey
+    const sqlText = `
+      SELECT it.name AS "itemId",
+             it.code AS "itemCode",
+             SUM(smd.qty::numeric) AS "returnQty"
+      FROM stock_movement_details smd
+      JOIN stock_movements sm ON sm.id = smd.movement_id
+      JOIN movement_types mt ON mt.id = sm.type_id
+      JOIN items it ON it.id = smd.item_id
+      ${whereSql}
+      GROUP BY it.id, it.name, it.code
+      ORDER BY "returnQty" DESC
+      LIMIT 10
+    `;
+    const result = (await pool.query(sqlText, params)) as any;
+    const rows = result.rows ?? result;
+    // Ensure returnQty is number and itemId is name for display
+    const mapped = (rows as any[]).map((r: any) => ({
+      itemId: r.itemId ?? r.item_id ?? r.name,
+      itemCode: r.itemCode ?? r.item_code,
+      returnQty: Number(r.returnQty ?? r.return_qty ?? 0),
+    }));
+    return { rows: mapped as any[], previousValue: null, percentChange: null, periodLabel: null };
+  }
+  // Special KPI: Persentase Return = Total Return / Total Delivery * 100 (qty)
+  // factTable = "return_pct", measure alias = returnPct
+  if (config?.factTable === "return_pct") {
+    const filters: Record<string, unknown> = (config?.filters ?? {}) as any;
+    const isAdmin = !req.user || (req as any).user?.role === "role_sys_admin";
+    const whIds: string[] = (req as any).accessibleWarehouseIds ?? [];
+    const measures: any[] = config?.measures ?? [];
+    const valueKey = measures?.[0]?.alias || (measures?.[0] ? `${measures[0].field}_${measures[0].aggregation}` : "returnPct");
+
+    async function sumReturn(dateRange?: [string, string] | null): Promise<number> {
+      const whereConds: string[] = [];
+      const params: any[] = [];
+      let idx = 1;
+      whereConds.push(`mt.code = $${idx++}`);
+      params.push("RETURN_CUSTOMER");
+      whereConds.push(`sm.status = $${idx++}`);
+      params.push("POSTED");
+      if (!isAdmin && whIds.length) {
+        const ph = whIds.map((_, i) => `$${idx + i}`).join(", ");
+        whereConds.push(`smd.to_warehouse_id IN (${ph})`);
+        params.push(...whIds);
+        idx += whIds.length;
+      }
+      if (Array.isArray(filters.warehouseId) && (filters.warehouseId as string[]).length) {
+        const ids = filters.warehouseId as string[];
+        const ph = ids.map((_, i) => `$${idx + i}`).join(", ");
+        whereConds.push(`smd.to_warehouse_id IN (${ph})`);
+        params.push(...ids);
+        idx += ids.length;
+      }
+      if (Array.isArray(filters.branchId) && (filters.branchId as string[]).length) {
+        const ids = filters.branchId as string[];
+        const ph = ids.map((_, i) => `$${idx + i}`).join(", ");
+        whereConds.push(`smd.to_warehouse_id IN (SELECT id FROM warehouses WHERE branch_id IN (${ph}))`);
+        params.push(...ids);
+        idx += ids.length;
+      }
+      if (Array.isArray(filters.itemId) && (filters.itemId as string[]).length) {
+        const ids = filters.itemId as string[];
+        const ph = ids.map((_, i) => `$${idx + i}`).join(", ");
+        whereConds.push(`smd.item_id IN (${ph})`);
+        params.push(...ids);
+        idx += ids.length;
+      }
+      let needItemJoin = false;
+      if (Array.isArray(filters.itemGroupId) && (filters.itemGroupId as string[]).length) needItemJoin = true;
+      if (filters.isFinishGood !== undefined) needItemJoin = true;
+      let joinItem = "";
+      if (needItemJoin) {
+        joinItem = ` JOIN items it ON it.id = smd.item_id`;
+        if (Array.isArray(filters.itemGroupId) && (filters.itemGroupId as string[]).length) {
+          const ids = filters.itemGroupId as string[];
+          const ph = ids.map((_, i) => `$${idx + i}`).join(", ");
+          whereConds.push(`it.item_group_id IN (${ph})`);
+          params.push(...ids);
+          idx += ids.length;
+        }
+        if (filters.isFinishGood !== undefined) {
+          whereConds.push(`it.is_finish_good = $${idx++}`);
+          params.push(Boolean(filters.isFinishGood));
+        }
+      }
+      const dr: [string, string] | null = dateRange !== undefined ? (dateRange as [string, string] | null) : (Array.isArray(filters.dateRange) ? (filters.dateRange as [string, string]) : null);
+      if (dr && dr.length === 2) {
+        whereConds.push(`sm.movement_date >= $${idx++}::date`);
+        params.push(String(dr[0]));
+        whereConds.push(`sm.movement_date <= $${idx++}::date`);
+        params.push(String(dr[1]));
+      }
+      const whereSql = whereConds.length ? `WHERE ${whereConds.join(" AND ")}` : "";
+      const sqlText = `SELECT COALESCE(SUM(smd.qty::numeric),0) as val FROM stock_movement_details smd JOIN stock_movements sm ON sm.id = smd.movement_id JOIN movement_types mt ON mt.id = sm.type_id${joinItem} ${whereSql}`;
+      const result = (await pool.query(sqlText, params)) as any;
+      const rws = result.rows ?? result;
+      return Number(rws[0]?.val ?? 0);
+    }
+
+    async function sumDelivery(dateRange?: [string, string] | null): Promise<number> {
+      const whereConds: string[] = [];
+      const params: any[] = [];
+      let idx = 1;
+      whereConds.push(`dlv.status = $${idx++}`);
+      params.push("POSTED");
+      if (!isAdmin && whIds.length) {
+        const ph = whIds.map((_, i) => `$${idx + i}`).join(", ");
+        whereConds.push(`dlv.warehouse_id IN (${ph})`);
+        params.push(...whIds);
+        idx += whIds.length;
+      }
+      if (Array.isArray(filters.warehouseId) && (filters.warehouseId as string[]).length) {
+        const ids = filters.warehouseId as string[];
+        const ph = ids.map((_, i) => `$${idx + i}`).join(", ");
+        whereConds.push(`dlv.warehouse_id IN (${ph})`);
+        params.push(...ids);
+        idx += ids.length;
+      }
+      if (Array.isArray(filters.branchId) && (filters.branchId as string[]).length) {
+        const ids = filters.branchId as string[];
+        const ph = ids.map((_, i) => `$${idx + i}`).join(", ");
+        whereConds.push(`dlv.warehouse_id IN (SELECT id FROM warehouses WHERE branch_id IN (${ph}))`);
+        params.push(...ids);
+        idx += ids.length;
+      }
+      if (Array.isArray(filters.itemId) && (filters.itemId as string[]).length) {
+        const ids = filters.itemId as string[];
+        const ph = ids.map((_, i) => `$${idx + i}`).join(", ");
+        whereConds.push(`dl.item_id IN (${ph})`);
+        params.push(...ids);
+        idx += ids.length;
+      }
+      let needItemJoin = false;
+      if (Array.isArray(filters.itemGroupId) && (filters.itemGroupId as string[]).length) needItemJoin = true;
+      if (filters.isFinishGood !== undefined) needItemJoin = true;
+      let joinItem = "";
+      if (needItemJoin) {
+        joinItem = ` JOIN items it ON it.id = dl.item_id`;
+        if (Array.isArray(filters.itemGroupId) && (filters.itemGroupId as string[]).length) {
+          const ids = filters.itemGroupId as string[];
+          const ph = ids.map((_, i) => `$${idx + i}`).join(", ");
+          whereConds.push(`it.item_group_id IN (${ph})`);
+          params.push(...ids);
+          idx += ids.length;
+        }
+        if (filters.isFinishGood !== undefined) {
+          whereConds.push(`it.is_finish_good = $${idx++}`);
+          params.push(Boolean(filters.isFinishGood));
+        }
+      }
+      const dr: [string, string] | null = dateRange !== undefined ? (dateRange as [string, string] | null) : (Array.isArray(filters.dateRange) ? (filters.dateRange as [string, string]) : null);
+      if (dr && dr.length === 2) {
+        whereConds.push(`dlv.delivery_date >= $${idx++}::date`);
+        params.push(String(dr[0]));
+        whereConds.push(`dlv.delivery_date <= $${idx++}::date`);
+        params.push(String(dr[1]));
+      }
+      const whereSql = whereConds.length ? `WHERE ${whereConds.join(" AND ")}` : "";
+      const sqlText = `SELECT COALESCE(SUM(dl.qty::numeric),0) as val FROM delivery_lines dl JOIN deliveries dlv ON dl.delivery_id = dlv.id${joinItem} ${whereSql}`;
+      const result = (await pool.query(sqlText, params)) as any;
+      const rws = result.rows ?? result;
+      return Number(rws[0]?.val ?? 0);
+    }
+
+    const returnQty = await sumReturn();
+    const deliveryQty = await sumDelivery();
+    const pct = deliveryQty > 0 ? (returnQty / deliveryQty) * 100 : 0;
+
+    // Siapkan row dengan berbagai alias agar KpiWidget menemukan key yang benar
+    const row: Record<string, any> = {};
+    row[valueKey] = pct;
+    row["returnPct"] = pct;
+    row["returnPct_avg"] = pct;
+    row["returnPct_sum"] = pct;
+    row["value"] = pct;
+    // tambahan info untuk debugging/tooltip (tidak dipakai KPI tapi bisa dicek)
+    (row as any)["returnQty"] = returnQty;
+    (row as any)["deliveryQty"] = deliveryQty;
+
+    let previousValue: number | null = null;
+    let percentChange: number | null = null;
+    let periodLabel: string | null = null;
+    if (Array.isArray((filters as any).dateRange) && (filters as any).dateRange.length === 2) {
+      const dr = (filters as any).dateRange as [string, string];
+      const prev = previousDateRange(dr);
+      if (prev) {
+        periodLabel = prev.label;
+        const prevReturn = await sumReturn(prev.range);
+        const prevDelivery = await sumDelivery(prev.range);
+        const prevPct = prevDelivery > 0 ? (prevReturn / prevDelivery) * 100 : 0;
+        previousValue = prevPct;
+        if (prevPct !== 0) percentChange = ((pct - prevPct) / Math.abs(prevPct)) * 100;
+        else if (pct !== 0) percentChange = null;
+        else percentChange = 0;
+      }
+    }
+    return { rows: [row], previousValue, percentChange, periodLabel };
+  }
   const { rows } = await runQuery(config, req);
   // KPI only: groupBy empty + single measure + ada dateColumn → hitung vs previous period
   const filters = (config?.filters ?? {}) as Record<string, unknown>;
@@ -431,6 +788,24 @@ function applyFilters(
     conditions.push(sql`${s.stockBalances.closingQty} <= ${Number(filters.closingQtyLte)}`);
   if (filters.closingQtyEq !== undefined && fact.table === s.stockBalances)
     conditions.push(sql`${s.stockBalances.closingQty} = ${Number(filters.closingQtyEq)}`);
+  if (filters.movementTypeCode !== undefined && fact.table === s.stockMovementDetails) {
+    // join stockMovements + movementTypes untuk filter type
+    if (fact.dateJoin) addJoin(fact.dateJoin.key, fact.dateJoin.table, fact.dateJoin.on);
+    addJoin("mt_filter", s.movementTypes, eq(s.stockMovements.typeId, s.movementTypes.id));
+    conditions.push(eq(s.movementTypes.code, String(filters.movementTypeCode)));
+  }
+  if (filters.isFinishGood !== undefined) {
+    const val = Boolean(filters.isFinishGood);
+    // filter finish good via items table
+    if (fact.itemCol) {
+      conditions.push(sql`EXISTS (SELECT 1 FROM ${it} WHERE ${it.id} = ${fact.itemCol} AND ${it.isFinishGood} = ${val})`);
+    } else {
+      // untuk stock_batches yang item via batch
+      addJoin("it_fg", it, eq(s.batches.itemId, it.id));
+      addJoin("bat_fg", bat, eq(s.stockBatches.batchId, bat.id));
+      conditions.push(sql`EXISTS (SELECT 1 FROM ${it} WHERE ${it.id} = ${s.batches.itemId} AND ${it.isFinishGood} = ${val})`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

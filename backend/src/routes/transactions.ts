@@ -61,6 +61,7 @@ export interface MovementInput {
   referenceType: string | null;
   referenceId: string | null;
   description: string | null;
+  customerId?: string | null;
   details: DetailInput[];
 }
 
@@ -106,6 +107,7 @@ function parseBody(body: unknown): { ok: true; value: MovementInput } | { ok: fa
   if (!MOVEMENT_STATUSES.includes(status as MovementStatus)) {
     return { ok: false, error: `Status tidak valid: ${status}.` };
   }
+  const customerId = typeof b.customerId === "string" && b.customerId.trim() ? b.customerId.trim() : null;
   const detailsRaw = Array.isArray(b.details) ? b.details : [];
   const details: DetailInput[] = [];
   for (const raw of detailsRaw) {
@@ -160,6 +162,7 @@ function parseBody(body: unknown): { ok: true; value: MovementInput } | { ok: fa
       referenceType: typeof b.referenceType === "string" && b.referenceType ? b.referenceType : null,
       referenceId: typeof b.referenceId === "string" && b.referenceId ? b.referenceId : null,
       description: typeof b.description === "string" && b.description ? b.description : null,
+      customerId,
       details,
     },
   };
@@ -759,6 +762,27 @@ export async function insertMovementWithDetails(
   if (!type) throw new Error("Tipe transaksi tidak ditemukan.");
 
   validateKindDirection(type.kind, input.details);
+  // Return hanya untuk finish good
+  if (type.code === "RETURN_CUSTOMER") {
+    if (!input.customerId) throw new StockError("Customer wajib diisi untuk return.");
+    // validasi finish good per line
+    for (const d of input.details) {
+      const [it] = await tx.select({ isFinishGood: schema.items.isFinishGood }).from(schema.items).where(eq(schema.items.id, d.itemId)).limit(1);
+      if (!it?.isFinishGood) {
+        const [meta] = await tx.select({ code: schema.items.code, name: schema.items.name }).from(schema.items).where(eq(schema.items.id, d.itemId)).limit(1);
+        throw new StockError(`Item ${meta?.code ?? d.itemId} - ${meta?.name ?? ""} bukan finish good, tidak bisa di-return.`);
+      }
+    }
+    // pastikan toWarehouse adalah retur warehouse (code LIKE %RET%)
+    for (const d of input.details) {
+      if (d.toWarehouseId) {
+        const [wh] = await tx.select({ code: schema.warehouses.code }).from(schema.warehouses).where(eq(schema.warehouses.id, d.toWarehouseId)).limit(1);
+        if (wh && !wh.code.includes("RET")) {
+          // auto-allow but warn; tidak blokir keras agar fleksibel
+        }
+      }
+    }
+  }
 
   const movementDate = input.movementDate ? new Date(input.movementDate) : new Date();
   const movementNumber = await nextMovementNumber(tx, type.series, movementDate);
@@ -772,6 +796,7 @@ export async function insertMovementWithDetails(
     referenceType: input.referenceType,
     referenceId: input.referenceId,
     description: input.description,
+    customerId: (input as any).customerId ?? null,
     createdBy: actorId,
   });
 

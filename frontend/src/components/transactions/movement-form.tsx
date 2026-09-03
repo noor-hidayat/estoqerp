@@ -16,6 +16,7 @@ import {
   useBarcodeFormats,
   useBatchFormats,
   useItemGroups,
+  useCustomers,
 } from "@/lib/api/query";
 import { api } from "@/lib/api/client";
 import { parseBarcode } from "@/lib/barcode/parser";
@@ -389,6 +390,8 @@ export function MovementForm({
       /^(\d{2}:\d{2})$/,
       "$1:00"
     ),
+    customerId: (initial as any)?.customerId ?? "",
+    description: (initial as any)?.description ?? "",
   });
   const [editPostingDate, setEditPostingDate] = useState(
     Boolean(initial?.movementDate)
@@ -577,6 +580,7 @@ export function MovementForm({
   const { data: formats = [] } = useBarcodeFormats();
   const { data: batchFormats = [] } = useBatchFormats();
   const { data: itemGroups = [] } = useItemGroups();
+  const { data: customers = [] } = useCustomers();
 
   // Isi cache lokal supaya scan bisa resolve item offline.
   useEffect(() => {
@@ -800,6 +804,10 @@ export function MovementForm({
       setError("Transaction type is required.");
       return;
     }
+    if (isReturnCustomer && !form.customerId) {
+      setError("Customer is required for return.");
+      return;
+    }
     if (editPostingDate && !form.movementDate) {
       setError("Date is required.");
       return;
@@ -861,6 +869,13 @@ export function MovementForm({
         setError("Source and destination warehouse cannot be the same.");
         return;
       }
+      if (isReturnCustomer) {
+        const it = itemOf(d.itemId) as any;
+        if (!it?.isFinishGood) {
+          setError(`Item ${it?.code ?? d.itemId} bukan finish good — hanya finish good bisa di-return.`);
+          return;
+        }
+      }
     }
     const movementDate = editPostingDate
       ? `${form.movementDate}T${form.movementTime}`
@@ -871,10 +886,12 @@ export function MovementForm({
         typeId: form.typeId,
         movementDate,
         status: "DRAFT",
-        referenceType: null,
-        referenceId: null,
+        referenceType: isReturnCustomer ? "RETURN_CUSTOMER" : null,
+        referenceId: isReturnCustomer ? form.customerId : null,
+        description: form.description?.trim() ? form.description.trim() : null,
+        customerId: isReturnCustomer ? form.customerId : null,
         details,
-      });
+      } as any);
       onSaved?.(selectedType?.name ?? form.typeId);
       setSaved(true);
       setSnapshot(serialize());
@@ -888,11 +905,20 @@ export function MovementForm({
   const itemOf = (id: string) => items.find((i) => i.id === id);
   const selectedType = types.find((t) => t.id === form.typeId);
   const kind = selectedType?.kind;
+  const isReturnCustomer = selectedType?.code === "RETURN_CUSTOMER";
+  const returWarehouses = warehouses.filter((w) => w.code.includes("RET"));
+  const filteredItems = isReturnCustomer ? (items as any[]).filter((i: any) => i.isFinishGood) : items;
 
   const handleTypeChange = (typeId: string) => {
     setForm((prev) => ({ ...prev, typeId }));
-    const nextKind = types.find((t) => t.id === typeId)?.kind;
-    if (nextKind === "RECEIPT") {
+    const nextType = types.find((t) => t.id === typeId);
+    const nextKind = nextType?.kind;
+    if (nextType?.code === "RETURN_CUSTOMER") {
+      // Return: receipt to retur warehouse, need customer
+      const returWh = warehouses.find((w) => w.code.includes("RET"))?.id ?? "";
+      if (returWh) setToDefault(returWh);
+      setFromDefault("");
+    } else if (nextKind === "RECEIPT") {
       setFromDefault("");
       setToDefault((prev) => prev);
     } else if (nextKind === "ISSUE") {
@@ -1041,13 +1067,41 @@ export function MovementForm({
                 disabled={readOnly}
               >
                 <option value=""></option>
-                {warehouses.map((w) => (
+                {(isReturnCustomer ? returWarehouses.length ? returWarehouses : warehouses : warehouses).map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
                   </option>
                 ))}
               </Select>
             </div>
+            {isReturnCustomer && (
+              <>
+                <div>
+                  <Select
+                    label="Customer *"
+                    value={form.customerId}
+                    onChange={(e) => setForm({ ...form, customerId: e.target.value })}
+                    disabled={readOnly}
+                  >
+                    <option value="">Select customer...</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium leading-none">Receipt / Keterangan</label>
+                  <Input
+                    placeholder="No. receipt / keterangan return"
+                    value={form.description}
+                    disabled={readOnly}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  />
+                </div>
+              </>
+            )}
           </FormGrid>
         </FormSection>
 
@@ -1247,11 +1301,11 @@ export function MovementForm({
                         <TableCell className="px-4">
                           <TableSearchSelect
                             value={r.itemId}
-                            options={items.map((i) => ({
+                            options={filteredItems.map((i) => ({
                               value: i.id,
-                              label: `${i.name}: ${i.code}`,
+                              label: `${i.name}: ${i.code}${(i as any).isFinishGood ? "" : ""}`,
                             }))}
-                            placeholder=""
+                            placeholder={isReturnCustomer ? "Finish good only" : ""}
                             onChange={(v) => {
                               const item = itemOf(v);
                               setRow(r.key, { itemId: v, uomId: item?.uomId ?? "" });

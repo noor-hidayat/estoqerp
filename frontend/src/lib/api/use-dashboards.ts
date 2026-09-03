@@ -89,20 +89,16 @@ export function useActiveDashboardId(dashboards: DashboardSummary[], workspaceId
       const def =
         (workspaceId ? dashboards.find((d) => d.workspaceId === workspaceId) : null) ??
         dashboards.find((d) => d.workspaceId) ??
-        dashboards.find((d) => d.isGlobal) ??
         dashboards[0];
       setActiveIdState(def.id);
     } else if (workspaceId) {
-      // Jika ada dashboard spesifik workspace dan active masih global, prefer spesifik
+      // Jika ada dashboard spesifik workspace dan active masih global-ish, prefer spesifik
       const hasSpecific = dashboards.some((d) => d.workspaceId === workspaceId);
-      const activeIsGlobal = dashboards.find((d) => d.id === activeId)?.isGlobal;
+      const active = dashboards.find((d) => d.id === activeId);
+      const activeIsGlobal = active ? !active.workspaceId || active.isGlobal : false;
       if (hasSpecific && activeIsGlobal) {
         const specific = dashboards.find((d) => d.workspaceId === workspaceId)!;
-        // hanya auto-switch jika user belum explicit pilih (cek localStorage masih global)
-        // Untuk WH, paksa ke Warehouse Overview agar tidak "masih" lihat global
-        if (workspaceId === "wsp-warehouse") {
-          setActiveIdState(specific.id);
-        }
+        setActiveIdState(specific.id);
       }
     }
   }, [dashboards, activeId, workspaceId]);

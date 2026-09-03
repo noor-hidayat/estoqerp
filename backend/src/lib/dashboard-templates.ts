@@ -66,7 +66,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
     config: { factTable: "opname_scan_details", measures: [{ field: "quantity", aggregation: "sum" }], groupBy: ["location"] },
     defaultLayout: { w: 6, h: 8 },
   },
-  // ---- wsp-warehouse: 5 KPI 1 baris, ukuran sama rata (12 cols / 5 = 2.4) ----
+  // ---- wsp-warehouse: 6 KPI 1 baris, ukuran sama rata (12 cols / 6 = 2) ----
   {
     id: "tpl-kpi-wh-stock-value",
     workspaceId: "wsp-warehouse",
@@ -74,7 +74,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
     title: "Total Stock Value",
     description: "Nilai stok (closingQty * valuationRate)",
     config: { factTable: "stock_balances", measures: [{ field: "stockValue", aggregation: "sum" }], groupBy: [] },
-    defaultLayout: { w: 2.4, h: 4 },
+    defaultLayout: { w: 2, h: 4 },
   },
   {
     id: "tpl-kpi-wh-total-warehouse",
@@ -83,7 +83,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
     title: "Total Warehouse",
     description: "Jumlah gudang yang punya stock",
     config: { factTable: "stock_balances", measures: [{ field: "warehouseId", aggregation: "countDistinct" }], groupBy: [] },
-    defaultLayout: { w: 2.4, h: 4 },
+    defaultLayout: { w: 2, h: 4 },
   },
   {
     id: "tpl-kpi-wh-active-items",
@@ -92,7 +92,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
     title: "Total Active Items",
     description: "Item aktif dengan stock",
     config: { factTable: "stock_balances", measures: [{ field: "itemId", aggregation: "countDistinct" }], groupBy: [], filters: { isActive: true } },
-    defaultLayout: { w: 2.4, h: 4 },
+    defaultLayout: { w: 2, h: 4 },
   },
   {
     id: "tpl-kpi-wh-low-stock",
@@ -101,7 +101,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
     title: "Low Stock",
     description: "Stock 1-10 (closingQty rendah)",
     config: { factTable: "stock_balances", measures: [{ field: "itemId", aggregation: "count" }], groupBy: [], filters: { closingQtyGt: 0, closingQtyLte: 10 } },
-    defaultLayout: { w: 2.4, h: 4 },
+    defaultLayout: { w: 2, h: 4 },
   },
   {
     id: "tpl-kpi-wh-out-of-stock",
@@ -110,7 +110,52 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
     title: "Out of Stock",
     description: "Stock kosong (closingQty = 0)",
     config: { factTable: "stock_balances", measures: [{ field: "itemId", aggregation: "count" }], groupBy: [], filters: { closingQtyEq: 0 } },
-    defaultLayout: { w: 2.4, h: 4 },
+    defaultLayout: { w: 2, h: 4 },
+  },
+  {
+    id: "tpl-kpi-wh-return-pct",
+    workspaceId: "wsp-warehouse",
+    type: "kpi",
+    title: "Persentase Return",
+    description: "Persentase Return = Total Return / Total Delivery * 100% (qty)",
+    config: { factTable: "return_pct", measures: [{ field: "returnPct", aggregation: "avg", alias: "returnPct" }], groupBy: [] },
+    defaultLayout: { w: 2, h: 4 },
+  },
+  {
+    id: "tpl-line-wh-receiving-vs-delivery",
+    workspaceId: "wsp-warehouse",
+    type: "bar",
+    title: "Receiving vs Delivery Trend",
+    description: "Perbandingan nilai Receiving (GR receiptDate) vs Delivery SO (deliveryDate) per bulan — batang vertikal",
+    config: { factTable: "receiving_vs_delivery", measures: [{ field: "receivingValue", aggregation: "sum" }, { field: "deliveryValue", aggregation: "sum" }], groupBy: ["month"] },
+    defaultLayout: { w: 7, h: 8 },
+  },
+  {
+    id: "tpl-bar-wh-stock-per-warehouse-h",
+    workspaceId: "wsp-warehouse",
+    type: "bar",
+    title: "Stock per Warehouse",
+    description: "Stock closing qty per gudang — batang menyamping",
+    config: { factTable: "stock_balances", measures: [{ field: "closingQty", aggregation: "sum" }], groupBy: ["warehouse"] },
+    defaultLayout: { w: 5, h: 8 },
+  },
+  {
+    id: "tpl-top10-return-items",
+    workspaceId: "wsp-warehouse",
+    type: "bar",
+    title: "Top 10 Most Returned Items",
+    description: "Finish good paling sering di-return customer",
+    config: { factTable: "stock_movement_details", measures: [{ field: "qty", aggregation: "sum", alias: "returnQty" }], groupBy: ["itemId"], filters: { movementTypeCode: "RETURN_CUSTOMER", isFinishGood: true } },
+    defaultLayout: { w: 5, h: 8 },
+  },
+  {
+    id: "tpl-line-wh-closing-stock-fg",
+    workspaceId: "wsp-warehouse",
+    type: "line",
+    title: "Stock Level Trend (Finish Good)",
+    description: "Closing stock per hari untuk item finish good (total semua warehouse)",
+    config: { factTable: "stock_balances", measures: [{ field: "closingQty", aggregation: "sum", alias: "closingStock" }], groupBy: ["day"], filters: { isFinishGood: true } },
+    defaultLayout: { w: 7, h: 8 },
   },
   // ---- wsp-purchasing: supply chain (pakai stock_movement_details & stock_ledger sebagai proxy, + opname untuk variasi) ----
   {

@@ -2,13 +2,13 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Pencil, X } from "lucide-react";
 import {
-  useSalesOrder,
+  useDelivery,
   useCustomers,
   useAllWarehouses,
-  useUpdateSalesOrder,
-  usePostSalesOrder,
-  useCancelSalesOrder,
-  useCreateDeliveryFromSo,
+  useSalesOrders,
+  useUpdateDelivery,
+  usePostDelivery,
+  useCancelDelivery,
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -19,53 +19,53 @@ import { DocStatusBadge } from "@/components/supply/doc-status";
 import { OrderLineTable, type OrderLineInput } from "@/components/supply/order-line-table";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatId } from "@/lib/utils";
-import type { SalesOrder } from "@/types";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function SalesOrderDetailPage() {
+export default function DeliveryDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: so, isLoading } = useSalesOrder(id);
+  const { data: dlv, isLoading } = useDelivery(id);
   const { data: customers = [] } = useCustomers();
   const { data: warehouses = [] } = useAllWarehouses();
-  const update = useUpdateSalesOrder();
-  const post = usePostSalesOrder();
-  const cancel = useCancelSalesOrder();
-  const createDelivery = useCreateDeliveryFromSo();
+  const { data: salesOrders = [] } = useSalesOrders();
+  const update = useUpdateDelivery();
+  const post = usePostDelivery();
+  const cancel = useCancelDelivery();
   const [error, setError] = useState("");
   useErrorToast(error);
   const [editing, setEditing] = useState(false);
 
-  const customerName = (cid?: string) => customers.find((c) => c.id === cid)?.name ?? "—";
+  const customerName = (cid?: string | null) => (cid ? customers.find((c) => c.id === cid)?.name ?? "—" : "—");
   const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "—";
+  const soNo = (sid?: string | null) => (sid ? salesOrders.find((s) => s.id === sid)?.soNo ?? formatId(sid) : "—");
 
   if (isLoading) {
     return (
-      <RoleGuard roles={[]} menus={["supply.salesOrders"]}>
+      <RoleGuard roles={[]} menus={["supply.deliveries"]}>
         <p className="py-20 text-center text-muted-foreground">Loading…</p>
       </RoleGuard>
     );
   }
-  if (!so) {
+  if (!dlv) {
     return (
-      <RoleGuard roles={[]} menus={["supply.salesOrders"]}>
-        <p className="py-20 text-center text-foreground">Sales order not found.</p>
+      <RoleGuard roles={[]} menus={["supply.deliveries"]}>
+        <p className="py-20 text-center text-foreground">Delivery not found.</p>
       </RoleGuard>
     );
   }
 
   const [form, setForm] = useState({
-    customerId: so.customerId,
-    warehouseId: so.warehouseId,
-    orderDate: so.orderDate?.slice(0, 10) ?? todayISO(),
-    expectedDate: so.expectedDate?.slice(0, 10) ?? "",
-    notes: so.notes ?? "",
+    salesOrderId: dlv.salesOrderId ?? "",
+    customerId: dlv.customerId ?? "",
+    warehouseId: dlv.warehouseId,
+    deliveryDate: dlv.deliveryDate?.slice(0, 10) ?? todayISO(),
+    notes: (dlv as any).notes ?? "",
   });
   const [lines, setLines] = useState<OrderLineInput[]>(
-    (so.lines ?? []).map((l) => ({
+    ((dlv as any).lines ?? []).map((l: any) => ({
       itemId: l.itemId,
       uomId: l.uomId,
       qty: String(l.qty),
@@ -75,16 +75,22 @@ export default function SalesOrderDetailPage() {
     }))
   );
 
+  // Sync when dlv loads initially (only once)
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  if (editing === false && lines.length === 0 && (dlv as any).lines?.length) {
+    // This will be handled via useEffect in real, but keep simple: already set above on first render
+  }
+
   const saveEdit = async () => {
     const valid = lines.filter((l) => l.itemId);
     try {
       await update.mutateAsync({
-        id: so.id,
+        id: dlv.id,
         patch: {
-          customerId: form.customerId,
+          salesOrderId: form.salesOrderId || null,
+          customerId: form.customerId || null,
           warehouseId: form.warehouseId,
-          orderDate: form.orderDate,
-          expectedDate: form.expectedDate || null,
+          deliveryDate: form.deliveryDate,
           notes: form.notes.trim() || null,
           lines: valid.map((l) => ({
             itemId: l.itemId,
@@ -102,60 +108,45 @@ export default function SalesOrderDetailPage() {
     }
   };
 
-  const isDraft = so.status === "DRAFT";
+  const isDraft = dlv.status === "DRAFT";
   const onPost = async () => {
-    if (!confirm("Post this sales order? Stock will go OUT.")) return;
+    if (!confirm("Post this delivery? Stock will go OUT.")) return;
     try {
-      await post.mutateAsync(so.id);
+      await post.mutateAsync(dlv.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to post.");
     }
   };
   const onCancel = async () => {
-    if (!confirm("Cancel this sales order?")) return;
+    if (!confirm("Cancel this delivery?")) return;
     try {
-      await cancel.mutateAsync(so.id);
+      await cancel.mutateAsync(dlv.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to cancel.");
     }
   };
-  const onCreateDelivery = async () => {
-    if (!confirm("Create delivery from this SO?")) return;
-    try {
-      const res = await createDelivery.mutateAsync({ id: so.id, deliveryDate: new Date().toISOString().slice(0, 10) });
-      navigate(`/app/deliveries/${(res as any).id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create delivery.");
-    }
-  };
 
   return (
-    <RoleGuard roles={[]} menus={["supply.salesOrders"]}>
+    <RoleGuard roles={[]} menus={["supply.deliveries"]}>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-              SO {formatId(so.id)}
-            </h1>
-            <DocStatusBadge status={so.status} />
+            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">DLV {formatId(dlv.id)}</h1>
+            <DocStatusBadge status={dlv.status} />
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {customerName(so.customerId)} · {warehouseName(so.warehouseId)}
+            {customerName(dlv.customerId)} · {warehouseName(dlv.warehouseId)} · {dlv.deliveryDate?.slice(0, 10)}
           </p>
+          {dlv.salesOrderId && <p className="text-xs text-muted-foreground">From SO {soNo(dlv.salesOrderId)}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {!editing && (
-            <Button variant="outline" size="sm" onClick={onCreateDelivery} disabled={createDelivery.isPending}>
-              Create Delivery
-            </Button>
-          )}
           {!editing && isDraft && (
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
               <Pencil size={14} strokeWidth={2} /> Edit
             </Button>
           )}
           {!editing && (
-            <Button variant="outline" size="sm" onClick={onCancel} disabled={so.status === "CANCELED" || post.isPending}>
+            <Button variant="outline" size="sm" onClick={onCancel} disabled={dlv.status === "CANCELED" || post.isPending}>
               Cancel
             </Button>
           )}
@@ -182,6 +173,13 @@ export default function SalesOrderDetailPage() {
           <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
             <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
               <SearchableSelect
+                label="Sales Order"
+                placeholder="Select SO..."
+                options={salesOrders.map((s) => ({ value: s.id, label: String(s.soNo) }))}
+                value={form.salesOrderId}
+                onChange={(v) => setForm({ ...form, salesOrderId: v })}
+              />
+              <SearchableSelect
                 label="Customer"
                 placeholder="Select customer..."
                 options={customers.map((c) => ({ value: c.id, label: c.name }))}
@@ -195,8 +193,7 @@ export default function SalesOrderDetailPage() {
                 value={form.warehouseId}
                 onChange={(v) => setForm({ ...form, warehouseId: v })}
               />
-              <DatePicker label="Order Date" value={form.orderDate} onChange={(v) => setForm({ ...form, orderDate: v })} />
-              <DatePicker label="Expected Date" value={form.expectedDate} onChange={(v) => setForm({ ...form, expectedDate: v })} />
+              <DatePicker label="Delivery Date" value={form.deliveryDate} onChange={(v) => setForm({ ...form, deliveryDate: v })} />
               <div className="sm:col-span-2">
                 <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
                 <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
@@ -212,11 +209,11 @@ export default function SalesOrderDetailPage() {
         <div className="space-y-6">
           <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
             <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-              <Detail label="Customer" value={customerName(so.customerId)} />
-              <Detail label="Warehouse" value={warehouseName(so.warehouseId)} />
-              <Detail label="Order Date" value={so.orderDate?.slice(0, 10) ?? "—"} />
-              <Detail label="Expected Date" value={so.expectedDate?.slice(0, 10) ?? "—"} />
-              <Detail label="Notes" value={so.notes || "—"} />
+              <Detail label="Sales Order" value={dlv.salesOrderId ? String(soNo(dlv.salesOrderId)) : "—"} />
+              <Detail label="Customer" value={customerName(dlv.customerId)} />
+              <Detail label="Warehouse" value={warehouseName(dlv.warehouseId)} />
+              <Detail label="Delivery Date" value={dlv.deliveryDate?.slice(0, 10) ?? "—"} />
+              <Detail label="Notes" value={(dlv as any).notes || "—"} />
             </dl>
           </div>
           <div>

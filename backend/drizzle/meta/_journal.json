@@ -225,6 +225,27 @@
       "when": 1788400000000,
       "tag": "0033_po_line_delivery_date",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788500000000,
+      "tag": "0034_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788600000000,
+      "tag": "0035_is_finish_good",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788700000000,
+      "tag": "0036_stock_movements_customer",
+      "breakpoints": true
     }
   ]
 }
