@@ -41,6 +41,41 @@ export function formatNumber(n: number) {
   return new Intl.NumberFormat("id-ID").format(n);
 }
 
+/**
+ * Format ringkas: 1.2K (ribu), 1.5M (juta), 2.3B (miliar).
+ * < 1000 tetap pakai formatNumber biasa (id-ID).
+ * Desimal maks 1 digit, trailing .0 dihapus (1500 -> 1.5K, 15000 -> 15K).
+ */
+export function formatCompact(n: number, decimals = 1) {
+  if (!Number.isFinite(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs < 1000) return formatNumber(n);
+  const units: Array<[number, string]> = [
+    [1e12, "T"],
+    [1e9, "B"],
+    [1e6, "M"],
+    [1e3, "K"],
+  ];
+  for (let i = 0; i < units.length; i++) {
+    const [threshold, suffix] = units[i];
+    if (abs >= threshold) {
+      const val = n / threshold;
+      let str = val.toFixed(decimals);
+      str = str.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+      // handle overflow pembulatan mis. 999.999K -> 1000K => naik ke 1M
+      if (Math.abs(Number(str)) >= 1000 && i > 0) {
+        const [higherThreshold, higherSuffix] = units[i - 1];
+        const higherVal = n / higherThreshold;
+        let higherStr = higherVal.toFixed(decimals);
+        higherStr = higherStr.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+        return `${higherStr}${higherSuffix}`;
+      }
+      return `${str}${suffix}`;
+    }
+  }
+  return formatNumber(n);
+}
+
 /** Format id internal (ses_2608_0001) → tampilan rapi (SES-2608-0001). */
 export function formatId(id?: string | null): string {
   if (!id) return "—";

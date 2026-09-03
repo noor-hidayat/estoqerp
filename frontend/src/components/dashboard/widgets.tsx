@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Gauge } from "lucide-react";
+import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { formatNumber } from "@/lib/utils";
+import { formatCompact, formatNumber } from "@/lib/utils";
 import { useWidgetQuery } from "@/lib/api/query";
 import {
   dimLabel,
@@ -76,24 +76,57 @@ function KpiWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
   const data = presetData ?? queryData;
   const isLoading = presetData !== undefined ? !!presetLoading : queryLoading;
   const valueKey = valueKeyOf(widget.config);
-  const raw = data?.rows?.[0]?.[valueKey];
-  const value: ReactNode =
-    raw === undefined || raw === null ? "—" : formatNumber(Number(raw));
+  const raw = (data as unknown as { rows?: WidgetRow[] })?.rows?.[0]?.[valueKey];
+  const isCurrency = /stockvalue/i.test(valueKey) || /stock\s*value/i.test(widget.config.title ?? "");
+  const formattedCompact = (() => {
+    if (raw === undefined || raw === null) return "—";
+    const num = Number(raw);
+    if (!Number.isFinite(num)) return "—";
+    const compact = formatCompact(num);
+    return isCurrency ? `Rp ${compact}` : compact;
+  })();
+  const value: ReactNode = formattedCompact;
+  const fullTitle = (() => {
+    if (raw === undefined || raw === null) return "";
+    const num = Number(raw);
+    if (!Number.isFinite(num)) return String(raw);
+    return isCurrency ? `Rp ${formatNumber(num)}` : formatNumber(num);
+  })();
+  // percentChange & periodLabel dari backend (jika ada filter dateRange)
+  const percentChange = (data as unknown as { percentChange?: number | null })?.percentChange ?? null;
+  const periodLabel = (data as unknown as { periodLabel?: string | null })?.periodLabel ?? null;
+  const isPositive = percentChange !== null && percentChange > 0;
+  const isNegative = percentChange !== null && percentChange < 0;
+  const isZero = percentChange !== null && percentChange === 0;
   return (
-    <Card className="@container/card">
-      <CardHeader className="flex flex-row items-start justify-between gap-2">
-        <div>
-          <CardTitle className="text-base font-medium">{widget.config.title || "KPI"}</CardTitle>
-          <p className="mt-1 text-3xl font-semibold tabular-nums @[250px]/card:text-4xl">
-            {isLoading ? <Skeleton className="h-9 w-24" /> : value}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
+    <Card className="@container/card overflow-hidden">
+      <CardHeader className="flex flex-col gap-1.5 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="truncate text-sm font-medium leading-tight" title={widget.config.title || ""}>
+            {widget.config.title || "—"}
+          </CardTitle>
           {dragHandle}
-          <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Gauge size={17} strokeWidth={2} />
-          </div>
         </div>
+        <p className="truncate text-2xl font-semibold tabular-nums leading-none @[250px]/card:text-[26px]" title={fullTitle}>
+          {isLoading ? <Skeleton className="h-7 w-24" /> : value}
+        </p>
+        {percentChange !== null && !isLoading && (
+          <div className="flex items-center gap-1 text-xs">
+            <span
+              className={
+                isPositive
+                  ? "inline-flex items-center gap-0.5 font-medium text-emerald-600"
+                  : isNegative
+                    ? "inline-flex items-center gap-0.5 font-medium text-red-600"
+                    : "inline-flex items-center gap-0.5 font-medium text-muted-foreground"
+              }
+            >
+              {isPositive ? <ArrowUp size={12} strokeWidth={2.5} /> : isNegative ? <ArrowDown size={12} strokeWidth={2.5} /> : <Minus size={12} strokeWidth={2} />}
+              {isZero ? "0%" : `${isPositive ? "+" : ""}${percentChange.toFixed(1)}%`}
+            </span>
+            {periodLabel && <span className="truncate text-muted-foreground">{periodLabel}</span>}
+          </div>
+        )}
       </CardHeader>
     </Card>
   );

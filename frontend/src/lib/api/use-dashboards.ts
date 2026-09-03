@@ -76,7 +76,7 @@ export function useDashboard(id?: string) {
 }
 
 /** Id dashboard aktif — tersimpan per browser (localStorage), bukan global. */
-export function useActiveDashboardId(dashboards: DashboardSummary[]) {
+export function useActiveDashboardId(dashboards: DashboardSummary[], workspaceId?: string | null) {
   const [activeId, setActiveIdState] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(ACTIVE_KEY);
@@ -86,10 +86,26 @@ export function useActiveDashboardId(dashboards: DashboardSummary[]) {
     if (!dashboards.length) return;
     const exists = dashboards.some((d) => d.id === activeId);
     if (!exists) {
-      const def = dashboards.find((d) => d.isGlobal) ?? dashboards[0];
+      const def =
+        (workspaceId ? dashboards.find((d) => d.workspaceId === workspaceId) : null) ??
+        dashboards.find((d) => d.workspaceId) ??
+        dashboards.find((d) => d.isGlobal) ??
+        dashboards[0];
       setActiveIdState(def.id);
+    } else if (workspaceId) {
+      // Jika ada dashboard spesifik workspace dan active masih global, prefer spesifik
+      const hasSpecific = dashboards.some((d) => d.workspaceId === workspaceId);
+      const activeIsGlobal = dashboards.find((d) => d.id === activeId)?.isGlobal;
+      if (hasSpecific && activeIsGlobal) {
+        const specific = dashboards.find((d) => d.workspaceId === workspaceId)!;
+        // hanya auto-switch jika user belum explicit pilih (cek localStorage masih global)
+        // Untuk WH, paksa ke Warehouse Overview agar tidak "masih" lihat global
+        if (workspaceId === "wsp-warehouse") {
+          setActiveIdState(specific.id);
+        }
+      }
     }
-  }, [dashboards, activeId]);
+  }, [dashboards, activeId, workspaceId]);
 
   const setActiveId = (id: string) => {
     localStorage.setItem(ACTIVE_KEY, id);
@@ -123,6 +139,9 @@ export interface DashboardWidgetsData {
     rows: import("@/components/dashboard/types").WidgetRow[];
     error: string | null;
     config: WidgetConfig;
+    percentChange?: number | null;
+    periodLabel?: string | null;
+    previousValue?: number | null;
   }[];
 }
 

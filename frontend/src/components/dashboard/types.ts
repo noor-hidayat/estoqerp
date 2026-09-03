@@ -1,6 +1,6 @@
 export type WidgetType = "bar" | "line" | "pie" | "table" | "kpi";
 
-export type Aggregation = "sum" | "count" | "avg" | "min" | "max";
+export type Aggregation = "sum" | "count" | "countDistinct" | "avg" | "min" | "max";
 
 export interface WidgetMeasure {
   field: string;

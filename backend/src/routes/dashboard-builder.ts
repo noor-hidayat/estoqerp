@@ -13,7 +13,7 @@ export const dashboardBuilderRouter = Router();
 // (factTable, measure, dim, filter) di bawah yang diproses.
 // ---------------------------------------------------------------------------
 
-const ALLOWED_AGGS = ["sum", "count", "avg", "min", "max"] as const;
+const ALLOWED_AGGS = ["sum", "count", "countDistinct", "avg", "min", "max"] as const;
 type Agg = (typeof ALLOWED_AGGS)[number];
 
 interface FactDef {
@@ -39,7 +39,7 @@ const FACT_TABLES: Record<string, FactDef> = {
     batchCol: null,
     dateColumn: s.stockBalances.balanceDate,
     dateJoin: null,
-    measures: ["openingQty", "inQty", "outQty", "closingQty"],
+    measures: ["openingQty", "inQty", "outQty", "closingQty", "stockValue", "warehouseId", "itemId"],
     dims: ["warehouse", "warehouseId", "itemGroup", "itemId"],
   },
   stock_batches: {
@@ -120,6 +120,12 @@ const ALLOWED_FILTERS = [
   "itemId",
   "locationId",
   "batchId",
+  "isActive",
+  "closingQtyGt",
+  "closingQtyGte",
+  "closingQtyLt",
+  "closingQtyLte",
+  "closingQtyEq",
 ] as const;
 
 const PERIOD_KEYS = ["day", "week", "month"] as const;
@@ -132,6 +138,8 @@ function aggSql(agg: string, col: any) {
       return sql`sum(${col})`;
     case "count":
       return sql`count(${col})`;
+    case "countDistinct":
+      return sql`count(distinct ${col})`;
     case "avg":
       return sql`avg(${col})`;
     case "min":
@@ -225,10 +233,25 @@ function resolvePeriod(fact: FactDef, gran: string) {
   return { alias: "date", selectExpr, groupExpr: selectExpr };
 }
 
-async function buildWidgetQuery(
-  config: any,
-  req: Request
-): Promise<{ rows: any[] }> {
+function previousDateRange(dateRange: [string, string]): { range: [string, string]; label: string } | null {
+  if (!Array.isArray(dateRange) || dateRange.length !== 2) return null;
+  const [s, e] = dateRange as [string, string];
+  const start = new Date(s);
+  const end = new Date(e);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+  const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+  const prevEnd = new Date(start.getTime() - 86400000);
+  const prevStart = new Date(prevEnd.getTime() - (days - 1) * 86400000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  let label = "vs previous period";
+  if (days >= 28 && days <= 31) label = "vs last month";
+  else if (days === 7) label = "vs last week";
+  else if (days === 1) label = "vs yesterday";
+  else if (days > 1 && days < 7) label = `vs previous ${days}d`;
+  return { range: [fmt(prevStart), fmt(prevEnd)], label };
+}
+
+async function runQuery(config: any, req: Request): Promise<{ rows: any[] }> {
   const factKey: string = config?.factTable;
   const fact = FACT_TABLES[factKey];
   if (!fact) throw new InvalidConfig("factTable tidak valid");
@@ -259,7 +282,15 @@ async function buildWidgetQuery(
   const groupExprs: any[] = [];
 
   for (const m of measures) {
-    const col = (fact.table as any)[m.field];
+    let col: any;
+    // stockValue = closingQty * valuationRate (join items)
+    if (factKey === "stock_balances" && m.field === "stockValue") {
+      addJoin("it_stockValue", s.items, eq(fact.itemCol, s.items.id));
+      col = sql`(${s.stockBalances.closingQty}::numeric * COALESCE(${s.items.valuationRate}::numeric, 0))`;
+    } else {
+      col = (fact.table as any)[m.field];
+    }
+    if (!col) throw new InvalidConfig(`measure tidak valid: ${m.field}`);
     const alias = m.alias || `${m.field}_${m.aggregation}`;
     selectObj[alias] = aggSql(m.aggregation, col);
   }
@@ -296,6 +327,43 @@ async function buildWidgetQuery(
 
   const rows = await q;
   return { rows: rows as any[] };
+}
+
+async function buildWidgetQuery(
+  config: any,
+  req: Request
+): Promise<{ rows: any[]; previousValue?: number | null; percentChange?: number | null; periodLabel?: string | null }> {
+  const { rows } = await runQuery(config, req);
+  // KPI only: groupBy empty + single measure + ada dateColumn → hitung vs previous period
+  const filters = (config?.filters ?? {}) as Record<string, unknown>;
+  const factKey: string = config?.factTable;
+  const fact = FACT_TABLES[factKey];
+  const groupBy: string[] = config?.groupBy ?? [];
+  const measures: any[] = config?.measures ?? [];
+  const isKpi = groupBy.length === 0 && measures.length === 1 && !!fact?.dateColumn;
+  if (!isKpi || !Array.isArray((filters as any)?.dateRange)) {
+    return { rows, previousValue: null, percentChange: null, periodLabel: null };
+  }
+  const dr = (filters as any).dateRange as [string, string];
+  const prev = previousDateRange(dr);
+  if (!prev) return { rows, previousValue: null, percentChange: null, periodLabel: null };
+  const prevConfig = {
+    ...config,
+    filters: { ...filters, dateRange: prev.range },
+  };
+  try {
+    const { rows: prevRows } = await runQuery(prevConfig, req);
+    const valueKey = measures[0].alias || `${measures[0].field}_${measures[0].aggregation}`;
+    const curVal = Number(rows?.[0]?.[valueKey] ?? 0);
+    const prevVal = Number(prevRows?.[0]?.[valueKey] ?? 0);
+    let pct: number | null = null;
+    if (prevVal !== 0) pct = ((curVal - prevVal) / Math.abs(prevVal)) * 100;
+    else if (curVal !== 0) pct = null; // infinite, hide
+    else pct = 0;
+    return { rows, previousValue: prevVal, percentChange: pct, periodLabel: prev.label };
+  } catch {
+    return { rows, previousValue: null, percentChange: null, periodLabel: null };
+  }
 }
 
 function applyFilters(
@@ -348,6 +416,21 @@ function applyFilters(
     conditions.push(inArray(fact.locationCol, filters.locationId));
   if (Array.isArray(filters.batchId) && filters.batchId.length && fact.batchCol)
     conditions.push(inArray(fact.batchCol, filters.batchId));
+  // Filters khusus stock_balances - pakai EXISTS biar tidak butuh join tambahan setelah q dibuat
+  if (filters.isActive !== undefined && fact.table === s.stockBalances) {
+    const val = Boolean(filters.isActive);
+    conditions.push(sql`EXISTS (SELECT 1 FROM ${it} WHERE ${it.id} = ${fact.itemCol} AND ${it.isActive} = ${val})`);
+  }
+  if (filters.closingQtyGt !== undefined && fact.table === s.stockBalances)
+    conditions.push(sql`${s.stockBalances.closingQty} > ${Number(filters.closingQtyGt)}`);
+  if (filters.closingQtyGte !== undefined && fact.table === s.stockBalances)
+    conditions.push(sql`${s.stockBalances.closingQty} >= ${Number(filters.closingQtyGte)}`);
+  if (filters.closingQtyLt !== undefined && fact.table === s.stockBalances)
+    conditions.push(sql`${s.stockBalances.closingQty} < ${Number(filters.closingQtyLt)}`);
+  if (filters.closingQtyLte !== undefined && fact.table === s.stockBalances)
+    conditions.push(sql`${s.stockBalances.closingQty} <= ${Number(filters.closingQtyLte)}`);
+  if (filters.closingQtyEq !== undefined && fact.table === s.stockBalances)
+    conditions.push(sql`${s.stockBalances.closingQty} = ${Number(filters.closingQtyEq)}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -358,8 +441,8 @@ function applyFilters(
 dashboardBuilderRouter.post("/dashboards/widgets/query", async (req, res, next) => {
   if (!(await checkPermission(req, res, "dashboard", "view"))) return;
   try {
-    const { rows } = await buildWidgetQuery(req.body ?? {}, req);
-    res.json({ rows });
+    const result = await buildWidgetQuery(req.body ?? {}, req);
+    res.json(result);
   } catch (e) {
     if (e instanceof InvalidConfig)
       return res.status(400).json({ error: e.message });
@@ -409,10 +492,10 @@ dashboardBuilderRouter.post("/dashboards/widgets/query-batch", async (req, res, 
     const results = await Promise.all(
       configs.map(async (cfg) => {
         try {
-          const { rows } = await buildWidgetQuery(cfg, req);
-          return { rows, error: null as string | null };
+          const result = await buildWidgetQuery(cfg, req);
+          return { ...result, error: null as string | null };
         } catch (e) {
-          if (e instanceof InvalidConfig) return { rows: [] as unknown[], error: e.message };
+          if (e instanceof InvalidConfig) return { rows: [] as unknown[], error: e.message, percentChange: null, periodLabel: null, previousValue: null };
           throw e;
         }
       })
@@ -545,10 +628,10 @@ dashboardBuilderRouter.get("/dashboards/:id/widgets/data", async (req, res, next
         }
         try {
           // Merge title ke config untuk label, tapi buildWidgetQuery tidak butuh title
-          const { rows } = await buildWidgetQuery(effectiveConfig, req);
-          return { id: w.id, type: effectiveType, layout: w.layout, title: effectiveTitle ?? w.type, templateId, rows, error: null as string | null, config: effectiveConfig };
+          const result = await buildWidgetQuery(effectiveConfig, req);
+          return { id: w.id, type: effectiveType, layout: w.layout, title: effectiveTitle ?? w.type, templateId, rows: result.rows, percentChange: (result as any).percentChange ?? null, periodLabel: (result as any).periodLabel ?? null, previousValue: (result as any).previousValue ?? null, error: null as string | null, config: effectiveConfig };
         } catch (e) {
-          if (e instanceof InvalidConfig) return { id: w.id, type: effectiveType, layout: w.layout, title: effectiveTitle ?? w.type, templateId, rows: [] as unknown[], error: e.message, config: effectiveConfig };
+          if (e instanceof InvalidConfig) return { id: w.id, type: effectiveType, layout: w.layout, title: effectiveTitle ?? w.type, templateId, rows: [] as unknown[], percentChange: null, periodLabel: null, previousValue: null, error: e.message, config: effectiveConfig };
           throw e;
         }
       })

@@ -17,7 +17,7 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 export default function DashboardPage() {
   const { activeId: workspaceId } = useActiveWorkspace();
   const { dashboards, isLoading: listLoading } = useDashboards(workspaceId);
-  const { activeId, setActiveId } = useActiveDashboardId(dashboards);
+  const { activeId, setActiveId } = useActiveDashboardId(dashboards, workspaceId);
   const { data: dashboard, isLoading: dashLoading } = useDashboard(activeId ?? undefined);
   const { data: widgetsData, isLoading: widgetsLoading } = useDashboardWidgetsData(activeId ?? undefined);
 
@@ -88,13 +88,22 @@ export default function DashboardPage() {
             const dw = dataById.get(w.id);
             // Selama widgetsData loading, suppress fetch per-widget — tampilkan skeleton
             const isLoading = hasWidgets && widgetsLoading && !dw;
-            const dataProp = dw ? { rows: dw.rows } : hasWidgets && widgetsLoading ? { rows: [] } : undefined;
-            // Jika batch data ada, pakai config lengkap dari server (dw.config) yang sudah di-expand dari templateId
-            const widgetEffective = dw?.config
-              ? ({ ...w, type: dw.type as typeof w.type, config: dw.config as unknown as typeof w.config } as typeof w)
-              : dw?.title
-                ? ({ ...w, config: { ...(w.config as object), title: dw.title } as unknown as typeof w.config } as typeof w)
-                : w;
+            const dataProp = dw
+              ? { rows: dw.rows, percentChange: (dw as unknown as { percentChange?: number | null }).percentChange, periodLabel: (dw as unknown as { periodLabel?: string | null }).periodLabel, previousValue: (dw as unknown as { previousValue?: number | null }).previousValue }
+              : hasWidgets && widgetsLoading
+                ? { rows: [] }
+                : undefined;
+            // Jika batch data ada, pakai config lengkap dari server (dw.config) + title dari dw.title
+            const widgetEffective = dw
+              ? ({
+                  ...w,
+                  type: dw.type as typeof w.type,
+                  config: {
+                    ...((dw.config ?? w.config) as object),
+                    title: (dw as unknown as { title?: string }).title ?? (dw.config as unknown as { title?: string })?.title ?? (w.config as unknown as { title?: string })?.title,
+                  } as unknown as typeof w.config,
+                } as typeof w)
+              : w;
             const useFallback = !dw && !widgetsLoading;
             return (
               <div key={w.id}>

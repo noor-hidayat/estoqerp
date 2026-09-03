@@ -822,7 +822,7 @@ export function useWidgetQuery(config: WidgetConfig | undefined) {
     queryKey: ["widgetQuery", config],
     enabled: !!config && !!config.factTable && config.measures.length > 0,
     queryFn: () =>
-      api.post<{ rows: WidgetRow[] }>("/dashboards/widgets/query", config),
+      api.post<{ rows: WidgetRow[]; percentChange?: number | null; periodLabel?: string | null; previousValue?: number | null }>("/dashboards/widgets/query", config),
     staleTime: 60_000,
     gcTime: 5 * 60_000,
     refetchOnMount: false,
@@ -842,7 +842,7 @@ export function useWidgetQueries(configs: WidgetConfig[] | undefined) {
     queryKey: ["widgetQueries", key],
     enabled,
     queryFn: () =>
-      api.post<{ results: { rows: WidgetRow[]; error: string | null }[] }>(
+      api.post<{ results: { rows: WidgetRow[]; error: string | null; percentChange?: number | null; periodLabel?: string | null; previousValue?: number | null }[] }>(
         "/dashboards/widgets/query-batch",
         { queries: configs }
       ),
