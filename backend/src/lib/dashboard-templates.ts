@@ -15,6 +15,9 @@ export interface WidgetTemplate {
     measures: { field: string; aggregation: "sum" | "count" | "countDistinct" | "avg" | "min" | "max"; alias?: string }[];
     groupBy: string[];
     filters?: Record<string, unknown>;
+    limit?: number;
+    orderBy?: string;
+    orderDirection?: "asc" | "desc";
   };
   defaultLayout: { w: number; h: number };
 }
@@ -135,8 +138,15 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
     workspaceId: "wsp-warehouse",
     type: "bar",
     title: "Stock per Warehouse",
-    description: "Stock closing qty per gudang — batang menyamping",
-    config: { factTable: "stock_balances", measures: [{ field: "closingQty", aggregation: "sum" }], groupBy: ["warehouse"] },
+    description: "Top 10 gudang dengan stock closing qty terbesar — diurut besar ke kecil",
+    config: {
+      factTable: "stock_balances",
+      measures: [{ field: "closingQty", aggregation: "sum" }],
+      groupBy: ["warehouse"],
+      limit: 10,
+      orderBy: "closingQty_sum",
+      orderDirection: "desc",
+    },
     defaultLayout: { w: 5, h: 8 },
   },
   {

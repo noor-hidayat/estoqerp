@@ -397,8 +397,28 @@ async function runQuery(config: any, req: Request): Promise<{ rows: any[] }> {
 
   if (conditions.length) q = q.where(and(...conditions));
   if (groupExprs.length) q = q.groupBy(...groupExprs);
-  if (groupExprs.length) q = q.orderBy(groupExprs[0]);
-  q = q.limit(200);
+
+  // Sorting & limit: dukung template yang minta top-N diurut besar->kecil (misal Stock per Warehouse top 10)
+  const explicitLimit: number | undefined =
+    typeof config?.limit === "number" && Number.isFinite(config.limit) ? Math.min(Math.max(Math.trunc(config.limit), 1), 200) : undefined;
+  const explicitOrderBy: string | undefined = typeof config?.orderBy === "string" ? config.orderBy.trim() : undefined;
+  const explicitDir: "asc" | "desc" = config?.orderDirection === "asc" ? "asc" : "desc";
+  if (explicitOrderBy && selectObj[explicitOrderBy] !== undefined) {
+    const col = selectObj[explicitOrderBy];
+    q = explicitDir === "desc" ? q.orderBy(sql`${col} DESC`) : q.orderBy(sql`${col} ASC`);
+  } else if (explicitLimit !== undefined && groupExprs.length) {
+    // fallback: kalau ada limit tanpa orderBy, urutkan berdasarkan measure pertama DESC (paling relevan untuk Top N)
+    const firstMeasureAlias = (measures as any[]).map((m: any) => m.alias || `${m.field}_${m.aggregation}`)[0];
+    if (firstMeasureAlias && selectObj[firstMeasureAlias] !== undefined) {
+      const col = selectObj[firstMeasureAlias];
+      q = q.orderBy(sql`${col} DESC`);
+    } else {
+      q = q.orderBy(groupExprs[0]);
+    }
+  } else if (groupExprs.length) {
+    q = q.orderBy(groupExprs[0]);
+  }
+  q = q.limit(explicitLimit ?? 200);
 
   const rows = await q;
   return { rows: rows as any[] };

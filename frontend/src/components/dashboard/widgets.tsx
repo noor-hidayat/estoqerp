@@ -335,11 +335,16 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
   const isHorizontal = isHorizontalStockPerWarehouse || isTop10Return;
   const isSingleColor = isTop10Return;
   if (isHorizontal) {
-    const yAxisWidth = isTop10Return ? 130 : 92;
+    // Stock per Warehouse: 1 baris utuh, spacing kiri-kanan ke batas card disamakan 1rem (16px) — Card px-3 (12) + chart margin 4 =16
+    const yAxisWidth = isTop10Return ? 130 : 165;
     const yTickFormatter = (v: string) => {
       const s = String(v);
-      // Full visible tapi kecil, truncate hanya jika >22 char untuk Top10 yang nama panjang
-      if (s.length > 22) return `${s.slice(0, 20)}…`;
+      if (isTop10Return) {
+        if (s.length > 22) return `${s.slice(0, 20)}…`;
+        return s;
+      }
+      // Warehouse: 1 baris utuh (longest 30 "Gudang Bahan Baku Tangerang ZG"), baru truncate jika >32
+      if (s.length > 32) return `${s.slice(0, 30)}…`;
       return s;
     };
     return (
@@ -348,7 +353,7 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
           <CardTitle className="text-base font-medium tracking-tight">{widget.config.title || "Chart"}</CardTitle>
           {dragHandle}
         </CardHeader>
-        <CardContent className="flex-1 p-2 pt-0 pr-4">
+        <CardContent className="flex-1 px-3 pt-0 pb-3">
           {isLoading ? (
             <div className="flex h-[280px] items-center justify-center">
               <Skeleton className="h-[240px] w-full rounded-lg" />
@@ -357,7 +362,7 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
             <EmptyState />
           ) : (
             <ChartContainer config={chartConfig} className="h-[280px] w-full">
-              <BarChart data={chartData} layout="vertical" margin={{ left: -8, right: 16, top: 4, bottom: 4 }} barCategoryGap={isTop10Return ? "22%" : "30%"}>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 4, right: 4, top: 4, bottom: 4 }} barCategoryGap={isTop10Return ? "22%" : "30%"}>
                 <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />
                 <XAxis type="number" tick={{ fontSize: 10 }} tickMargin={6} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCompact(v)} />
                 <YAxis
@@ -366,10 +371,10 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
                   tickLine={false}
                   axisLine={false}
                   width={yAxisWidth}
-                  tickMargin={6}
+                  tickMargin={8}
                   interval={0}
-                  tick={{ fontSize: isTop10Return ? 8 : 8, textAnchor: "end" as const, dominantBaseline: "middle" as const }}
-                  tickFormatter={isTop10Return ? yTickFormatter : undefined}
+                  tick={{ fontSize: isTop10Return ? 8 : 8.5, textAnchor: "end" as const, dominantBaseline: "middle" as const }}
+                  tickFormatter={yTickFormatter}
                 />
                 <ChartTooltip cursor={{ fill: "hsl(var(--muted)/0.4)" }} content={<ChartTooltipContent />} />
                   <Bar dataKey="value" radius={0} barSize={isTop10Return ? 11 : 13}>
