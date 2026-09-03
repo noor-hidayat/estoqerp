@@ -63,11 +63,11 @@ function CountScanHistoryTable({ history, items }: { history: { key: string; bar
               const item = items.find((i) => h.barcode.toLowerCase().includes(i.code.toLowerCase()));
               return (
                 <tr key={h.key} className="hover:bg-muted/30">
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{history.length - idx}</td>
-                  <td className="break-all px-4 py-2.5 font-mono text-xs text-foreground">{h.barcode}</td>
+                  <td className="px-4 py-2.5 text-xs text-muted-foreground">{history.length - idx}</td>
+                  <td className="break-all px-4 py-2.5 text-xs text-foreground">{h.barcode}</td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">{item ? `${item.code}: ${item.name}` : "—"}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">—</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-xs text-foreground">1</td>
+                  <td className="px-4 py-2.5 text-xs text-muted-foreground">—</td>
+                  <td className="px-4 py-2.5 text-right text-xs text-foreground">1</td>
                 </tr>
               );
             })}
@@ -343,7 +343,7 @@ export default function CountDetailPage() {
                         }
                       }}
                       placeholder="Scan barcode..."
-                      className="h-8 rounded-md pl-3 pr-11 font-mono text-[13px] shadow-none focus-visible:ring-1"
+                      className="h-8 rounded-md pl-3 pr-11 text-[13px] shadow-none focus-visible:ring-1"
                     />
                     <button type="button" disabled={isPosted} aria-label="Scan with camera" onClick={() => alert("Camera scan coming soon")} className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-zinc-200/80 hover:text-foreground disabled:opacity-50">
                       <Camera size={16} strokeWidth={2} />
@@ -360,7 +360,7 @@ export default function CountDetailPage() {
                     <div className="overflow-hidden rounded-md border border-border bg-zinc-100 dark:bg-muted/40">
                       <div className="max-h-[280px] overflow-y-auto">
                         {scanHistory.slice(-10).reverse().map((h) => (
-                          <div key={h.key} className="break-all border-b border-border/60 bg-card px-3 py-1.5 font-mono text-[11.5px] text-foreground last:border-0 even:bg-zinc-50 dark:even:bg-muted/20">
+                          <div key={h.key} className="break-all border-b border-border/60 bg-card px-3 py-1.5 text-[11.5px] text-foreground last:border-0 even:bg-zinc-50 dark:even:bg-muted/20">
                             {h.barcode}
                           </div>
                         ))}
@@ -407,15 +407,15 @@ export default function CountDetailPage() {
                               <TableCell className="px-3">
                                 <Checkbox checked={selectedKeys.has(r.key)} onCheckedChange={() => toggleRow(r.key)} aria-label={`Select row ${idx + 1}`} disabled={isPosted} />
                               </TableCell>
-                              <TableCell className="px-3 font-mono text-sm text-muted-foreground">{idx + 1}</TableCell>
+                              <TableCell className="px-3 text-sm text-muted-foreground">{idx + 1}</TableCell>
                               <TableCell className="px-4">
                                 <SearchableSelect compact value={r.itemId} onChange={(v) => { const it = itemMap.get(v); setRow(r.key, { itemId: v, uomId: it?.uomId ?? "" }); }} options={items.map((i) => ({ value: i.id, label: `${i.code}: ${i.name}` }))} placeholder="Select item..." emptyLabel="No items" className="w-full" disabled={isPosted} />
                               </TableCell>
                               <TableCell className="px-4">
-                                <Input type="number" value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} disabled={isPosted} placeholder="0" className="h-8 w-full text-right font-mono text-sm shadow-none" />
+                                <Input type="number" value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} disabled={isPosted} placeholder="0" className="h-8 w-full text-right text-sm shadow-none" />
                               </TableCell>
                               <TableCell className="px-4">
-                                <Input value={r.batch} onChange={(e) => setRow(r.key, { batch: e.target.value })} disabled={isPosted} placeholder="—" className="h-8 w-full font-mono text-sm shadow-none" />
+                                <Input value={r.batch} onChange={(e) => setRow(r.key, { batch: e.target.value })} disabled={isPosted} placeholder="—" className="h-8 w-full text-sm shadow-none" />
                               </TableCell>
                               <TableCell className="px-4 text-xs text-muted-foreground">{uomName}</TableCell>
                               <TableCell className="px-4 text-xs text-muted-foreground">{selectedWarehouseName}</TableCell>

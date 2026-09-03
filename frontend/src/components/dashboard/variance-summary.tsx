@@ -91,7 +91,7 @@ export function VarianceSummary({
 
               <div
                 className={cx(
-                  "flex shrink-0 items-center gap-0.5 font-mono text-[12.5px] font-semibold",
+                  "flex shrink-0 items-center gap-0.5  text-[12.5px] font-semibold",
                   tone.text
                 )}
               >
@@ -105,7 +105,7 @@ export function VarianceSummary({
               </div>
 
               <div className="w-14 shrink-0 text-right">
-                <span className={cx("font-mono text-[11.5px] font-semibold", tone.text)}>
+                <span className={cx(" text-[11.5px] font-semibold", tone.text)}>
                   {r.pct > 0 ? "+" : ""}
                   {r.pct.toFixed(2).replace(".", ",")}%
                 </span>

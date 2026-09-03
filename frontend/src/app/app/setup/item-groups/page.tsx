@@ -44,7 +44,7 @@ export default function ItemGroupsPage() {
       id: "code",
       header: "Code",
       sortValue: (c) => c.code,
-      cell: (c) => <span className="font-mono text-xs text-muted-foreground">{c.code}</span>,
+      cell: (c) => <span className="text-xs text-muted-foreground">{c.code}</span>,
     },
     {
       id: "name",

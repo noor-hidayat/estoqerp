@@ -10,6 +10,7 @@ import {
   LineChart,
   Pie,
   PieChart,
+  Text,
   XAxis,
   YAxis,
 } from "recharts";
@@ -335,17 +336,32 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
   const isHorizontal = isHorizontalStockPerWarehouse || isTop10Return;
   const isSingleColor = isTop10Return;
   if (isHorizontal) {
-    // Stock per Warehouse: 1 baris utuh, spacing kiri-kanan ke batas card disamakan 1rem (16px) — Card px-3 (12) + chart margin 4 =16
-    const yAxisWidth = isTop10Return ? 130 : 165;
-    const yTickFormatter = (v: string) => {
-      const s = String(v);
-      if (isTop10Return) {
-        if (s.length > 22) return `${s.slice(0, 20)}…`;
-        return s;
-      }
-      // Warehouse: 1 baris utuh (longest 30 "Gudang Bahan Baku Tangerang ZG"), baru truncate jika >32
-      if (s.length > 32) return `${s.slice(0, 30)}…`;
-      return s;
+    // Stock per Warehouse: label 1 baris ellipsis native Recharts (Text width + maxLines=1)
+    // FIX VISIBLE: perkecil jarak kiri biar sama dengan 1M kanan — sebelumnya 165 terlalu jauh, sekarang 115
+    // Jarak dari label terluar ke border Card: kiri = nama gudang terjauh, kanan = 1M, bawah = angka bawah → semua ≈10px
+    const yAxisWidth = isTop10Return ? 120 : 115;
+    // Native ellipsis via Recharts <Text width maxLines> — tidak pakai JS slice manual agar pixel-accurate dan single-line
+    const renderYTick = (props: unknown) => {
+      const { x, y, payload } = props as { x: number; y: number; payload: { value: unknown } };
+      const value = String(payload?.value ?? "");
+      // width Text sedikit lebih kecil dari yAxisWidth agar ada gap tickMargin dan tidak overflow kiri
+      const textWidth = yAxisWidth - 8;
+      return (
+        <Text
+          x={x}
+          y={y}
+          width={textWidth}
+          textAnchor="end"
+          verticalAnchor="middle"
+          fontSize={isTop10Return ? 8 : 8.5}
+          maxLines={1}
+          // hilangkan outline hitam saat klik — biar simetris dengan Card (tidak ada kotak focus yang nongol)
+          style={{ outline: "none" } as React.CSSProperties}
+          tabIndex={-1}
+        >
+          {value}
+        </Text>
+      );
     };
     return (
       <Card className="flex h-full flex-col overflow-hidden border-border/60 shadow-sm">
@@ -353,7 +369,7 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
           <CardTitle className="text-base font-medium tracking-tight">{widget.config.title || "Chart"}</CardTitle>
           {dragHandle}
         </CardHeader>
-        <CardContent className="flex-1 px-3 pt-0 pb-3">
+        <CardContent className="flex-1 px-2 pt-0 pb-2">
           {isLoading ? (
             <div className="flex h-[280px] items-center justify-center">
               <Skeleton className="h-[240px] w-full rounded-lg" />
@@ -362,9 +378,9 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
             <EmptyState />
           ) : (
             <ChartContainer config={chartConfig} className="h-[280px] w-full">
-              <BarChart data={chartData} layout="vertical" margin={{ left: 4, right: 4, top: 4, bottom: 4 }} barCategoryGap={isTop10Return ? "22%" : "30%"}>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 14, top: 4, bottom: 12 }} barCategoryGap={isTop10Return ? "22%" : "30%"}>
                 <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />
-                <XAxis type="number" tick={{ fontSize: 10 }} tickMargin={6} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCompact(v)} />
+                <XAxis type="number" tick={{ fontSize: 10 }} tickMargin={4} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCompact(v)} />
                 <YAxis
                   dataKey="name"
                   type="category"
@@ -373,8 +389,8 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
                   width={yAxisWidth}
                   tickMargin={8}
                   interval={0}
-                  tick={{ fontSize: isTop10Return ? 8 : 8.5, textAnchor: "end" as const, dominantBaseline: "middle" as const }}
-                  tickFormatter={yTickFormatter}
+                  tick={renderYTick as never}
+
                 />
                 <ChartTooltip cursor={{ fill: "hsl(var(--muted)/0.4)" }} content={<ChartTooltipContent />} />
                   <Bar dataKey="value" radius={0} barSize={isTop10Return ? 11 : 13}>

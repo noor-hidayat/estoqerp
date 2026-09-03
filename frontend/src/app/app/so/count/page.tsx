@@ -76,11 +76,11 @@ function CountScanHistoryTable({ history, items }: { history: { key: string; bar
               const item = items.find((i) => h.barcode.toLowerCase().includes(i.code.toLowerCase()));
               return (
                 <tr key={h.key} className="hover:bg-muted/30">
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{history.length - idx}</td>
-                  <td className="break-all px-4 py-2.5 font-mono text-xs text-foreground">{h.barcode}</td>
+                  <td className="px-4 py-2.5 text-xs text-muted-foreground">{history.length - idx}</td>
+                  <td className="break-all px-4 py-2.5 text-xs text-foreground">{h.barcode}</td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">{item ? `${item.code}: ${item.name}` : "—"}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">—</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-xs text-foreground">1</td>
+                  <td className="px-4 py-2.5 text-xs text-muted-foreground">—</td>
+                  <td className="px-4 py-2.5 text-right text-xs text-foreground">1</td>
                 </tr>
               );
             })}
@@ -430,7 +430,7 @@ export default function CountPage() {
                         }
                       }}
                       placeholder="Scan barcode..."
-                      className="h-8 rounded-md pl-3 pr-11 font-mono text-[13px] shadow-none focus-visible:ring-1"
+                      className="h-8 rounded-md pl-3 pr-11 text-[13px] shadow-none focus-visible:ring-1"
                     />
                     <button
                       type="button"
@@ -454,7 +454,7 @@ export default function CountPage() {
                         {scanHistory.slice(-10).reverse().map((h) => (
                           <div
                             key={h.key}
-                            className="break-all border-b border-border/60 bg-card px-3 py-1.5 font-mono text-[11.5px] text-foreground last:border-0 even:bg-zinc-50 dark:even:bg-muted/20"
+                            className="break-all border-b border-border/60 bg-card px-3 py-1.5 text-[11.5px] text-foreground last:border-0 even:bg-zinc-50 dark:even:bg-muted/20"
                           >
                             {h.barcode}
                           </div>
@@ -502,7 +502,7 @@ export default function CountPage() {
                               <TableCell className="px-3">
                                 <Checkbox checked={selectedKeys.has(r.key)} onCheckedChange={() => toggleRow(r.key)} aria-label={`Select row ${idx + 1}`} />
                               </TableCell>
-                              <TableCell className="px-3 font-mono text-sm text-muted-foreground">{idx + 1}</TableCell>
+                              <TableCell className="px-3 text-sm text-muted-foreground">{idx + 1}</TableCell>
                               <TableCell className="px-4">
                                 <SearchableSelect
                                   compact
@@ -523,7 +523,7 @@ export default function CountPage() {
                                   value={r.qty}
                                   onChange={(e) => setRow(r.key, { qty: e.target.value })}
                                   placeholder="0"
-                                  className="h-8 w-full text-right font-mono text-sm shadow-none"
+                                  className="h-8 w-full text-right text-sm shadow-none"
                                 />
                               </TableCell>
                               <TableCell className="px-4">
@@ -531,7 +531,7 @@ export default function CountPage() {
                                   value={r.batch}
                                   onChange={(e) => setRow(r.key, { batch: e.target.value })}
                                   placeholder="—"
-                                  className="h-8 w-full font-mono text-sm shadow-none"
+                                  className="h-8 w-full text-sm shadow-none"
                                 />
                               </TableCell>
                               <TableCell className="px-4 text-xs text-muted-foreground">{uomName}</TableCell>

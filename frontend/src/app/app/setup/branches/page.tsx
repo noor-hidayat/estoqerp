@@ -38,7 +38,7 @@ export default function BranchesPage() {
       id: "code",
       header: "Code",
       sortValue: (b) => b.code,
-      cell: (b) => <span className="font-mono text-xs text-muted-foreground">{b.code}</span>,
+      cell: (b) => <span className="text-xs text-muted-foreground">{b.code}</span>,
     },
     {
       id: "name",

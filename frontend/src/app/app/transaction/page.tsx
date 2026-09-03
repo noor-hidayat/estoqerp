@@ -72,7 +72,7 @@ export default function TransactionsPage() {
       sortValue: (m) => m.id,
       cell: (m) => (
         <button
-          className="font-mono text-xs font-medium text-primary hover:underline"
+          className="text-xs font-medium text-primary hover:underline"
           onClick={() => navigate(`/app/transaction/${m.id}`)}
         >
           {m.id}

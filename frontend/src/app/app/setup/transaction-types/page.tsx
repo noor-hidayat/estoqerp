@@ -36,7 +36,7 @@ export default function TransactionTypesPage() {
       sortValue: (t) => t.code,
       cell: (t) => (
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-muted-foreground">{t.code}</span>
+          <span className="text-xs text-muted-foreground">{t.code}</span>
           {t.builtin && <Badge tone="info">Built-in</Badge>}
         </div>
       ),
@@ -56,7 +56,7 @@ export default function TransactionTypesPage() {
       header: "Series",
       sortValue: (t) => t.series,
       cell: (t) => (
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {t.series ? `${t.series}-0001` : "—"}
         </span>
       ),

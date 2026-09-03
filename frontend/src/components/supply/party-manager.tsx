@@ -118,7 +118,7 @@ export function PartyManager({ kind, title, menu, singular, icon: Icon }: PartyM
     {
       id: "code",
       header: "Code",
-      cell: (r) => <span className="font-mono text-xs text-muted-foreground">{r.code}</span>,
+      cell: (r) => <span className="text-xs text-muted-foreground">{r.code}</span>,
     },
     {
       id: "name",

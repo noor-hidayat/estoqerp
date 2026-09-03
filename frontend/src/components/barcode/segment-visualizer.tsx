@@ -96,7 +96,7 @@ export function SegmentBar({
                 key={idx}
                 title={digitTitle(i)}
                 className={cx(
-                  "flex h-11 cursor-default flex-col items-center justify-center rounded-md font-mono text-[13px] font-semibold transition-colors",
+                  "flex h-11 cursor-default flex-col items-center justify-center rounded-md  text-[13px] font-semibold transition-colors",
                   digitClass(i)
                 )}
               >

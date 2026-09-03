@@ -37,7 +37,7 @@ export default function PurchaseOrdersPage() {
     {
       id: "poNo",
       header: "PO No",
-      cell: (o) => <span className="font-mono text-xs font-semibold">{formatId(o.id)}</span>,
+      cell: (o) => <span className="text-xs font-semibold">{formatId(o.id)}</span>,
       sortValue: (o) => String(o.poNo),
     },
     {

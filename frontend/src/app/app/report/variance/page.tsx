@@ -115,7 +115,7 @@ export default function VarianceReportPage() {
       cell: (r) => (
         <div>
           <p className="text-[13px] font-medium text-foreground">{r.name}</p>
-          <p className="font-mono text-[10.5px] text-muted-foreground">{r.code}</p>
+          <p className="text-[10.5px] text-muted-foreground">{r.code}</p>
         </div>
       ),
       className: "min-w-[200px]",
@@ -130,14 +130,14 @@ export default function VarianceReportPage() {
       header: "System Qty",
       align: "right",
       sortValue: (r) => r.systemQty,
-      cell: (r) => <span className="font-mono text-xs tabular-nums">{formatNumber(r.systemQty)}</span>,
+      cell: (r) => <span className="text-xs tabular-nums">{formatNumber(r.systemQty)}</span>,
     },
     {
       id: "counted",
       header: "Counted Qty",
       align: "right",
       sortValue: (r) => r.countedQty,
-      cell: (r) => <span className="font-mono text-xs tabular-nums">{formatNumber(r.countedQty)}</span>,
+      cell: (r) => <span className="text-xs tabular-nums">{formatNumber(r.countedQty)}</span>,
     },
     {
       id: "diff",
@@ -147,7 +147,7 @@ export default function VarianceReportPage() {
       cell: (r) => (
         <span
           className={cx(
-            "font-mono text-xs font-semibold tabular-nums",
+            " text-xs font-semibold tabular-nums",
             r.diff > 0 ? "text-emerald-600" : "text-destructive"
           )}
         >

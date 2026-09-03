@@ -62,7 +62,7 @@ export default function ItemsPage() {
     {
       id: "code",
       header: "Item Code",
-      cell: (item) => <span className="font-mono text-xs text-muted-foreground">{item.code}</span>,
+      cell: (item) => <span className="text-xs text-muted-foreground">{item.code}</span>,
       className: "whitespace-nowrap",
     },
     {
@@ -101,7 +101,7 @@ export default function ItemsPage() {
       id: "alternativeCode",
       header: "Alternative Code",
       cell: (item) => (
-        <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
           {item.alternativeCode || "—"}
         </span>
       ),
@@ -111,7 +111,7 @@ export default function ItemsPage() {
       header: "UOM Qty",
       align: "right",
       cell: (item) => (
-        <span className="whitespace-nowrap font-mono text-xs">
+        <span className="whitespace-nowrap text-xs">
           {item.uomQty != null ? formatNumber(item.uomQty) : "—"}
         </span>
       ),
@@ -121,7 +121,7 @@ export default function ItemsPage() {
       header: "Standard Cost",
       align: "right",
       cell: (item) => (
-        <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
           {item.standardCost != null && Number(item.standardCost) !== 0 ? `Rp ${formatNumber(Number(item.standardCost))}` : "—"}
         </span>
       ),
@@ -131,7 +131,7 @@ export default function ItemsPage() {
       header: "Valuation Rate",
       align: "right",
       cell: (item) => (
-        <span className="whitespace-nowrap font-mono text-xs font-medium">
+        <span className="whitespace-nowrap text-xs font-medium">
           {item.valuationRate != null && Number(item.valuationRate) !== 0 ? `Rp ${formatNumber(Number(item.valuationRate))}` : "—"}
         </span>
       ),

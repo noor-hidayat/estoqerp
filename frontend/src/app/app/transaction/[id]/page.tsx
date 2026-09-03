@@ -51,14 +51,14 @@ function ScanHistoryTable({ details }: { details: StockMovementDetailRow[] }) {
           <tbody className="divide-y divide-border">
             {scanned.map((d) => (
               <tr key={d.id} className="hover:bg-muted/30">
-                <td className="break-all px-4 py-2.5 font-mono text-[12px] text-foreground">
+                <td className="break-all px-4 py-2.5 text-[12px] text-foreground">
                   {d.barcode}
                 </td>
-                <td className="break-all px-3 py-2.5 font-mono text-[11.5px] text-muted-foreground">
+                <td className="break-all px-3 py-2.5 text-[11.5px] text-muted-foreground">
                   {d.batchNumber ?? "—"}
                 </td>
                 <td className="px-3 py-2.5">
-                  <span className="font-mono text-[11.5px] font-medium text-foreground">
+                  <span className="text-[11.5px] font-medium text-foreground">
                     {d.itemCode ?? "—"}
                   </span>
                   {d.itemName && (
@@ -67,10 +67,10 @@ function ScanHistoryTable({ details }: { details: StockMovementDetailRow[] }) {
                     </span>
                   )}
                 </td>
-                <td className="px-3 py-2.5 font-mono text-[11.5px] text-muted-foreground">
+                <td className="px-3 py-2.5 text-[11.5px] text-muted-foreground">
                   {d.serialNumber ?? "—"}
                 </td>
-                <td className="px-4 py-2.5 text-right font-mono text-[12px] font-semibold tabular-nums text-foreground">
+                <td className="px-4 py-2.5 text-right text-[12px] font-semibold tabular-nums text-foreground">
                   {formatNumber(d.qty)}
                 </td>
               </tr>

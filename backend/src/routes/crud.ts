@@ -752,20 +752,109 @@ async function stockBalanceConds(req: Request): Promise<ReturnType<typeof sql> |
 // GET /stock-balances/ledger?page=&pageSize=&query=&warehouseId=&itemId=&from=&to=
 // Join stockBalances × items × warehouses × item_groups dengan pagination
 // server-side (dipakai halaman Stock Balance). `from` & `to` filter balanceDate (YYYY-MM-DD, inclusive).
+// Behavior sesuai request user:
+// - Tanpa filter tanggal: tampilkan 1 row per (warehouse, item) = saldo terkini (MAX balance_date) -> item uniq per WH
+// - Dengan filter tanggal from/to: agregat per (warehouse, item) -> opening dari tgl paling awal di range, closing dari tgl paling akhir, in/out di-sum
+//   Contoh: tgl1 opening10 in20 out5 closing25, tgl2 opening25 in5 out20 closing10 => filter 1-2 => opening10 in25 out25 closing10 (1 row per WH+item)
 crudRouter.get("/stock-balances/ledger", async (req, res) => {
   if (!(await checkTablePermission(req, res, "stockBalances", "view"))) return;
   try {
     const page = queryNum(req, "page") ?? 1;
     const pageSize = queryNum(req, "pageSize") ?? DEFAULT_PAGE_SIZE;
     const offset = (page - 1) * pageSize;
-    const whereCond = await stockBalanceConds(req);
 
-    const countQ = db
-      .select({ count: sql<number>`count(*)` })
+    const from = queryStr(req, "from") ?? queryStr(req, "dateFrom") ?? queryStr(req, "startDate");
+    const to = queryStr(req, "to") ?? queryStr(req, "dateTo") ?? queryStr(req, "endDate");
+    const hasDateFilter = !!(from && /^\d{4}-\d{2}-\d{2}$/.test(from) || to && /^\d{4}-\d{2}-\d{2}$/.test(to));
+    console.log(`[stock-ledger] hasDateFilter=${hasDateFilter} from=${from} to=${to} query=${JSON.stringify(req.query)}`);
+
+    // Jika ada filter tanggal, kita agregat per (warehouse, item)
+    if (hasDateFilter) {
+      const whereCond = await stockBalanceConds(req);
+      // Subquery agregat per wh+item
+      const aggSub = db
+        .select({
+          warehouseId: schema.stockBalances.warehouseId,
+          itemId: schema.stockBalances.itemId,
+          minDate: sql<string>`MIN(${schema.stockBalances.balanceDate})`.as("minDate"),
+          maxDate: sql<string>`MAX(${schema.stockBalances.balanceDate})`.as("maxDate"),
+          sumIn: sql<number>`SUM(${schema.stockBalances.inQty})`.as("sumIn"),
+          sumOut: sql<number>`SUM(${schema.stockBalances.outQty})`.as("sumOut"),
+        })
+        .from(schema.stockBalances)
+        .where(whereCond ?? undefined)
+        .groupBy(schema.stockBalances.warehouseId, schema.stockBalances.itemId)
+        .as("agg");
+
+      // Count total distinct wh+item in range
+      const countQ = await db.select({ count: sql<number>`count(*)` }).from(aggSub);
+      const total = Number(countQ[0]?.count ?? 0);
+
+      const rows = await db
+        .select({
+          warehouseId: aggSub.warehouseId,
+          itemId: aggSub.itemId,
+          code: schema.items.code,
+          name: schema.items.name,
+          itemGroup: schema.itemGroups.name,
+          warehouse: schema.warehouses.name,
+          balanceDate: aggSub.maxDate,
+          openingQty: sql<number>`(SELECT ${schema.stockBalances.openingQty} FROM ${schema.stockBalances} WHERE ${schema.stockBalances.warehouseId} = ${aggSub.warehouseId} AND ${schema.stockBalances.itemId} = ${aggSub.itemId} AND ${schema.stockBalances.balanceDate} = ${aggSub.minDate} LIMIT 1)`.as("openingQty"),
+          inQty: aggSub.sumIn,
+          outQty: aggSub.sumOut,
+          closingQty: sql<number>`(SELECT ${schema.stockBalances.closingQty} FROM ${schema.stockBalances} WHERE ${schema.stockBalances.warehouseId} = ${aggSub.warehouseId} AND ${schema.stockBalances.itemId} = ${aggSub.itemId} AND ${schema.stockBalances.balanceDate} = ${aggSub.maxDate} LIMIT 1)`.as("closingQty"),
+          id: sql<string>`${aggSub.warehouseId} || '|' || ${aggSub.itemId}`.as("id"),
+        })
+        .from(aggSub)
+        .leftJoin(schema.items, eq(schema.items.id, aggSub.itemId))
+        .leftJoin(schema.warehouses, eq(schema.warehouses.id, aggSub.warehouseId))
+        .leftJoin(schema.itemGroups, eq(schema.itemGroups.id, schema.items.itemGroupId))
+        .orderBy(sql`${schema.items.code} ASC NULLS LAST`, sql`${schema.warehouses.name} ASC NULLS LAST`)
+        .offset(offset)
+        .limit(pageSize);
+
+      res.json({
+        rows: rows.map((r) => ({
+          id: String((r as any).id),
+          warehouseId: (r as any).warehouseId,
+          itemId: (r as any).itemId,
+          code: (r as any).code,
+          name: (r as any).name,
+          itemGroup: (r as any).itemGroup,
+          warehouse: (r as any).warehouse,
+          balanceDate: (r as any).balanceDate,
+          openingQty: Number((r as any).openingQty ?? 0),
+          inQty: Number((r as any).inQty ?? 0),
+          outQty: Number((r as any).outQty ?? 0),
+          closingQty: Number((r as any).closingQty ?? 0),
+        })),
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      });
+      return;
+    }
+
+    // Tanpa filter tanggal: hanya saldo terkini per (warehouse, item) -> 1 row per WH+item
+    const baseWhere = await stockBalanceConds(req);
+    // Filter whereCond tanpa balance_date sudah di baseWhere, tapi kita perlu tambahan latest filter
+    // Buat subquery latest
+    const latestSub = db
+      .select({
+        warehouseId: schema.stockBalances.warehouseId,
+        itemId: schema.stockBalances.itemId,
+        maxDate: sql<string>`MAX(${schema.stockBalances.balanceDate})`.as("maxDate"),
+      })
       .from(schema.stockBalances)
-      .where(whereCond ?? undefined);
-    const [c] = await countQ;
-    const total = Number(c.count);
+      .where(baseWhere ?? undefined)
+      .groupBy(schema.stockBalances.warehouseId, schema.stockBalances.itemId)
+      .as("latest");
+
+    const countQ = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(latestSub);
+    const total = Number(countQ[0]?.count ?? 0);
 
     const rows = await db
       .select({
@@ -783,14 +872,19 @@ crudRouter.get("/stock-balances/ledger", async (req, res) => {
         closingQty: schema.stockBalances.closingQty,
       })
       .from(schema.stockBalances)
+      .innerJoin(
+        latestSub,
+        and(
+          eq(schema.stockBalances.warehouseId, latestSub.warehouseId),
+          eq(schema.stockBalances.itemId, latestSub.itemId),
+          eq(schema.stockBalances.balanceDate, latestSub.maxDate)
+        )
+      )
       .leftJoin(schema.items, eq(schema.items.id, schema.stockBalances.itemId))
       .leftJoin(schema.warehouses, eq(schema.warehouses.id, schema.stockBalances.warehouseId))
       .leftJoin(schema.itemGroups, eq(schema.itemGroups.id, schema.items.itemGroupId))
-      .where(whereCond ?? undefined)
-      .orderBy(
-        sql`${schema.items.code} ASC NULLS LAST`,
-        sql`${schema.warehouses.name} ASC NULLS LAST`
-      )
+      .where(baseWhere ?? undefined)
+      .orderBy(sql`${schema.items.code} ASC NULLS LAST`, sql`${schema.warehouses.name} ASC NULLS LAST`)
       .offset(offset)
       .limit(pageSize);
 
@@ -809,24 +903,64 @@ crudRouter.get("/stock-balances/ledger", async (req, res) => {
 // GET /stock-balances/summary?query=&warehouseId=&itemId=&from=&to=
 // Ringkasan untuk summary card halaman Stock Balance: total item, total qty
 // (closing stock), dan jumlah baris — mengikuti filter & scope yang sama (termasuk from/to tanggal).
+// Konsisten dengan ledger: tanpa filter tanggal -> hitung dari saldo terkini per WH+item (1 per WH+item)
+// Dengan filter tanggal -> agregat per WH+item (closing dari tgl akhir di range, in/out sum, opening dari awal)
 crudRouter.get("/stock-balances/summary", async (req, res) => {
   if (!(await checkTablePermission(req, res, "stockBalances", "view"))) return;
   try {
+    const from = queryStr(req, "from") ?? queryStr(req, "dateFrom") ?? queryStr(req, "startDate");
+    const to = queryStr(req, "to") ?? queryStr(req, "dateTo") ?? queryStr(req, "endDate");
+    const hasDateFilter = !!(from && /^\d{4}-\d{2}-\d{2}$/.test(from) || to && /^\d{4}-\d{2}-\d{2}$/.test(to));
     const whereCond = await stockBalanceConds(req);
 
-    const [row] = await db
+    if (hasDateFilter) {
+      const aggSub = db
+        .select({
+          warehouseId: schema.stockBalances.warehouseId,
+          itemId: schema.stockBalances.itemId,
+          maxDate: sql<string>`MAX(${schema.stockBalances.balanceDate})`.as("maxDate"),
+        })
+        .from(schema.stockBalances)
+        .where(whereCond ?? undefined)
+        .groupBy(schema.stockBalances.warehouseId, schema.stockBalances.itemId)
+        .as("agg");
+      const [row] = await db
+        .select({
+          totalItems: sql<number>`count(distinct ${aggSub.itemId})`,
+          totalQty: sql<number>`coalesce(sum((SELECT ${schema.stockBalances.closingQty} FROM ${schema.stockBalances} WHERE ${schema.stockBalances.warehouseId} = ${aggSub.warehouseId} AND ${schema.stockBalances.itemId} = ${aggSub.itemId} AND ${schema.stockBalances.balanceDate} = ${aggSub.maxDate} LIMIT 1)),0)`,
+          totalRows: sql<number>`count(*)`,
+        })
+        .from(aggSub);
+      res.json({
+        totalItems: Number(row.totalItems ?? 0),
+        totalQty: Number(row.totalQty ?? 0),
+        totalRows: Number(row.totalRows ?? 0),
+      });
+      return;
+    }
+
+    // Tanpa filter tanggal: hanya saldo terkini per WH+item
+    const latestSub = db
       .select({
-        totalItems: sql<number>`count(distinct ${schema.stockBalances.itemId})`,
-        totalQty: sql<number>`coalesce(sum(${schema.stockBalances.closingQty}), 0)`,
-        totalRows: sql<number>`count(*)`,
+        warehouseId: schema.stockBalances.warehouseId,
+        itemId: schema.stockBalances.itemId,
+        maxDate: sql<string>`MAX(${schema.stockBalances.balanceDate})`.as("maxDate"),
       })
       .from(schema.stockBalances)
-      .where(whereCond ?? undefined);
-
+      .where(whereCond ?? undefined)
+      .groupBy(schema.stockBalances.warehouseId, schema.stockBalances.itemId)
+      .as("latest");
+    const [row] = await db
+      .select({
+        totalItems: sql<number>`count(distinct ${latestSub.itemId})`,
+        totalQty: sql<number>`coalesce(sum((SELECT ${schema.stockBalances.closingQty} FROM ${schema.stockBalances} WHERE ${schema.stockBalances.warehouseId} = ${latestSub.warehouseId} AND ${schema.stockBalances.itemId} = ${latestSub.itemId} AND ${schema.stockBalances.balanceDate} = ${latestSub.maxDate} LIMIT 1)),0)`,
+        totalRows: sql<number>`count(*)`,
+      })
+      .from(latestSub);
     res.json({
-      totalItems: Number(row.totalItems),
-      totalQty: Number(row.totalQty),
-      totalRows: Number(row.totalRows),
+      totalItems: Number(row.totalItems ?? 0),
+      totalQty: Number(row.totalQty ?? 0),
+      totalRows: Number(row.totalRows ?? 0),
     });
   } catch (e) {
     res.status(500).json({ error: messageOf(e) });

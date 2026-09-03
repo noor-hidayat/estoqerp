@@ -118,7 +118,7 @@ export default function BatchesPage() {
       header: "Item Code",
       sortValue: (r) => r.itemCode,
       cell: (r) => (
-        <span className="whitespace-nowrap font-mono text-xs font-medium text-foreground">
+        <span className="whitespace-nowrap text-xs font-medium text-foreground">
           {r.itemCode}
         </span>
       ),
@@ -150,7 +150,7 @@ export default function BatchesPage() {
         return (
           <Link
             to={`/app/inventory/batches/barcode?${q.toString()}`}
-            className="whitespace-nowrap font-mono text-xs font-medium text-primary hover:underline"
+            className="whitespace-nowrap text-xs font-medium text-primary hover:underline"
           >
             {r.batchNumber}
           </Link>
@@ -220,7 +220,7 @@ export default function BatchesPage() {
       align: "right",
       sortValue: (r) => r.qty,
       cell: (r) => (
-        <span className="font-mono text-xs font-semibold tabular-nums">
+        <span className="text-xs font-semibold tabular-nums">
           {formatNumber(r.qty)}
         </span>
       ),

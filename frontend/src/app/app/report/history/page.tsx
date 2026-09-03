@@ -132,7 +132,7 @@ export default function ScanHistoryPage() {
     {
       id: "barcode",
       header: "Barcode",
-      cell: (r) => <span className="font-mono text-xs">{r.barcode}</span>,
+      cell: (r) => <span className="text-xs">{r.barcode}</span>,
       className: "whitespace-nowrap",
     },
     {
@@ -153,7 +153,7 @@ export default function ScanHistoryPage() {
       header: "Qty",
       align: "right",
       cell: (r) => (
-        <span className="font-mono text-[13px] font-semibold tabular-nums">
+        <span className="text-[13px] font-semibold tabular-nums">
           {formatNumber(r.quantity)}
         </span>
       ),
@@ -171,7 +171,7 @@ export default function ScanHistoryPage() {
       id: "location",
       header: "Location",
       cell: (r) => (
-        <span className="font-mono text-xs">
+        <span className="text-xs">
           {locations.find((l) => l.id === r.locationId)?.code ?? "—"}
         </span>
       ),

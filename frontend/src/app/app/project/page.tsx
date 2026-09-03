@@ -48,7 +48,7 @@ export default function ProjectsPage() {
       header: "ID",
       sortValue: (p) => p.id,
       cell: (p) => (
-        <span className="font-mono text-[10.5px] font-semibold tracking-tight text-muted-foreground">
+        <span className="text-[10.5px] font-semibold tracking-tight text-muted-foreground">
           {p.id}
         </span>
       ),
@@ -81,7 +81,7 @@ export default function ProjectsPage() {
       header: "Warehouse",
       sortValue: (p) => p.jumlahGudang,
       cell: (p) => (
-        <span className="font-mono text-[12.5px] tabular-nums text-muted-foreground">
+        <span className="text-[12.5px] tabular-nums text-muted-foreground">
           {p.jumlahGudang} Warehouse
         </span>
       ),
@@ -101,7 +101,7 @@ export default function ProjectsPage() {
               style={{ width: `${p.progress.pct}%` }}
             />
           </div>
-          <span className="shrink-0 font-mono text-[11.5px] font-semibold text-muted-foreground">
+          <span className="shrink-0 text-[11.5px] font-semibold text-muted-foreground">
             {p.progress.pct}%
           </span>
         </div>

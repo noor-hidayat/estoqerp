@@ -228,10 +228,10 @@ export function OrderLineTable({
                     <TableCell className="px-3 text-muted-foreground">{idx + 1}</TableCell>
                     <TableCell className="px-3">{item ? `${item.code} — ${item.name}` : "—"}</TableCell>
                     <TableCell className="px-3 text-muted-foreground">{r.deliveryDate || "—"}</TableCell>
-                    <TableCell className="px-3 text-right font-mono">{r.qty || "—"}</TableCell>
-                    <TableCell className="px-3 text-right font-mono text-muted-foreground">{last ? `Rp ${formatNumber(Number(last))}` : "—"}</TableCell>
-                    <TableCell className="px-3 text-right font-mono">{r.unitPrice ? `Rp ${formatNumber(Number(r.unitPrice))}` : "—"}</TableCell>
-                    <TableCell className="px-3 text-right font-mono font-semibold">{total ? `Rp ${formatNumber(total)}` : "—"}</TableCell>
+                    <TableCell className="px-3 text-right">{r.qty || "—"}</TableCell>
+                    <TableCell className="px-3 text-right text-muted-foreground">{last ? `Rp ${formatNumber(Number(last))}` : "—"}</TableCell>
+                    <TableCell className="px-3 text-right">{r.unitPrice ? `Rp ${formatNumber(Number(r.unitPrice))}` : "—"}</TableCell>
+                    <TableCell className="px-3 text-right font-semibold">{total ? `Rp ${formatNumber(total)}` : "—"}</TableCell>
                   </TableRow>
                 );
               })
@@ -271,7 +271,7 @@ export function OrderLineTable({
                 const total = Number(r.qty || 0) * Number(r.unitPrice || 0);
                 return (
                   <TableRow key={idx} className="border-border/70 hover:bg-transparent">
-                    <TableCell className="px-3 font-mono text-sm text-muted-foreground">{idx + 1}</TableCell>
+                    <TableCell className="px-3 text-sm text-muted-foreground">{idx + 1}</TableCell>
                     <TableCell className="px-3">
                       <PoTableSelect
                         placeholder="Select item..."
@@ -300,12 +300,12 @@ export function OrderLineTable({
                         min={0}
                         value={r.qty}
                         onChange={(e) => setRow(idx, { qty: e.target.value })}
-                        className="h-8 w-full border-none bg-transparent px-1 text-right font-mono text-sm text-foreground focus:outline-none focus:ring-0"
+                        className="h-8 w-full border-none bg-transparent px-1 text-right text-sm text-foreground focus:outline-none focus:ring-0"
                         placeholder="0"
                       />
                     </TableCell>
                     <TableCell className="px-3 text-right">
-                      <span className="font-mono text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {last ? `Rp ${formatNumber(Number(last))}` : "—"}
                       </span>
                     </TableCell>
@@ -316,12 +316,12 @@ export function OrderLineTable({
                         step="0.01"
                         value={r.unitPrice}
                         onChange={(e) => setRow(idx, { unitPrice: e.target.value })}
-                        className="h-8 w-full border-none bg-transparent px-1 text-right font-mono text-sm text-foreground focus:outline-none focus:ring-0"
+                        className="h-8 w-full border-none bg-transparent px-1 text-right text-sm text-foreground focus:outline-none focus:ring-0"
                         placeholder="0.00"
                       />
                     </TableCell>
                     <TableCell className="px-3 text-right">
-                      <span className="font-mono text-xs font-semibold">
+                      <span className="text-xs font-semibold">
                         {total ? `Rp ${formatNumber(total)}` : "—"}
                       </span>
                     </TableCell>

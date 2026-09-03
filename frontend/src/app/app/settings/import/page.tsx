@@ -252,7 +252,7 @@ function PreviewStep({
               <AlertTriangle size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
               <div>
                 Unknown columns in template will be ignored:{" "}
-                <span className="font-mono">{unknownKeys.join(", ")}</span>
+                <span className="">{unknownKeys.join(", ")}</span>
               </div>
             </div>
           )}
@@ -279,7 +279,7 @@ function PreviewStep({
                 <TableBody>
                   {rows.slice(0, 10).map((row, i) => (
                     <TableRow key={i} className="hover:bg-accent/60">
-                      <TableCell className="px-3 py-2 font-mono text-[11.5px] tracking-tight text-muted-foreground">
+                      <TableCell className="px-3 py-2 text-[11.5px] tracking-tight text-muted-foreground">
                         {String(i + 1).padStart(2, "0")}
                       </TableCell>
                       {usedKeys.map((c) => {
@@ -292,7 +292,7 @@ function PreviewStep({
                             key={c.key}
                             className={cx(
                               "whitespace-normal px-3 py-2 text-[13px]",
-                              isCode && "font-mono text-[11.5px] tracking-tight text-muted-foreground",
+                              isCode && " text-[11.5px] tracking-tight text-muted-foreground",
                               missing && "bg-destructive/10 text-destructive",
                               !missing && c.required && "text-foreground"
                             )}
@@ -420,7 +420,7 @@ function DoneStep({
               <TableBody>
                 {result.errors.slice(0, 50).map((e, i) => (
                   <TableRow key={i} className="hover:bg-accent/60">
-                    <TableCell className="px-3 py-2 font-mono text-[11.5px] tracking-tight text-muted-foreground">{e.row}</TableCell>
+                    <TableCell className="px-3 py-2 text-[11.5px] tracking-tight text-muted-foreground">{e.row}</TableCell>
                     <TableCell className="whitespace-normal px-3 py-2 text-[13px] text-foreground">{e.message}</TableCell>
                   </TableRow>
                 ))}

@@ -152,7 +152,7 @@ export default function ProjectWarehousePage() {
               style={{ width: `${r.pct}%` }}
             />
           </div>
-          <span className="shrink-0 font-mono text-[11.5px] font-semibold text-muted-foreground">
+          <span className="shrink-0 text-[11.5px] font-semibold text-muted-foreground">
             {r.pct}%
           </span>
           <span className="shrink-0 text-[10.5px] text-muted-foreground">

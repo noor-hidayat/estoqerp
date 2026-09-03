@@ -39,7 +39,7 @@ export default function DeliveriesPage() {
     {
       id: "deliveryNo",
       header: "Delivery No",
-      cell: (d) => <span className="font-mono text-xs font-semibold">{formatId(d.id)}</span>,
+      cell: (d) => <span className="text-xs font-semibold">{formatId(d.id)}</span>,
       sortValue: (d) => String(d.deliveryNo),
     },
     {

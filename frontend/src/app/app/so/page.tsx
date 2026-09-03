@@ -31,7 +31,7 @@ export default function StockOpnamePage() {
       cell: (r) => (
         <Link
           to={`/app/so/count/${r.id}`}
-          className="font-mono text-[11px] font-semibold tracking-tight text-primary hover:underline"
+          className="text-[11px] font-semibold tracking-tight text-primary hover:underline"
         >
           {formatId(r.id)}
         </Link>

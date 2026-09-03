@@ -149,7 +149,7 @@ export default function SummaryReportPage() {
               style={{ width: `${p.pct}%` }}
             />
           </div>
-          <span className="font-mono text-xs font-medium text-muted-foreground">
+          <span className="text-xs font-medium text-muted-foreground">
             {p.counted}/{p.total} lokasi · {p.pct}%
           </span>
         </div>
@@ -189,7 +189,7 @@ export default function SummaryReportPage() {
             <Package size={18} strokeWidth={2} />
           </div>
           <p className="text-[12px] font-medium text-muted-foreground">Total master items</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
+          <p className="mt-1 text-2xl font-semibold text-foreground">
             {data.totalItems}
           </p>
         </div>
@@ -198,7 +198,7 @@ export default function SummaryReportPage() {
             <WarehouseIcon size={18} strokeWidth={2} />
           </div>
           <p className="text-[12px] font-medium text-muted-foreground">Total warehouses</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
+          <p className="mt-1 text-2xl font-semibold text-foreground">
             {warehouses.length}
           </p>
         </div>
@@ -207,7 +207,7 @@ export default function SummaryReportPage() {
             <Gauge size={18} strokeWidth={2} />
           </div>
           <p className="text-[12px] font-medium text-muted-foreground">Average completion</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
+          <p className="mt-1 text-2xl font-semibold text-foreground">
             {data.overallPct}%
           </p>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -222,7 +222,7 @@ export default function SummaryReportPage() {
             <Coins size={18} strokeWidth={2} />
           </div>
           <p className="text-[12px] font-medium text-muted-foreground">Total system stock</p>
-          <p className="mt-1 font-mono text-xl font-semibold tracking-tight text-foreground">
+          <p className="mt-1 text-xl font-semibold tracking-tight text-foreground">
             {formatNumber(data.totalQty)} unit
           </p>
         </div>

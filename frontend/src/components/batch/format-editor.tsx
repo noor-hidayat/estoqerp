@@ -170,7 +170,7 @@ function SegmentRow({
                 const v = e.target.value.replace(/\D/g, "");
                 onChange({ ...segment, start: v === "" ? 0 : Math.max(1, parseInt(v, 10)) });
               }}
-              className="h-9 w-14 shrink-0 text-center font-mono text-[13px]"
+              className="h-9 w-14 shrink-0 text-center text-[13px]"
               aria-label="posisi mulai"
             />
             <span className="shrink-0">s/d</span>
@@ -182,7 +182,7 @@ function SegmentRow({
                 const v = e.target.value.replace(/\D/g, "");
                 onChange({ ...segment, end: v === "" ? 0 : Math.max(1, parseInt(v, 10)) });
               }}
-              className="h-9 w-14 shrink-0 text-center font-mono text-[13px]"
+              className="h-9 w-14 shrink-0 text-center text-[13px]"
               aria-label="posisi akhir"
             />
           </div>
@@ -191,7 +191,7 @@ function SegmentRow({
             <Input
               value={segment.delimiter ?? ""}
               onChange={(e) => onChange({ ...segment, delimiter: e.target.value })}
-              className="h-9 w-16 shrink-0 text-center font-mono text-[13px]"
+              className="h-9 w-16 shrink-0 text-center text-[13px]"
               placeholder="-"
               aria-label="delimiter"
             />
@@ -204,7 +204,7 @@ function SegmentRow({
                 const v = e.target.value.replace(/\D/g, "");
                 onChange({ ...segment, index: v === "" ? 0 : parseInt(v, 10) });
               }}
-              className="h-9 w-12 shrink-0 text-center font-mono text-[13px]"
+              className="h-9 w-12 shrink-0 text-center text-[13px]"
               aria-label="index segmen"
             />
           </div>
@@ -454,7 +454,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
               placeholder="Contoh: 250726-A1"
               value={testNumber}
               onChange={(e) => setTestNumber(e.target.value)}
-              className="font-mono"
+              className=""
             />
             {testNumber.trim() && (
               <div className="mt-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 text-[12.5px]">
@@ -463,7 +463,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
                     {autoParse.productionDate && (
                       <span>
                         <span className="text-muted-foreground">Tanggal: </span>
-                        <span className="font-mono font-medium">
+                        <span className="font-medium">
                           {autoParse.productionDate}
                         </span>
                       </span>
@@ -471,13 +471,13 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
                     {autoParse.shift && (
                       <span>
                         <span className="text-muted-foreground">Shift: </span>
-                        <span className="font-mono font-medium">{autoParse.shift}</span>
+                        <span className="font-medium">{autoParse.shift}</span>
                       </span>
                     )}
                     {Object.entries(autoParse.meta).map(([k, v]) => (
                       <span key={k}>
                         <span className="text-muted-foreground">{k}: </span>
-                        <span className="font-mono font-medium">{v}</span>
+                        <span className="font-medium">{v}</span>
                       </span>
                     ))}
                     {Object.entries(autoParse.values)
@@ -485,7 +485,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
                       .map(([k, v]) => (
                         <span key={k}>
                           <span className="text-muted-foreground">{k}: </span>
-                          <span className="font-mono font-medium">{v}</span>
+                          <span className="font-medium">{v}</span>
                         </span>
                       ))}
                   </div>

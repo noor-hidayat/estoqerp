@@ -107,7 +107,7 @@ export default function StockLedgerPage() {
       header: "Item Code",
       sortValue: (r) => r.itemCode ?? "",
       cell: (r) => (
-        <span className="font-mono text-xs text-muted-foreground">{r.itemCode ?? "—"}</span>
+        <span className="text-xs text-muted-foreground">{r.itemCode ?? "—"}</span>
       ),
       className: "whitespace-nowrap",
     },
@@ -154,7 +154,7 @@ export default function StockLedgerPage() {
       align: "right",
       sortValue: (r) => r.qtyIn,
       cell: (r) => (
-        <span className="font-mono text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+        <span className="text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
           {r.qtyIn > 0 ? `+${formatNumber(r.qtyIn)}` : "—"}
         </span>
       ),
@@ -165,7 +165,7 @@ export default function StockLedgerPage() {
       align: "right",
       sortValue: (r) => r.qtyOut,
       cell: (r) => (
-        <span className="font-mono text-xs font-medium tabular-nums text-destructive">
+        <span className="text-xs font-medium tabular-nums text-destructive">
           {r.qtyOut > 0 ? `−${formatNumber(r.qtyOut)}` : "—"}
         </span>
       ),
@@ -176,7 +176,7 @@ export default function StockLedgerPage() {
       align: "right",
       sortValue: (r) => r.qtyBalance,
       cell: (r) => (
-        <span className="font-mono text-xs font-semibold tabular-nums">
+        <span className="text-xs font-semibold tabular-nums">
           {formatNumber(r.qtyBalance)}
         </span>
       ),
@@ -187,7 +187,7 @@ export default function StockLedgerPage() {
       align: "right",
       sortValue: (r) => r.valuationRate ?? 0,
       cell: (r) => (
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {r.valuationRate ? `Rp ${formatNumber(r.valuationRate)}` : "—"}
         </span>
       ),
@@ -198,7 +198,7 @@ export default function StockLedgerPage() {
       align: "right",
       sortValue: (r) => r.stockValue ?? 0,
       cell: (r) => (
-        <span className="font-mono text-xs font-semibold tabular-nums">
+        <span className="text-xs font-semibold tabular-nums">
           {r.stockValue ? `Rp ${formatNumber(r.stockValue)}` : "—"}
         </span>
       ),
@@ -210,13 +210,13 @@ export default function StockLedgerPage() {
       cell: (r) =>
         r.transactionId ? (
           <button
-            className="font-mono text-xs font-medium text-primary hover:underline"
+            className="text-xs font-medium text-primary hover:underline"
             onClick={() => navigate(`/app/transaction/${r.transactionId}`)}
           >
             {r.transactionId}
           </button>
         ) : (
-          <span className="font-mono text-xs text-muted-foreground">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         ),
       className: "whitespace-nowrap",
     },

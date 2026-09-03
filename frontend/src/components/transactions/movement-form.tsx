@@ -987,12 +987,12 @@ export function MovementForm({
                     })();
                     return (
                       <tr key={h.key} className="hover:bg-muted/30">
-                        <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{scanHistory.length - idx}</td>
-                        <td className="break-all px-4 py-2.5 font-mono text-xs text-foreground">{h.barcode}</td>
-                        <td className="break-all px-3 py-2.5 font-mono text-[11.5px] text-muted-foreground">{h.batch || "—"}</td>
-                        <td className="px-3 py-2.5 font-mono text-[11.5px] font-medium text-foreground">{h.itemCode || "—"}</td>
-                        <td className="px-3 py-2.5 font-mono text-[11.5px] text-muted-foreground">{h.serial || "—"}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-[12px] font-semibold tabular-nums text-foreground">{qtyFromRow}</td>
+                        <td className="px-4 py-2.5 text-xs text-muted-foreground">{scanHistory.length - idx}</td>
+                        <td className="break-all px-4 py-2.5 text-xs text-foreground">{h.barcode}</td>
+                        <td className="break-all px-3 py-2.5 text-[11.5px] text-muted-foreground">{h.batch || "—"}</td>
+                        <td className="px-3 py-2.5 text-[11.5px] font-medium text-foreground">{h.itemCode || "—"}</td>
+                        <td className="px-3 py-2.5 text-[11.5px] text-muted-foreground">{h.serial || "—"}</td>
+                        <td className="px-4 py-2.5 text-right text-[12px] font-semibold tabular-nums text-foreground">{qtyFromRow}</td>
                       </tr>
                     );
                   })}
@@ -1142,7 +1142,7 @@ export function MovementForm({
                   }
                 }}
                 placeholder="Scan Barcode"
-                className="h-8 rounded-md pr-11 pl-3 font-mono text-[13px] shadow-none focus-visible:ring-1"
+                className="h-8 rounded-md pr-11 pl-3 text-[13px] shadow-none focus-visible:ring-1"
               />
               {!readOnly && (
                 <button
@@ -1167,7 +1167,7 @@ export function MovementForm({
                   {scanHistory.slice(-10).reverse().map((h) => (
                     <div
                       key={h.key}
-                      className="break-all border-b border-border/60 bg-card px-3 py-1.5 font-mono text-[11.5px] text-foreground last:border-0 even:bg-zinc-50 dark:even:bg-muted/20"
+                      className="break-all border-b border-border/60 bg-card px-3 py-1.5 text-[11.5px] text-foreground last:border-0 even:bg-zinc-50 dark:even:bg-muted/20"
                     >
                       {h.barcode}
                     </div>
@@ -1269,7 +1269,7 @@ export function MovementForm({
                           />
                         </TableCell>
                       )}
-                      <TableCell className="px-3 font-mono text-sm text-muted-foreground">                        {idx + 1}
+                      <TableCell className="px-3 text-sm text-muted-foreground">                        {idx + 1}
                       </TableCell>
                       {visibleCols.source && (
                         <TableCell className="px-4">
@@ -1345,7 +1345,7 @@ export function MovementForm({
                                 tabNext(r.key, "batch");
                               }
                             }}
-                            className="h-8 w-full min-w-[90px] border-none bg-transparent px-1 font-mono text-sm text-foreground focus:outline-none focus:ring-0 disabled:opacity-100"
+                            className="h-8 w-full min-w-[90px] border-none bg-transparent px-1 text-sm text-foreground focus:outline-none focus:ring-0 disabled:opacity-100"
                           />
                           {!readOnly && r.batchNumber.trim() && (
                             <BatchHint
@@ -1373,7 +1373,7 @@ export function MovementForm({
                                 tabNext(r.key, "rate");
                               }
                             }}
-                            className="h-8 w-full min-w-[90px] border-none bg-transparent px-1 text-right font-mono text-sm text-foreground focus:outline-none focus:ring-0 disabled:opacity-100"
+                            className="h-8 w-full min-w-[90px] border-none bg-transparent px-1 text-right text-sm text-foreground focus:outline-none focus:ring-0 disabled:opacity-100"
                           />
                         </TableCell>
                       )}

@@ -29,7 +29,7 @@ export function Stat({
           {label}
         </p>
         <p className={cn(
-          "mt-0.5 font-mono font-bold leading-tight tracking-tight text-foreground",
+          "mt-0.5  font-bold leading-tight tracking-tight text-foreground",
           compact ? "text-lg" : "text-[21px]"
         )}>
           {value}

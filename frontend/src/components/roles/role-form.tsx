@@ -545,7 +545,7 @@ export function RoleForm({ role }: { role?: Role }) {
                       </span>
                       <span className="flex items-center gap-2">
                         {gs.count > 0 && (
-                          <span className="rounded bg-primary/10 px-1.5 py-px font-mono text-[10px] font-semibold text-primary">
+                          <span className="rounded bg-primary/10 px-1.5 py-px text-[10px] font-semibold text-primary">
                             {gs.count}
                           </span>
                         )}

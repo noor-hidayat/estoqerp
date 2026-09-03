@@ -105,7 +105,7 @@ export default function ProjectReportPage() {
       sortValue: (r) => r.code,
       cell: (r) => {
         const item = items.find((i) => i.id === r.itemId);
-        return <span className="font-mono text-xs text-muted-foreground">{item?.code ?? r.code}</span>;
+        return <span className="text-xs text-muted-foreground">{item?.code ?? r.code}</span>;
       },
       className: "whitespace-nowrap",
     },
@@ -145,14 +145,14 @@ export default function ProjectReportPage() {
       header: "System Qty",
       align: "right",
       sortValue: (r) => r.systemQty,
-      cell: (r) => <span className="font-mono text-xs tabular-nums">{formatNumber(r.systemQty)}</span>,
+      cell: (r) => <span className="text-xs tabular-nums">{formatNumber(r.systemQty)}</span>,
     },
     {
       id: "counted",
       header: "Counted Qty",
       align: "right",
       sortValue: (r) => r.countedQty,
-      cell: (r) => <span className="font-mono text-xs tabular-nums">{formatNumber(r.countedQty)}</span>,
+      cell: (r) => <span className="text-xs tabular-nums">{formatNumber(r.countedQty)}</span>,
     },
     {
       id: "diff",
@@ -162,7 +162,7 @@ export default function ProjectReportPage() {
       cell: (r) => (
         <span
           className={cx(
-            "font-mono text-xs font-semibold tabular-nums",
+            " text-xs font-semibold tabular-nums",
             r.diff === 0
               ? "text-muted-foreground"
               : r.diff > 0
@@ -232,13 +232,13 @@ export default function ProjectReportPage() {
             <div className="flex items-center gap-4">
               <span>
                 Total system qty{" "}
-                <b className="font-mono tabular-nums text-foreground">
+                <b className="tabular-nums text-foreground">
                   {formatNumber(totalSystem)}
                 </b>
               </span>
               <span>
                 Total counted qty{" "}
-                <b className="font-mono tabular-nums text-foreground">
+                <b className="tabular-nums text-foreground">
                   {formatNumber(totalCounted)}
                 </b>
               </span>

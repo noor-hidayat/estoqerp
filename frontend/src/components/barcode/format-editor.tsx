@@ -177,7 +177,7 @@ function SegmentRow({
                 if (!isNaN(n)) onChange({ ...segment, start: Math.max(1, n) });
               }
             }}
-            className="h-9 w-14 shrink-0 text-center font-mono text-[13px]"
+            className="h-9 w-14 shrink-0 text-center text-[13px]"
             aria-label="posisi mulai"
           />
           <span className="shrink-0">s/d</span>
@@ -194,7 +194,7 @@ function SegmentRow({
                 if (!isNaN(n)) onChange({ ...segment, end: Math.max(1, n) });
               }
             }}
-            className="h-9 w-14 shrink-0 text-center font-mono text-[13px]"
+            className="h-9 w-14 shrink-0 text-center text-[13px]"
             aria-label="posisi akhir"
           />
         </div>

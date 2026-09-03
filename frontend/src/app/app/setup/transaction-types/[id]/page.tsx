@@ -131,7 +131,7 @@ export default function EditTransactionTypePage() {
                 disabled={type.builtin}
               />
               <FieldDescription>
-                Awalan nomor transaksi. Bisa pakai token tanggal: <code className="rounded bg-muted px-1 font-mono text-[11px]">DD</code> hari, <code className="rounded bg-muted px-1 font-mono text-[11px]">MM</code> bulan, <code className="rounded bg-muted px-1 font-mono text-[11px]">YY</code> tahun 2 digit, <code className="rounded bg-muted px-1 font-mono text-[11px]">YYYY</code> tahun 4 digit, <code className="rounded bg-muted px-1 font-mono text-[11px]">HH</code> jam. Contoh <code className="rounded bg-muted px-1 font-mono text-[11px]">TRF-DDMMYY</code> → <code className="rounded bg-muted px-1 font-mono text-[11px]">TRF-250817</code>.
+                Awalan nomor transaksi. Bisa pakai token tanggal: <code className="rounded bg-muted px-1 text-[11px]">DD</code> hari, <code className="rounded bg-muted px-1 text-[11px]">MM</code> bulan, <code className="rounded bg-muted px-1 text-[11px]">YY</code> tahun 2 digit, <code className="rounded bg-muted px-1 text-[11px]">YYYY</code> tahun 4 digit, <code className="rounded bg-muted px-1 text-[11px]">HH</code> jam. Contoh <code className="rounded bg-muted px-1 text-[11px]">TRF-DDMMYY</code> → <code className="rounded bg-muted px-1 text-[11px]">TRF-250817</code>.
               </FieldDescription>
             </Field>
             <Input

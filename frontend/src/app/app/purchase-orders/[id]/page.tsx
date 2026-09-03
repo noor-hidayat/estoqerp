@@ -302,7 +302,7 @@ function POBody({
                     to={`/app/goods-receipts/${r.id}`}
                     className="flex items-center justify-between px-5 py-3 hover:bg-muted/60"
                   >
-                    <span className="font-mono text-[13px] font-semibold">GR {formatId(r.id)}</span>
+                    <span className="text-[13px] font-semibold">GR {formatId(r.id)}</span>
                     <div className="flex items-center gap-3">
                       <span className="text-sm text-muted-foreground">{r.receiptDate?.slice(0, 10)}</span>
                       <DocStatusBadge status={r.status} />

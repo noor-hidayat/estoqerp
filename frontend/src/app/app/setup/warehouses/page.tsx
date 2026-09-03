@@ -41,7 +41,7 @@ export default function WarehousesPage() {
       id: "code",
       header: "Code",
       sortValue: (w) => w.code,
-      cell: (w) => <span className="font-mono text-xs text-muted-foreground">{w.code}</span>,
+      cell: (w) => <span className="text-xs text-muted-foreground">{w.code}</span>,
     },
     {
       id: "name",

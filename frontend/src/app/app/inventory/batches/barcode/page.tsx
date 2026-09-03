@@ -43,7 +43,7 @@ export default function BatchBarcodesPage() {
       header: "Kode Item",
       sortValue: (r) => itemMap.get(r.itemId ?? "")?.code ?? "",
       cell: (r) => (
-        <span className="whitespace-nowrap font-mono text-xs font-medium text-foreground">
+        <span className="whitespace-nowrap text-xs font-medium text-foreground">
           {itemMap.get(r.itemId ?? "")?.code ?? "—"}
         </span>
       ),
@@ -65,7 +65,7 @@ export default function BatchBarcodesPage() {
       header: "Barcode",
       sortValue: (r) => r.barcode,
       cell: (r) => (
-        <span className="block break-all font-mono text-xs">{r.barcode}</span>
+        <span className="block break-all text-xs">{r.barcode}</span>
       ),
       minWidth: 160,
     },
@@ -74,7 +74,7 @@ export default function BatchBarcodesPage() {
       header: "Batch",
       sortValue: (r) => batchMap.get(r.batchId ?? "")?.batchNumber ?? "",
       cell: (r) => (
-        <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
           {batchMap.get(r.batchId ?? "")?.batchNumber ?? r.barcode}
         </span>
       ),

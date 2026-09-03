@@ -37,7 +37,7 @@ export default function GoodsReceiptsPage() {
     {
       id: "grNo",
       header: "GR No",
-      cell: (r) => <span className="font-mono text-xs font-semibold">{formatId(r.id)}</span>,
+      cell: (r) => <span className="text-xs font-semibold">{formatId(r.id)}</span>,
       sortValue: (r) => String(r.grNo),
     },
     {

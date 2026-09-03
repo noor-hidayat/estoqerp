@@ -128,7 +128,7 @@ export function TimePicker({
           />
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
             <span>00:00:00</span>
-            <span className="font-mono text-foreground">{value}</span>
+            <span className="text-foreground">{value}</span>
             <span>23:59:59</span>
           </div>
           <Button

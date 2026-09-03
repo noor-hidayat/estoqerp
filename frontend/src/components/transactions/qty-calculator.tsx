@@ -77,7 +77,7 @@ export function QtyCalculator({ value, onChange, onTab, disabled, registerRef }:
       onChange={(e) => setDraft(e.target.value)}
       placeholder={draft ?? ""}
       className={cn(
-        "h-8 w-24 border-none bg-transparent px-1 text-right font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0 disabled:opacity-100"
+        "h-8 w-24 border-none bg-transparent px-1 text-right  text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0 disabled:opacity-100"
       )}
     />
   );

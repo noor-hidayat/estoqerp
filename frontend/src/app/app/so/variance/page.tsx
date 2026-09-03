@@ -96,7 +96,7 @@ export default function VarianceReviewPage() {
       id: "code",
       header: "Item Code",
       sortValue: (r) => r.itemCode,
-      cell: (r) => <span className="font-mono text-xs text-muted-foreground">{r.itemCode}</span>,
+      cell: (r) => <span className="text-xs text-muted-foreground">{r.itemCode}</span>,
       className: "whitespace-nowrap",
     },
     {
@@ -132,7 +132,7 @@ export default function VarianceReviewPage() {
       cell: (r) => (
         <span
           className={cx(
-            "font-mono text-xs font-semibold tabular-nums",
+            " text-xs font-semibold tabular-nums",
             r.diff === 0
               ? "text-muted-foreground"
               : r.diff > 0
@@ -178,7 +178,7 @@ export default function VarianceReviewPage() {
         footerLeft={
           <Badge tone={totalDiff >= 0 ? "emerald" : "red"} dot>
             Total variance:{" "}
-            <span className="font-mono">
+            <span className="">
               {totalDiff >= 0 ? `+${formatNumber(totalDiff)}` : formatNumber(totalDiff)}
             </span>
           </Badge>

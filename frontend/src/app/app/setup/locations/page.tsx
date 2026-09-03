@@ -51,7 +51,7 @@ export default function LocationsPage() {
       id: "code",
       header: "Location Code",
       sortValue: (l) => l.code,
-      cell: (l) => <span className="font-mono text-xs text-muted-foreground">{l.code}</span>,
+      cell: (l) => <span className="text-xs text-muted-foreground">{l.code}</span>,
     },
     {
       id: "name",

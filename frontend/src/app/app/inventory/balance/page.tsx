@@ -136,7 +136,7 @@ export default function StockBalancePage() {
       id: "code",
       header: "Item Code",
       sortValue: (r) => r.code,
-      cell: (r) => <span className="font-mono text-xs text-muted-foreground">{r.code}</span>,
+      cell: (r) => <span className="text-xs text-muted-foreground">{r.code}</span>,
       className: "whitespace-nowrap",
     },
     {
@@ -196,28 +196,28 @@ export default function StockBalancePage() {
       header: "Opening Stock",
       align: "right",
       sortValue: (r) => r.openingQty,
-      cell: (r) => <span className="font-mono text-xs font-medium tabular-nums">{formatNumber(r.openingQty)}</span>,
+      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatNumber(r.openingQty)}</span>,
     },
     {
       id: "inQty",
       header: "In Qty",
       align: "right",
       sortValue: (r) => r.inQty,
-      cell: (r) => <span className="font-mono text-xs font-medium tabular-nums">{formatNumber(r.inQty)}</span>,
+      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatNumber(r.inQty)}</span>,
     },
     {
       id: "outQty",
       header: "Out Qty",
       align: "right",
       sortValue: (r) => r.outQty,
-      cell: (r) => <span className="font-mono text-xs font-medium tabular-nums">{formatNumber(r.outQty)}</span>,
+      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatNumber(r.outQty)}</span>,
     },
     {
       id: "closingQty",
       header: "Closing Stock",
       align: "right",
       sortValue: (r) => r.closingQty,
-      cell: (r) => <span className="font-mono text-xs font-medium tabular-nums">{formatNumber(r.closingQty)}</span>,
+      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatNumber(r.closingQty)}</span>,
     },
   ];
 
@@ -231,19 +231,19 @@ export default function StockBalancePage() {
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <div className="rounded-md border border-border bg-card p-5">
           <p className="text-[12px] font-medium text-muted-foreground">Total item</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
+          <p className="mt-1 text-2xl font-semibold text-foreground">
             {formatNumber(totalItems)}
           </p>
         </div>
         <div className="rounded-md border border-border bg-card p-5">
           <p className="text-[12px] font-medium text-muted-foreground">Total closing stock</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
+          <p className="mt-1 text-2xl font-semibold text-foreground">
             {formatNumber(totalQty)}
           </p>
         </div>
         <div className="rounded-md border border-border bg-card p-5">
           <p className="text-[12px] font-medium text-muted-foreground">Stock rows</p>
-          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">
+          <p className="mt-1 text-2xl font-semibold text-foreground">
             {formatNumber(total)}
           </p>
         </div>
@@ -311,7 +311,7 @@ export default function StockBalancePage() {
                           }}
                           className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] text-foreground transition-colors hover:bg-accent"
                         >
-                          <span className="font-mono text-xs text-muted-foreground">{it.code}</span>
+                          <span className="text-xs text-muted-foreground">{it.code}</span>
                           <span className="min-w-0 flex-1 truncate font-medium">{it.name}</span>
                           <span className="shrink-0 text-xs text-muted-foreground">
                             {it.uomId ? (uomById.get(it.uomId)?.name ?? "—") : "—"}

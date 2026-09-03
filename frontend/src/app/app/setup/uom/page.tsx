@@ -41,7 +41,7 @@ export default function UomPage() {
       id: "code",
       header: "Code",
       sortValue: (u) => u.code,
-      cell: (u) => <span className="font-mono text-xs text-muted-foreground">{u.code}</span>,
+      cell: (u) => <span className="text-xs text-muted-foreground">{u.code}</span>,
     },
     {
       id: "name",

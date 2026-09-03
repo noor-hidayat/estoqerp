@@ -22,7 +22,8 @@
     "db:seed-all-1000": "tsx src/db/seed-all-1000.ts",
     "db:seed-warehouse-dashboard": "tsx src/db/seed-warehouse-dashboard.ts",
     "db:seed-purchase-delivery-trend": "tsx src/db/seed-purchase-delivery-trend.ts",
-    "db:seed-return-dummy": "tsx src/db/seed-return-dummy.ts"
+    "db:seed-return-dummy": "tsx src/db/seed-return-dummy.ts",
+    "db:seed-100k": "tsx src/db/seed-100k-integrated.ts"
 
   },
   "dependencies": {
