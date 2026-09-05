@@ -5,7 +5,6 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/pool";
 import { refreshTokens, users, roles, rolePermissions, branchAccesses, branches, warehouses } from "../db/schema";
 import * as schema from "../db/schema";
-import { nextRowId } from "../lib/id";
 import { config } from "../config";
 import { requireAuth, requireRoles, type AuthUser } from "../middleware/auth";
 import { signAccessToken } from "../utils/jwt";
@@ -18,23 +17,61 @@ import {
 export const authRouter = Router();
 
 export type PublicUser = {
-  id: string;
+  id: string; // publicId uuid v7
+  publicId: string;
+  internalId: number;
   name: string;
   email: string;
-  role: string;
+  role: string; // publicId or code for compat
+  roleId?: number | null;
   active: boolean;
   avatarHue: number;
   createdAt: Date;
 };
 
-export function toPublicUser(row: typeof users.$inferSelect): PublicUser {
-  const { passwordHash: _passwordHash, ...rest } = row;
-  return rest;
+export async function toPublicUser(row: typeof users.$inferSelect): Promise<PublicUser> {
+  const { passwordHash: _passwordHash, publicId, id, roleId, ...rest } = row as any;
+  let roleStr: string = "";
+  if (roleId) {
+    const [r] = await db.select({ publicId: roles.publicId, code: roles.code, isSystem: roles.isSystem }).from(roles).where(eq(roles.id, roleId)).limit(1);
+    if (r) {
+      if (r.isSystem) roleStr = r.code ?? r.publicId;
+      else roleStr = r.publicId;
+    } else roleStr = String(roleId);
+  }
+  return {
+    id: publicId,
+    publicId,
+    internalId: id,
+    name: (row as any).name,
+    email: (row as any).email,
+    role: roleStr,
+    roleId: roleId ?? null,
+    active: (row as any).active,
+    avatarHue: (row as any).avatarHue,
+    createdAt: (row as any).createdAt,
+  };
+}
+function toPublicUserSync(row: typeof users.$inferSelect): PublicUser {
+  const { passwordHash: _passwordHash, publicId, id, roleId, ...rest } = row as any;
+  // sync fallback without DB lookup for role (used where role not needed)
+  return {
+    id: publicId,
+    publicId,
+    internalId: id,
+    name: (row as any).name,
+    email: (row as any).email,
+    role: roleId ? String(roleId) : "",
+    roleId: roleId ?? null,
+    active: (row as any).active,
+    avatarHue: (row as any).avatarHue,
+    createdAt: (row as any).createdAt,
+  };
 }
 
 function issueTokens(user: PublicUser) {
   const accessToken = signAccessToken({
-    sub: user.id,
+    sub: user.publicId,
     email: user.email,
     role: user.role,
   });
@@ -42,17 +79,40 @@ function issueTokens(user: PublicUser) {
   return { accessToken, refreshToken, hash };
 }
 
-async function persistRefreshToken(userId: string, hash: string) {
+async function resolveUserInternalId(publicId: string): Promise<number | null> {
+  if (!publicId) return null;
+  if (/^\d+$/.test(publicId)) return Number(publicId);
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(publicId);
+  if (isUuid) {
+    const [u] = await db.select({ id: users.id }).from(users).where(eq(users.publicId, publicId)).limit(1);
+    return u?.id ?? null;
+  }
+  const [u] = await db.select({ id: users.id }).from(users).where(eq(users.publicId, publicId)).limit(1);
+  return u?.id ?? null;
+}
+
+async function persistRefreshToken(userPublicId: string, hash: string) {
+  const internalId = await resolveUserInternalId(userPublicId);
+  if (internalId === null) throw new Error("User not found for refresh token");
   await db.insert(refreshTokens).values({
-    id: `rt_${randomBytes(8).toString("hex")}`,
-    userId,
+    userId: internalId,
     tokenHash: hash,
     expiresAt: refreshTokenExpiry(config.jwtRefreshExpiresDays),
   });
 }
 
-async function findUserById(id: string) {
-  const [row] = await db.select().from(users).where(eq(users.id, id));
+async function findUserById(publicId: string) {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(publicId);
+  if (isUuid) {
+    const [row] = await db.select().from(users).where(eq(users.publicId, publicId));
+    return row ?? null;
+  }
+  if (/^\d+$/.test(publicId)) {
+    const [row] = await db.select().from(users).where(eq(users.id, Number(publicId)));
+    return row ?? null;
+  }
+  // try email? fallback by publicId
+  const [row] = await db.select().from(users).where(eq(users.publicId, publicId));
   return row ?? null;
 }
 
@@ -62,10 +122,6 @@ async function findUserByEmail(email: string) {
     .from(users)
     .where(eq(users.email, email.toLowerCase()));
   return row ?? null;
-}
-
-async function nextUserId(): Promise<string> {
-  return nextRowId(db, users, "usr");
 }
 
 authRouter.post("/login", async (req, res) => {
@@ -87,9 +143,9 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
-  const publicUser = toPublicUser(user);
+  const publicUser = await toPublicUser(user);
   const { accessToken, refreshToken, hash } = issueTokens(publicUser);
-  await persistRefreshToken(publicUser.id, hash);
+  await persistRefreshToken(publicUser.publicId, hash);
 
   res.json({ accessToken, refreshToken, user: publicUser });
 });
@@ -112,7 +168,7 @@ authRouter.post("/refresh", async (req, res) => {
     return;
   }
 
-  const user = await findUserById(stored.userId);
+  const [user] = await db.select().from(users).where(eq(users.id, stored.userId)).limit(1);
   if (!user || !user.active) {
     res.status(401).json({ error: "Akun tidak aktif." });
     return;
@@ -120,9 +176,9 @@ authRouter.post("/refresh", async (req, res) => {
 
   await db.delete(refreshTokens).where(eq(refreshTokens.id, stored.id));
 
-  const publicUser = toPublicUser(user);
+  const publicUser = await toPublicUser(user);
   const tokens = issueTokens(publicUser);
-  await persistRefreshToken(publicUser.id, tokens.hash);
+  await persistRefreshToken(publicUser.publicId, tokens.hash);
 
   res.json({
     accessToken: tokens.accessToken,
@@ -162,31 +218,52 @@ authRouter.post(
     return;
   }
 
-  let userRole = "role_staff";
+  let roleInternalId: number | null = null;
   if (roleId) {
-    const [r] = await db
-      .select({ id: roles.id })
-      .from(roles)
-      .where(eq(roles.id, String(roleId)))
-      .limit(1);
-    if (r) userRole = r.id;
+    if (/^\d+$/.test(String(roleId))) roleInternalId = Number(roleId);
+    else {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(roleId));
+      if (isUuid) {
+        const [r] = await db.select({ id: roles.id }).from(roles).where(eq(roles.publicId, String(roleId))).limit(1);
+        if (r) roleInternalId = r.id;
+        else {
+          const [r2] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, String(roleId))).limit(1);
+          if (r2) roleInternalId = r2.id;
+        }
+      } else {
+        const [r] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, String(roleId))).limit(1);
+        if (r) roleInternalId = r.id;
+        else {
+          const [r2] = await db.select({ id: roles.id }).from(roles).where(eq(roles.publicId, String(roleId))).limit(1);
+          if (r2) roleInternalId = r2.id;
+        }
+      }
+    }
+  }
+  if (!roleInternalId) {
+    // default to Staff
+    const [staff] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, "STAFF")).limit(1);
+    if (staff) roleInternalId = staff.id;
+    else {
+      const [anyR] = await db.select({ id: roles.id }).from(roles).limit(1);
+      roleInternalId = anyR?.id ?? null;
+    }
   }
 
   const passwordHash = await bcrypt.hash(String(password), 10);
   const [created] = await db
     .insert(users)
     .values({
-      id: await nextUserId(),
       name: String(name),
       email: normalizedEmail,
       passwordHash,
-      role: userRole,
+      roleId: roleInternalId,
       active: true,
       avatarHue: Math.floor(Math.random() * 360),
     })
     .returning();
 
-  res.status(201).json({ user: toPublicUser(created) });
+  res.status(201).json({ user: await toPublicUser(created) });
 });
 
 authRouter.get("/me", requireAuth, async (req, res) => {
@@ -197,68 +274,108 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     return;
   }
 
-  const role = await db
-    .select({ isSystem: roles.isSystem })
-    .from(roles)
-    .where(eq(roles.id, user.role))
-    .limit(1);
+  // resolve role internal for permission check
+  let roleInternalId: number | null = null;
+  if (/^\d+$/.test(user.role)) roleInternalId = Number(user.role);
+  else {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.role);
+    if (isUuid) {
+      const [r] = await db.select({ id: roles.id }).from(roles).where(eq(roles.publicId, user.role)).limit(1);
+      roleInternalId = r?.id ?? null;
+    } else {
+      const [r] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, user.role)).limit(1);
+      roleInternalId = r?.id ?? null;
+      if (!roleInternalId) {
+        const [r2] = await db.select({ id: roles.id }).from(roles).where(eq(roles.publicId, user.role)).limit(1);
+        roleInternalId = r2?.id ?? null;
+      }
+    }
+  }
+  // fallback to user's actual roleId
+  if (!roleInternalId) roleInternalId = (row as any).roleId;
 
-  const isSystem = role[0]?.isSystem ?? false;
+  const [role] = roleInternalId ? await db.select({ isSystem: roles.isSystem }).from(roles).where(eq(roles.id, roleInternalId)).limit(1) : [];
+  const isSystem = (role as any)?.isSystem ?? false;
 
   let permissions: { menu: string; action: string }[] = [];
-  let branchIds: string[] = [];
-  let warehouseIds: string[] = [];
-  let workspaceIds: string[] = [];
+  let branchPublicIds: string[] = [];
+  let warehousePublicIds: string[] = [];
+  let workspacePublicIds: string[] = [];
+  let branchInternalIds: (number|string)[] = [];
+  let warehouseInternalIds: (number|string)[] = [];
+  let workspaceInternalIds: (number|string)[] = [];
 
   if (isSystem) {
-    const allBranches = await db.select({ id: branches.id }).from(branches);
-    const allWarehouses = await db.select({ id: warehouses.id }).from(warehouses);
-    const allWorkspaces = await db.select({ id: schema.workspaces.id }).from(schema.workspaces);
-    branchIds = allBranches.map((b) => b.id);
-    warehouseIds = allWarehouses.map((w) => w.id);
-    workspaceIds = allWorkspaces.map((w) => w.id);
-  } else {
+    const allBranches = await db.select({ id: branches.id, publicId: branches.publicId }).from(branches);
+    const allWarehouses = await db.select({ id: warehouses.id, publicId: warehouses.publicId }).from(warehouses);
+    const allWorkspaces = await db.select({ id: schema.workspaces.id, publicId: schema.workspaces.publicId }).from(schema.workspaces);
+    branchInternalIds = allBranches.map((b) => b.id);
+    warehouseInternalIds = allWarehouses.map((w) => w.id);
+    workspaceInternalIds = allWorkspaces.map((w) => w.id);
+    branchPublicIds = allBranches.map((b) => b.publicId);
+    warehousePublicIds = allWarehouses.map((w) => w.publicId);
+    workspacePublicIds = allWorkspaces.map((w) => w.publicId);
+  } else if (roleInternalId) {
     permissions = (await db
       .select({ menu: rolePermissions.menu, action: rolePermissions.action })
       .from(rolePermissions)
-      .where(eq(rolePermissions.roleId, user.role))
+      .where(eq(rolePermissions.roleId, roleInternalId))
     ).map((p) => ({ menu: p.menu, action: p.action }));
 
-    const branchSet = new Set<string>();
-    const warehouseSet = new Set<string>();
+    const branchSet = new Set<number>();
+    const warehouseSet = new Set<number>();
+    const branchPublicSet = new Set<string>();
+    const warehousePublicSet = new Set<string>();
 
     const ras = await db
       .select({ entityType: branchAccesses.entityType, entityId: branchAccesses.entityId })
       .from(branchAccesses)
-      .where(eq(branchAccesses.roleId, user.role));
+      .where(eq(branchAccesses.roleId, roleInternalId));
 
     for (const e of ras) {
-      if (e.entityType === "BRANCH") branchSet.add(e.entityId);
+      if (e.entityType === "BRANCH") {
+        branchSet.add(e.entityId);
+        const [b] = await db.select({ publicId: branches.publicId }).from(branches).where(eq(branches.id, e.entityId)).limit(1);
+        if (b) branchPublicSet.add(b.publicId);
+      }
       if (e.entityType === "WAREHOUSE") {
         warehouseSet.add(e.entityId);
-        const [wh] = await db
-          .select({ branchId: warehouses.branchId })
-          .from(warehouses)
-          .where(eq(warehouses.id, e.entityId))
-          .limit(1);
-        if (wh) branchSet.add(wh.branchId);
+        const [w] = await db.select({ publicId: warehouses.publicId, branchId: warehouses.branchId }).from(warehouses).where(eq(warehouses.id, e.entityId)).limit(1);
+        if (w) {
+          warehousePublicSet.add(w.publicId);
+          branchSet.add(w.branchId);
+          const [b] = await db.select({ publicId: branches.publicId }).from(branches).where(eq(branches.id, w.branchId)).limit(1);
+          if (b) branchPublicSet.add(b.publicId);
+        }
       }
     }
 
-    branchIds = [...branchSet];
-    warehouseIds = [...warehouseSet];
+    branchInternalIds = [...branchSet];
+    warehouseInternalIds = [...warehouseSet];
+    branchPublicIds = [...branchPublicSet];
+    warehousePublicIds = [...warehousePublicSet];
 
     const was = await db
       .select({ workspaceId: schema.workspaceAccesses.workspaceId })
       .from(schema.workspaceAccesses)
-      .where(eq(schema.workspaceAccesses.roleId, user.role));
-    workspaceIds = was.map((w) => w.workspaceId);
+      .where(eq(schema.workspaceAccesses.roleId, roleInternalId));
+    workspaceInternalIds = was.map((w) => w.workspaceId);
+    if (was.length) {
+      const ws = await db.select({ publicId: schema.workspaces.publicId }).from(schema.workspaces).where(eq(schema.workspaces.id, was[0].workspaceId));
+      // fetch all
+      const allWs = await db.select({ publicId: schema.workspaces.publicId, id: schema.workspaces.id }).from(schema.workspaces);
+      const map = new Map(allWs.map((r) => [r.id, r.publicId]));
+      workspacePublicIds = was.map((w) => map.get(w.workspaceId) ?? String(w.workspaceId)).filter(Boolean) as string[];
+    }
   }
 
+  const publicUser = await toPublicUser(row);
   res.json({
-    ...toPublicUser(row),
+    ...publicUser,
     isSystem,
     permissions,
-    access: { branchIds, warehouseIds, workspaceIds },
+    access: { branchIds: branchPublicIds, warehouseIds: warehousePublicIds, workspaceIds: workspacePublicIds },
+    // internal ids kept for scope middleware compat (numbers)
+    _internalAccess: { branchIds: branchInternalIds, warehouseIds: warehouseInternalIds, workspaceIds: workspaceInternalIds },
   });
 });

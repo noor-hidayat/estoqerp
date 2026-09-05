@@ -2,24 +2,65 @@
 import type { Request, Response } from "express";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/pool";
-import { roles, rolePermissions, branchAccesses, workspaceAccesses } from "../db/schema";
+import { roles, rolePermissions, branchAccesses, workspaceAccesses, branches, warehouses, workspaces } from "../db/schema";
 
 type EntityType = "BRANCH" | "WAREHOUSE";
 
-export const systemRoleId = "role_sys_admin";
+export const systemRoleId = "role_sys_admin"; // legacy, kept for compat, use isAdminUser() instead
 
 const systemRoleCache = new Map<string, boolean>();
 
+async function resolveRoleInternalId(roleId: string): Promise<number | null> {
+  if (!roleId) return null;
+  if (/^\d+$/.test(roleId)) return Number(roleId);
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roleId);
+  if (isUuid) {
+    const [r] = await db.select({ id: roles.id }).from(roles).where(eq(roles.publicId, roleId)).limit(1);
+    if (r) return r.id;
+  }
+  // try by code (SYS_ADMIN)
+  const [byCode] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, roleId)).limit(1);
+  if (byCode) return byCode.id;
+  // legacy text id still in JWT during transition
+  // try publicId fallback
+  const [byPublic] = await db.select({ id: roles.id }).from(roles).where(eq(roles.publicId, roleId)).limit(1);
+  if (byPublic) return byPublic.id;
+  return null;
+}
+
 export async function isAdminUser(roleId: string): Promise<boolean> {
+  if (!roleId) return false;
   if (systemRoleCache.has(roleId)) return systemRoleCache.get(roleId)!;
-  const [r] = await db
-    .select({ isSystem: roles.isSystem })
-    .from(roles)
-    .where(eq(roles.id, roleId))
-    .limit(1);
-  const ok = r?.isSystem ?? false;
+  // legacy hard-coded string always admin for backward compat during migration
+  if (roleId === systemRoleId) {
+    systemRoleCache.set(roleId, true);
+    return true;
+  }
+  let internalId: number | null = null;
+  if (/^\d+$/.test(roleId)) internalId = Number(roleId);
+  else {
+    internalId = await resolveRoleInternalId(roleId);
+  }
+  let ok = false;
+  if (internalId !== null) {
+    const [r] = await db.select({ isSystem: roles.isSystem }).from(roles).where(eq(roles.id, internalId)).limit(1);
+    ok = r?.isSystem ?? false;
+  } else {
+    // try publicId directly
+    const [r] = await db.select({ isSystem: roles.isSystem }).from(roles).where(eq(roles.publicId, roleId)).limit(1);
+    ok = r?.isSystem ?? false;
+    if (!ok) {
+      const [r2] = await db.select({ isSystem: roles.isSystem }).from(roles).where(eq(roles.code, roleId)).limit(1);
+      ok = r2?.isSystem ?? false;
+    }
+  }
   systemRoleCache.set(roleId, ok);
   return ok;
+}
+
+// helper to get internal role id for queries
+export async function getRoleInternalId(roleId: string): Promise<number | null> {
+  return resolveRoleInternalId(roleId);
 }
 
 /** Cek permission langsung (non-middleware). Res 403 jika tidak punya akses.
@@ -38,10 +79,11 @@ export async function hasPermission(
   menu: string,
   action: string
 ): Promise<boolean> {
+  const internalId = await resolveRoleInternalId(roleId);
   const perms = await db
     .select({ menu: rolePermissions.menu, action: rolePermissions.action })
     .from(rolePermissions)
-    .where(eq(rolePermissions.roleId, roleId));
+    .where(internalId !== null ? eq(rolePermissions.roleId, internalId) : eq(rolePermissions.roleId, -1 as any));
 
   // Cocok persis.
   if (perms.some((p) => p.menu === menu && p.action === action)) return true;
@@ -79,10 +121,11 @@ export async function checkPermission(
 /** Cek apakah role boleh menggunakan fitur opname — punya akses menu opname
  *  apa pun (list, detail, scan, session, variance). */
 export async function canViewOpnameContext(roleId: string): Promise<boolean> {
+  const internalId = await resolveRoleInternalId(roleId);
   const menus = await db
     .select({ menu: rolePermissions.menu })
     .from(rolePermissions)
-    .where(eq(rolePermissions.roleId, roleId));
+    .where(internalId !== null ? eq(rolePermissions.roleId, internalId) : eq(rolePermissions.roleId, -1 as any));
   return menus.some((p) => p.menu === "opname" || p.menu.startsWith("opname."));
 }
 
@@ -112,16 +155,40 @@ export async function checkAnyPermission(
 export async function canAccessEntity(
   userRoleId: string,
   type: EntityType,
-  entityId: string
+  entityId: string | number
 ): Promise<boolean> {
+  const internalRoleId = await resolveRoleInternalId(userRoleId);
+  if (internalRoleId === null) return false;
+  let internalEntityId: number | null = null;
+  if (typeof entityId === "number") internalEntityId = entityId;
+  else if (/^\d+$/.test(String(entityId))) internalEntityId = Number(entityId);
+  else {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(entityId));
+    if (isUuid) {
+      // try branches
+      if (type === "BRANCH") {
+        const [b] = await db.select({ id: branches.id }).from(branches).where(eq(branches.publicId, String(entityId))).limit(1);
+        if (b) internalEntityId = b.id;
+      } else {
+        const [w] = await db.select({ id: warehouses.id }).from(warehouses).where(eq(warehouses.publicId, String(entityId))).limit(1);
+        if (w) internalEntityId = w.id;
+      }
+    }
+    if (internalEntityId === null) {
+      // try numeric fallback via code? not needed
+      const n = Number(entityId);
+      if (!Number.isNaN(n)) internalEntityId = n;
+    }
+  }
+  if (internalEntityId === null) return false;
   const [ra] = await db
     .select({ id: branchAccesses.id })
     .from(branchAccesses)
     .where(
       and(
-        eq(branchAccesses.roleId, userRoleId),
+        eq(branchAccesses.roleId, internalRoleId),
         eq(branchAccesses.entityType, type),
-        eq(branchAccesses.entityId, entityId)
+        eq(branchAccesses.entityId, internalEntityId)
       )
     )
     .limit(1);
@@ -130,10 +197,22 @@ export async function canAccessEntity(
 
 export async function canAccessWorkspace(roleId: string, workspaceId: string): Promise<boolean> {
   if (await isAdminUser(roleId)) return true;
+  const internalRoleId = await resolveRoleInternalId(roleId);
+  if (internalRoleId === null) return false;
+  let internalWsId: number | null = null;
+  if (/^\d+$/.test(workspaceId)) internalWsId = Number(workspaceId);
+  else {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workspaceId);
+    if (isUuid) {
+      const [w] = await db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.publicId, workspaceId)).limit(1);
+      if (w) internalWsId = w.id;
+    }
+  }
+  if (internalWsId === null) return false;
   const [r] = await db
     .select({ id: workspaceAccesses.id })
     .from(workspaceAccesses)
-    .where(and(eq(workspaceAccesses.roleId, roleId), eq(workspaceAccesses.workspaceId, workspaceId)))
+    .where(and(eq(workspaceAccesses.roleId, internalRoleId), eq(workspaceAccesses.workspaceId, internalWsId)))
     .limit(1);
   return !!r;
 }
@@ -142,5 +221,6 @@ export async function hasWorkspaceAccess(req: Request, workspaceId: string): Pro
   if (!req.user) return false;
   if (await isAdminUser(req.user.role)) return true;
   const ids = req.accessibleWorkspaceIds ?? [];
-  return ids.includes(workspaceId);
+  // ids are internal bigint numbers stringified or publicIds
+  return ids.includes(workspaceId) || ids.includes(String(workspaceId));
 }

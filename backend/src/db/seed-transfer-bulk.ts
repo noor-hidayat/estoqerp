@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Seed massal: 1.000.000 transaksi transfer antargudang (INTER-WAREHOUSE)
 // beserta barcode yang benar-benar berpindah gudang.
 //

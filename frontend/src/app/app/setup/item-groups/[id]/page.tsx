@@ -1,20 +1,22 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save } from "lucide-react";
-import { useItemGroup, useItemGroups, useUpdate } from "@/lib/api/query";
-import { useSaveShortcut } from "@/lib/use-save-shortcut";
+import { useItemGroup, useItemGroups, useUpdate, useRemove } from "@/lib/api/query";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { FormSkeleton } from "@/components/ui/skeleton";
-import {
-  FormPage,
-  FormSection,
-  FormGrid,
-} from "@/components/ui/form-page";
+import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
 import { Link } from "react-router-dom";
-import { useErrorToast } from "@/hooks/use-error-toast";
+import { toast } from "sonner";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function EditItemGroupPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,22 +24,26 @@ export default function EditItemGroupPage() {
   const { data: itemGroup, isLoading: itemGroupLoading } = useItemGroup(id);
   const { data: itemGroupsRaw = [] } = useItemGroups();
   const updateItemGroup = useUpdate("itemGroups");
+  const removeItemGroup = useRemove("itemGroups");
 
-  const [form, setForm] = useState({ code: "", name: "" });
-  const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
-  useErrorToast(error);
+  const [form, setForm] = useState<any>({});
+  const [editing, setEditing] = useState(false);
+  const [snapshot, setSnapshot] = useState<string>("");
 
   useEffect(() => {
     if (itemGroup) {
-      setForm({ code: itemGroup.code, name: itemGroup.name });
+      const init = { code: itemGroup.code, name: itemGroup.name };
+      setForm(init);
+      setSnapshot(JSON.stringify(init));
     }
   }, [itemGroup]);
 
-  const save = async (): Promise<boolean> => {
-    if (!form.code.trim() || !form.name.trim()) {
-      setError("Code and item group name are required.");
-      return false;
+  const dirty = JSON.stringify(form) !== snapshot;
+
+  const handleSave = async () => {
+    if (!form.code?.trim() || !form.name?.trim()) {
+      toast.error("Code and item group name are required.");
+      return;
     }
     if (
       itemGroupsRaw.some(
@@ -46,32 +52,56 @@ export default function EditItemGroupPage() {
           c.id !== id
       )
     ) {
-      setError("Item group code already in use.");
-      return false;
+      toast.error("Item group code already in use.");
+      return;
     }
-    if (!id) return false;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast.custom(
+        (t) => (
+          <div className="bg-background border border-border rounded-lg shadow-lg p-3 w-[300px]">
+            <div className="font-semibold text-xs">Confirm</div>
+            <div className="text-xs text-muted-foreground mt-1 leading-relaxed">This transaction will be made permanent, continue?</div>
+            <div className="flex justify-end gap-1.5 mt-3">
+              <Button variant="ghost" size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(false); }}>
+                No
+              </Button>
+              <Button size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(true); }}>
+                Yes
+              </Button>
+            </div>
+          </div>
+        ),
+        { duration: Infinity }
+      );
+    });
+    if (!confirmed) return;
     try {
-      await updateItemGroup.mutateAsync({ id, patch: { ...form } });
-      setSaved(true);
-      return true;    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-      return false;
+      await updateItemGroup.mutateAsync({ id: id!, patch: { code: form.code.trim(), name: form.name.trim() } });
+      toast.success("Updated");
+      setSnapshot(JSON.stringify(form));
+      setEditing(false);
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
-  const handleSubmit = async () => {
-    const ok = await save();
-    if (ok) navigate("/app/setup/item-groups");
+  const handleDelete = async () => {
+    if (!confirm("Hapus item group ini?")) return;
+    try {
+      await removeItemGroup.mutateAsync(id!);
+      toast.success("Deleted");
+      navigate("/app/setup/item-groups");
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
-  useSaveShortcut(save, true);
+  const handleEdit = () => setEditing(true);
 
   if (itemGroupLoading) {
     return (
       <RoleGuard roles={MANAGER_ROLES} menus={["master.itemGroups"]}>
-        <FormSkeleton
-          sections={[["half", "half"]]}
-        />
+        <FormSkeleton sections={[["half", "half"]]} />
       </RoleGuard>
     );
   }
@@ -90,18 +120,30 @@ export default function EditItemGroupPage() {
   return (
     <RoleGuard roles={MANAGER_ROLES} menus={["master.itemGroups"]}>
       <FormPage
-        title="Edit Item Group"
+        title={form.name || itemGroup.name}
+        titleBadge={editing && dirty ? <Badge tone="destructive">Not save</Badge> : null}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/setup/item-groups")}>
-              Cancel
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save}>
-              Save
-            </Button>
-            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit}>
-              Submit
-            </Button>
+            {editing && dirty && (
+              <Button size="sm" onClick={handleSave} disabled={updateItemGroup.isPending}>
+                {updateItemGroup.isPending ? "Saving..." : "Update"}
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7">
+                  <MoreHorizontal size={16} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-36">
+                <DropdownMenuItem onClick={handleEdit} className="gap-2">
+                  <Pencil size={14} /> Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDelete} className="gap-2 text-destructive focus:text-destructive">
+                  <Trash2 size={14} /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         }
       >
@@ -110,14 +152,16 @@ export default function EditItemGroupPage() {
             <Input
               label="Item group code"
               placeholder="GROUP"
-              value={form.code}
+              value={form.code || ""}
               onChange={(e) => setForm({ ...form, code: e.target.value })}
+              disabled={!editing}
             />
             <Input
               label="Item group name"
               placeholder="Snacks"
-              value={form.name}
+              value={form.name || ""}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
+              disabled={!editing}
             />
           </FormGrid>
         </FormSection>

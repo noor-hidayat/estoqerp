@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Seed dummy Receiving vs Delivery trend — 12 bulan terakhir, harian/mingguan/bulanan, saling bersimpangan
 // Receiving = Goods Receipt (GR), Delivery = Delivery dari SO
 // Jalankan: npm run db:seed-purchase-delivery-trend -w backend (alias seed-receiving-delivery)

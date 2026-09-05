@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus } from "lucide-react";
 import { useLocations, useAllWarehouses, useInsert } from "@/lib/api/query";
-import { useSaveShortcut } from "@/lib/use-save-shortcut";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -14,47 +12,57 @@ import {
   FormSection,
   FormGrid,
 } from "@/components/ui/form-page";
-import { useErrorToast } from "@/hooks/use-error-toast";
+import { toast } from "sonner";
 
 export default function NewLocationPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ code: "", name: "", warehouseId: "" });
-  const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
-  useErrorToast(error);
 
   const { data: allLocations = [] } = useLocations();
   const { data: warehouses = [], isLoading: warehousesLoading } = useAllWarehouses();
   const insertLocation = useInsert("locations");
 
-  const save = async (): Promise<boolean> => {
+  const handleCreate = async () => {
     if (!form.code.trim() || !form.warehouseId) {
-      setError("Location code and warehouse are required.");
-      return false;
+      toast.error("Location code and warehouse are required.");
+      return;
     }
     if (
       allLocations.some(
         (l) => l.code.toLowerCase() === form.code.trim().toLowerCase()
       )
     ) {
-      setError("Location code already in use.");
-      return false;
+      toast.error("Location code already in use.");
+      return;
     }
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast.custom(
+        (t) => (
+          <div className="bg-background border border-border rounded-lg shadow-lg p-3 w-[300px]">
+            <div className="font-semibold text-xs">Confirm</div>
+            <div className="text-xs text-muted-foreground mt-1 leading-relaxed">This transaction will be made permanent, continue?</div>
+            <div className="flex justify-end gap-1.5 mt-3">
+              <Button variant="ghost" size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(false); }}>
+                No
+              </Button>
+              <Button size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(true); }}>
+                Yes
+              </Button>
+            </div>
+          </div>
+        ),
+        { duration: Infinity }
+      );
+    });
+    if (!confirmed) return;
     try {
-      await insertLocation.mutateAsync({ ...form });
-      setSaved(true);
-      return true;    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-      return false;
+      await insertLocation.mutateAsync({ code: form.code.trim(), name: form.name, warehouseId: form.warehouseId });
+      toast.success("Created");
+      navigate("/app/setup/locations");
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
-
-  const handleSubmit = async () => {
-    const ok = await save();
-    if (ok) navigate("/app/setup/locations");
-  };
-
-  useSaveShortcut(save, true);
 
   if (warehousesLoading) {
     return (
@@ -71,17 +79,9 @@ export default function NewLocationPage() {
       <FormPage
         title="Add Location"
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/setup/locations")}>
-              Cancel
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save}>
-              Save
-            </Button>
-            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit}>
-              Submit
-            </Button>
-          </div>
+          <Button size="sm" onClick={handleCreate} disabled={insertLocation.isPending}>
+            {insertLocation.isPending ? "Saving..." : "Create"}
+          </Button>
         }
       >
         <FormSection>

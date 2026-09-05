@@ -17,6 +17,7 @@ import opnameProjectsRouter from "./routes/opname-projects";
 import opnameCountsRouter from "./routes/opname-counts";
 import { stockLedgerRouter, transactionsRouter } from "./routes/transactions";
 import { supplyChainRouter } from "./routes/supply-chain";
+import { documentTypesRouter, documentSeriesRouter } from "./routes/document-types";
 
 const app = express();
 
@@ -42,6 +43,8 @@ app.use("/api/opname-projects", opnameProjectsRouter);
 app.use("/api/opname-counts", opnameCountsRouter);
 app.use("/api/transactions", transactionsRouter);
 app.use("/api/stock-ledger", stockLedgerRouter);
+app.use("/api/document-types", documentTypesRouter);
+app.use("/api/document-series", documentSeriesRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api", supplyChainRouter);
 app.use("/api", crudRouter);

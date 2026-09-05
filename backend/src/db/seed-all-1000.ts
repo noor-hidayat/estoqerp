@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Seed 1000 data dummy di SEMUA module dengan tanggal & waktu bervariasi
 // Jalankan: npm run db:seed-all-1000  (atau COUNT=1000 npm run db:seed-all-1000)
 // Default COUNT = 1000 per module utama

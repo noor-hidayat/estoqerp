@@ -129,7 +129,7 @@ export default function GoodsReceiptDetailPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-              GR {formatId(gr.id)}
+              GR {(gr as any).documentNo ?? (gr as any).grNo ?? formatId(gr.id)}
             </h1>
             <DocStatusBadge status={gr.status} />
           </div>

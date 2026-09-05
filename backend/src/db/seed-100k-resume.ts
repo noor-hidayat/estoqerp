@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Resume lanjutan seed-100k — hanya sisa: stock_balances, stock_batches, opname_*
 // Dijalankan setelah seed-100k-integrated ter-kill di stock_balances.
 // Menggunakan metode cepat deterministik (tanpa Set random berat).

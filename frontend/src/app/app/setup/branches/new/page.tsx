@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus } from "lucide-react";
 import { useBranches, useInsert } from "@/lib/api/query";
-import { useSaveShortcut } from "@/lib/use-save-shortcut";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -12,64 +10,65 @@ import {
   FormSection,
   FormGrid,
 } from "@/components/ui/form-page";
-import { useErrorToast } from "@/hooks/use-error-toast";
+import { toast } from "sonner";
 
 export default function NewBranchPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ code: "", name: "", city: "" });
-  const [error, setError] = useState("");
-  useErrorToast(error);
 
   const { data: branches = [] } = useBranches();
   const insertBranch = useInsert("branches");
-  const [saved, setSaved] = useState(false);
 
-  const save = async (): Promise<boolean> => {
+  const handleCreate = async () => {
     if (!form.code.trim() || !form.name.trim()) {
-      setError("Code and branch name are required.");
-      return false;
+      toast.error("Code and branch name are required.");
+      return;
     }
     if (
       branches.some(
         (b) => b.code.toLowerCase() === form.code.trim().toLowerCase()
       )
     ) {
-      setError("Branch code already in use.");
-      return false;
+      toast.error("Branch code already in use.");
+      return;
     }
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast.custom(
+        (t) => (
+          <div className="bg-background border border-border rounded-lg shadow-lg p-3 w-[300px]">
+            <div className="font-semibold text-xs">Confirm</div>
+            <div className="text-xs text-muted-foreground mt-1 leading-relaxed">This transaction will be made permanent, continue?</div>
+            <div className="flex justify-end gap-1.5 mt-3">
+              <Button variant="ghost" size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(false); }}>
+                No
+              </Button>
+              <Button size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(true); }}>
+                Yes
+              </Button>
+            </div>
+          </div>
+        ),
+        { duration: Infinity }
+      );
+    });
+    if (!confirmed) return;
     try {
-      await insertBranch.mutateAsync({ ...form });
-      setSaved(true);
-      return true;
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-      return false;
+      await insertBranch.mutateAsync({ code: form.code.trim(), name: form.name.trim(), city: form.city });
+      toast.success("Created");
+      navigate("/app/setup/branches");
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
-
-  const handleSubmit = async () => {
-    const ok = await save();
-    if (ok) navigate("/app/setup/branches");
-  };
-
-  useSaveShortcut(save, true);
 
   return (
     <RoleGuard roles={MANAGER_ROLES} menus={["inventory.branches"]}>
       <FormPage
         title="Add Branch"
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/setup/branches")}>
-              Cancel
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={insertBranch.isPending}>
-              Save
-            </Button>
-            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit}>
-              Submit
-            </Button>
-          </div>
+          <Button size="sm" onClick={handleCreate} disabled={insertBranch.isPending}>
+            {insertBranch.isPending ? "Saving..." : "Create"}
+          </Button>
         }
       >
         <FormSection>

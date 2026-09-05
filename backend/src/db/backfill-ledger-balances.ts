@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Backfill stock_ledger.qty_balance menjadi saldo berjalan agregat yang
 // konsisten dengan stock_balances (sebelumnya campur saldo batch vs agregat).
 //

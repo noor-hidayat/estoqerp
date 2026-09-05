@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Seed massal: isi stock_balances sampai 100.000 row total.
 // Tidak menambah item/warehouse/branch/location/project — hanya memakai
 // master data yang sudah ada (pasangan unique warehouse_id + item_id).

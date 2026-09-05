@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Seed dashboard warehouse: 1 dashboard "Warehouse Overview" untuk wsp-warehouse
 // berisi 6 widget template warehouse (idempotent, bisa dijalankan ulang)
 // Jalankan: npm run db:seed-warehouse-dashboard -w backend

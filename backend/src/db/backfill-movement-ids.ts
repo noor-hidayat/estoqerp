@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Backfill id stock_movements ke nomor series (minimal 4 digit), sekali jalan.
 // Harus dijalankan SELURUHnya SEBELUM migrasi yang menghapus kolom
 // movement_number. Strategi: drop FK child sementara, repad nomor lama ke

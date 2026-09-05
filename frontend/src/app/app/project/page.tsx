@@ -10,6 +10,7 @@ import { cx, timeAgo } from "@/lib/utils";
 
 interface ProjectRow {
   id: string;
+  documentNo?: string | null;
   name: string;
   jumlahGudang: number;
   deadline: string | null;
@@ -45,11 +46,11 @@ export default function ProjectsPage() {
   const columns: DataTableColumn<ProjectRow>[] = [
     {
       id: "id",
-      header: "ID",
-      sortValue: (p) => p.id,
+      header: "No. Dokumen",
+      sortValue: (p) => p.documentNo ?? p.id,
       cell: (p) => (
-        <span className="text-[10.5px] font-semibold tracking-tight text-muted-foreground">
-          {p.id}
+        <span className="text-[10.5px] font-semibold tracking-tight text-foreground">
+          {p.documentNo ?? p.id.slice(0, 8)}
         </span>
       ),
     },
@@ -142,7 +143,7 @@ export default function ProjectsPage() {
         data={(projects ?? []) as ProjectRow[]}
         getRowId={(p) => p.id}
         loading={isLoading}
-        getSearchText={(p) => `${p.name} ${p.id} ${p.jumlahGudang}`}
+        getSearchText={(p) => `${p.name} ${p.documentNo ?? p.id} ${p.jumlahGudang}`}
         searchPlaceholder="Search project name..."
         selectable
         selectedKeys={selected}

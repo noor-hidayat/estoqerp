@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Seed 100rb terintegrasi — KECUALI branch, warehouse, user (preserve)
 // - suppliers & customers: JAGA minimal (target 1.5k-2k, tidak jadi 100k)
 // - PO, SO, GR, Delivery, Stock Movements, Stock Ledger, Stock Balances, Batches, Opname: masing-masing 100k

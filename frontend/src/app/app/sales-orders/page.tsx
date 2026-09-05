@@ -37,8 +37,8 @@ export default function SalesOrdersPage() {
     {
       id: "soNo",
       header: "SO No",
-      cell: (o) => <span className="text-xs font-semibold">{formatId(o.id)}</span>,
-      sortValue: (o) => String(o.soNo),
+      cell: (o) => <span className="text-xs font-semibold">{(o as any).documentNo ?? (o as any).soNo ?? formatId(o.id)}</span>,
+      sortValue: (o) => String((o as any).documentNo ?? o.soNo),
     },
     {
       id: "customer",
@@ -100,7 +100,7 @@ export default function SalesOrdersPage() {
         loading={isLoading}
         searchPlaceholder="Search sales orders..."
         getSearchText={(o) =>
-          `${formatId(o.id)} ${customerName(o.customerId)} ${warehouseName(o.warehouseId)}`
+          `${(o as any).documentNo ?? formatId(o.id)} ${customerName(o.customerId)} ${warehouseName(o.warehouseId)}`
         }
         filters={
           <div className="flex gap-2">

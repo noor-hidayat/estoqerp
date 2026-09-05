@@ -4,13 +4,26 @@ import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { BatchFormatEditor } from "@/components/batch/format-editor";
 import { FormPage } from "@/components/ui/form-page";
-import { useBatchFormats } from "@/lib/api/query";
+import { useBatchFormats, useRemove } from "@/lib/api/query";
+import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function EditBatchFormatPage() {
   const params = useParams<{ id: string }>();
   const navigate = useNavigate();
   const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
   const { data: formats = [], isLoading } = useBatchFormats();
+  const remove = useRemove("batchFormats");
+  const [editing, setEditing] = useState(false);
 
   if (isLoading) {
     return (
@@ -40,10 +53,45 @@ export default function EditBatchFormatPage() {
     );
   }
 
+  const handleEdit = () => setEditing(true);
+  const handleDelete = async () => {
+    if (!confirm("Hapus format ini?")) return;
+    try {
+      await remove.mutateAsync(format.id);
+      toast.success("Deleted");
+      navigate("/app/setup/batch-formats");
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   return (
     <RoleGuard roles={MANAGER_ROLES} menus={["master.batchFormats"]}>
-      <FormPage title="Edit Format">
-        <BatchFormatEditor key={format.id} format={format} />
+      <FormPage
+        title={format.name}
+        titleBadge={editing ? <Badge tone="destructive">Not save</Badge> : null}
+        actions={
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7">
+                  <MoreHorizontal size={16} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-36">
+                <DropdownMenuItem onClick={handleEdit} className="gap-2">
+                  <Pencil size={14} /> Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDelete} className="gap-2 text-destructive focus:text-destructive">
+                  <Trash2 size={14} /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        }
+      >
+        <BatchFormatEditor key={format.id} format={format} readOnly={!editing} hideInternalActions={!editing} onSaved={() => setEditing(false)} />
+      
       </FormPage>
     </RoleGuard>
   );

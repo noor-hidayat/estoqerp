@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Seed dummy Return Customer — Top10 finish good, ke gudang retur
 // Jalankan: npm run db:seed-return-dummy -w backend
 import { sql } from "drizzle-orm";

@@ -262,7 +262,7 @@ export default function CountDetailPage() {
   return (
     <div>
       <FormPage
-        title={count.id}
+        title={(count as any).documentNo ?? count.id}
         titleBadge={<Badge tone={dirty ? "destructive" : count.status === "POSTED" ? "emerald" : "neutral"}>{dirty ? "Not Save" : count.status}</Badge>}
         tabs={tabs}
         actions={

@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus } from "lucide-react";
 import { useItemGroups, useInsert, useUoms } from "@/lib/api/query";
-import { useSaveShortcut } from "@/lib/use-save-shortcut";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -16,7 +14,7 @@ import {
   FormSection,
   FormGrid,
 } from "@/components/ui/form-page";
-import { useErrorToast } from "@/hooks/use-error-toast";
+import { toast } from "sonner";
 
 const EMPTY = {
   code: "",
@@ -33,23 +31,40 @@ const EMPTY = {
 export default function NewItemPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState(EMPTY);
-  const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
-  useErrorToast(error);
 
   const { data: itemGroups, isLoading: itemGroupsLoading } = useItemGroups();
   const { data: uoms = [], isLoading: uomsLoading } = useUoms();
   const insertItem = useInsert("items");
 
-  const save = async (): Promise<boolean> => {
+  const handleCreate = async () => {
     if (!form.code.trim() || !form.name.trim() || !form.itemGroupId) {
-      setError("Code, name, and item group are required.");
-      return false;
+      toast.error("Code, name, and item group are required.");
+      return;
     }
     if (!form.uomId) {
-      setError("UOM is required.");
-      return false;
+      toast.error("UOM is required.");
+      return;
     }
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast.custom(
+        (t) => (
+          <div className="bg-background border border-border rounded-lg shadow-lg p-3 w-[300px]">
+            <div className="font-semibold text-xs">Confirm</div>
+            <div className="text-xs text-muted-foreground mt-1 leading-relaxed">This transaction will be made permanent, continue?</div>
+            <div className="flex justify-end gap-1.5 mt-3">
+              <Button variant="ghost" size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(false); }}>
+                No
+              </Button>
+              <Button size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(true); }}>
+                Yes
+              </Button>
+            </div>
+          </div>
+        ),
+        { duration: Infinity }
+      );
+    });
+    if (!confirmed) return;
     try {
       await insertItem.mutateAsync({
         ...form,
@@ -62,19 +77,12 @@ export default function NewItemPage() {
         isFinishGood: form.isFinishGood,
         hue: Math.floor(Math.random() * 360),
       });
-      setSaved(true);
-      return true;    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save item.");
-      return false;
+      toast.success("Created");
+      navigate("/app/setup/items");
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
-
-  const handleSubmit = async () => {
-    const ok = await save();
-    if (ok) navigate("/app/setup/items");
-  };
-
-  useSaveShortcut(save, true);
 
   if (itemGroupsLoading || uomsLoading) {
     return (
@@ -93,17 +101,9 @@ export default function NewItemPage() {
       <FormPage
         title="Add Item"
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/setup/items")}>
-              Cancel
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save}>
-              Save
-            </Button>
-            <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit}>
-              Submit
-            </Button>
-          </div>
+          <Button size="sm" onClick={handleCreate} disabled={insertItem.isPending}>
+            {insertItem.isPending ? "Saving..." : "Create"}
+          </Button>
         }
       >
         <FormSection>

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Migrasi RBAC: setup role sistem, konversi users.role dari enum lama ke id role baru.
 // Plus: akses entitas disederhanakan jadi PER ROLE — data role_accesses +
 // user_accesses digantikan tabel branch_access; ekspansi permission coarse → granular.

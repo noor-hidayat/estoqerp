@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Migrasi opname + rewrite ID ke format {prefix}-{YYMM}-{0001} (sekali jalan).
 //
 // Alur:

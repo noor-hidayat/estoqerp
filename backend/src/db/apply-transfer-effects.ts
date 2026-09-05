@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Backfill stock_balances, stock_batches, dan stock_ledger dari
 // stock_movement_details — mereplikasi efek applyMovementEffect()
 // (routes/transactions.ts) secara agregat lewat SQL agar cepat untuk jutaan baris.

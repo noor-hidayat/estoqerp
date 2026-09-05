@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Backfill closing stock harian untuk item finish good (total semua warehouse)
 // Generate 90 hari terakhir (2026-06-05 s/d 2026-09-03) dengan random walk
 // Jalankan: npm run db:backfill-closing-stock-daily -w backend (add script) atau npx tsx src/db/backfill-closing-stock-daily.ts

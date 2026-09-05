@@ -200,6 +200,8 @@ export type OpnameScanStatus = "DRAFT" | "POSTED" | "CANCELED";
 
 export interface OpnameProject {
   id: string;
+  publicId?: string;
+  documentNo?: string | null;
   name: string;
   mode: OpnameMode;
   status: ProjectStatus;
@@ -346,6 +348,8 @@ export type MovementStatus = "DRAFT" | "POSTED" | "CANCELED";
 
 export interface StockMovement {
   id: string;
+  publicId?: string;
+  documentNo?: string | null;
   typeId: string;
   movementDate: string;
   status: MovementStatus;
@@ -527,6 +531,8 @@ export interface PurchaseOrderLine {
 
 export interface PurchaseOrder {
   id: string;
+  publicId?: string;
+  documentNo?: string | null;
   /** Equals the row id. */
   poNo: string | number;
   supplierId: string;
@@ -557,6 +563,8 @@ export interface SalesOrderLine {
 
 export interface SalesOrder {
   id: string;
+  publicId?: string;
+  documentNo?: string | null;
   soNo: string | number;
   customerId: string;
   warehouseId: string;
@@ -583,6 +591,8 @@ export interface GoodsReceiptLine {
 
 export interface GoodsReceipt {
   id: string;
+  publicId?: string;
+  documentNo?: string | null;
   grNo: string | number;
   purchaseOrderId: string;
   warehouseId: string;
@@ -607,6 +617,8 @@ export interface DeliveryLine {
 
 export interface Delivery {
   id: string;
+  publicId?: string;
+  documentNo?: string | null;
   deliveryNo: string | number;
   salesOrderId?: string | null;
   customerId?: string | null;
@@ -617,6 +629,35 @@ export interface Delivery {
   createdAt?: string;
   updatedAt?: string;
   lines?: DeliveryLine[];
+}
+
+export interface DocumentType {
+  id: string;
+  publicId: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DocumentSeries {
+  id: string;
+  publicId: string;
+  documentTypeId: string;
+  typeName?: string;
+  name: string;
+  prefix: string;
+  format: string;
+  padding: number;
+  resetPolicy: "MONTHLY" | "YEARLY" | "NEVER" | "DAILY";
+  isDefault: boolean;
+  branchSpecific: boolean;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  nextNumber?: number;
+  preview?: string;
 }
 
 

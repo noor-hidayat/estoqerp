@@ -2,9 +2,11 @@ import type { NextFunction, Request, Response } from "express";
 import { verifyAccessToken } from "../utils/jwt";
 
 export interface AuthUser {
-  id: string;
+  id: string; // publicId uuid v7
   email: string;
-  role: string;
+  role: string; // role publicId or string numeric internal - kept as string for JWT
+  internalId?: number; // bigint internal id (optional cache)
+  roleInternalId?: number;
 }
 
 declare global {

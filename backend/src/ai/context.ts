@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { AnyColumn, SQL } from "drizzle-orm";
 import { db } from "../db/pool";

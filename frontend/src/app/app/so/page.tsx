@@ -10,6 +10,7 @@ import { ShellLoader } from "@/components/ui/loader";
 
 interface SoRow {
   id: string;
+  documentNo?: string | null;
   projectId: string;
   warehouseName: string;
   projectName: string;
@@ -26,14 +27,14 @@ export default function StockOpnamePage() {
   const columns: DataTableColumn<SoRow>[] = [
     {
       id: "id",
-      header: "ID",
-      sortValue: (r) => r.id,
+      header: "No. Dokumen",
+      sortValue: (r) => r.documentNo ?? r.id,
       cell: (r) => (
         <Link
           to={`/app/so/count/${r.id}`}
           className="text-[11px] font-semibold tracking-tight text-primary hover:underline"
         >
-          {formatId(r.id)}
+          {r.documentNo ?? formatId(r.id)}
         </Link>
       ),
     },
@@ -102,7 +103,7 @@ export default function StockOpnamePage() {
         data={rows}
         getRowId={(r) => r.id}
         searchPlaceholder="Search warehouse / project / auditor..."
-        getSearchText={(r) => `${r.id} ${r.warehouseName} ${r.projectName} ${r.status} ${r.auditor}`}
+        getSearchText={(r) => `${r.documentNo ?? r.id} ${r.warehouseName} ${r.projectName} ${r.status} ${r.auditor}`}
         initialSort={{ id: "created", dir: "desc" }}
         minWidth={800}
         emptyIcon={<Folder size={26} strokeWidth={2} />}

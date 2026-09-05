@@ -252,6 +252,12 @@ export const NAV: NavGroup[] = [
             menu: "master.movementTypes",
           },
           {
+            label: "Document Numbering",
+            href: "/app/setup/document-types",
+            icon: "FileText",
+            menu: "master",
+          },
+          {
             label: "Warehouses",
             href: "/app/setup/warehouses",
             icon: "Warehouse",

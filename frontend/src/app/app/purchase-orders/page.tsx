@@ -37,8 +37,8 @@ export default function PurchaseOrdersPage() {
     {
       id: "poNo",
       header: "PO No",
-      cell: (o) => <span className="text-xs font-semibold">{formatId(o.id)}</span>,
-      sortValue: (o) => String(o.poNo),
+      cell: (o) => <span className="text-xs font-semibold">{o.documentNo ?? o.poNo ?? formatId(o.id)}</span>,
+      sortValue: (o) => String(o.documentNo ?? o.poNo ?? o.id),
     },
     {
       id: "supplier",
@@ -106,7 +106,7 @@ export default function PurchaseOrdersPage() {
         loading={isLoading}
         searchPlaceholder="Search purchase orders..."
         getSearchText={(o) =>
-          `${formatId(o.id)} ${supplierName(o.supplierId)} ${warehouseName(o.warehouseId)}`
+          `${o.documentNo ?? o.poNo ?? formatId(o.id)} ${supplierName(o.supplierId)} ${warehouseName(o.warehouseId)}`
         }
         filters={
           <div className="flex gap-2">

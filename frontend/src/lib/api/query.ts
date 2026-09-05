@@ -969,6 +969,7 @@ export function useDeleteOpnameProject() {
 
 export interface OpnameCount {
   id: string;
+  documentNo?: string | null;
   projectId: string;
   warehouseId: string;
   postingDate?: string | null;
@@ -1057,5 +1058,74 @@ export function useBarcodeCheck(opnameId?: string, barcode?: string, excludeScan
     }>(`/opname-scan-details/check${qs({ opnameId: opnameId!, barcode: barcode!, excludeScanId })}`),
     enabled: !!opnameId && !!barcode,
     staleTime: 60_000,
+  });
+}
+
+export function useDocumentTypes() {
+  return useQuery({
+    queryKey: ["documentTypes"],
+    queryFn: () => api.get<import("@/types").DocumentType[]>("/document-types"),
+  });
+}
+export function useDocumentType(id?: string) {
+  return useQuery({
+    queryKey: ["documentTypes", id],
+    queryFn: () => api.get<import("@/types").DocumentType & { series: import("@/types").DocumentSeries[] }>(`/document-types/${id}`),
+    enabled: !!id,
+  });
+}
+export function useDocumentSeries(params?: { documentTypeId?: string; documentTypeCode?: string }) {
+  return useQuery({
+    queryKey: ["documentSeries", params],
+    queryFn: () => api.get<import("@/types").DocumentSeries[]>(`/document-series${qs(params ?? {})}`),
+  });
+}
+export function useDocumentSeriesOne(id?: string) {
+  return useQuery({
+    queryKey: ["documentSeries", id],
+    queryFn: () => api.get<import("@/types").DocumentSeries>(`/document-series/${id}`),
+    enabled: !!id,
+  });
+}
+export function useCreateDocumentType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => api.post("/document-types", body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentTypes"] }); qc.invalidateQueries({ queryKey: ["documentSeries"] }); },
+  });
+}
+export function useUpdateDocumentType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/document-types/${id}`, patch),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentTypes"] }); },
+  });
+}
+export function useRemoveDocumentType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/document-types/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentTypes"] }); },
+  });
+}
+export function useCreateDocumentSeries() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => api.post("/document-series", body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentSeries"] }); },
+  });
+}
+export function useUpdateDocumentSeries() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/document-series/${id}`, patch),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentSeries"] }); },
+  });
+}
+export function useRemoveDocumentSeries() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/document-series/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentSeries"] }); },
   });
 }

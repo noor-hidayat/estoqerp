@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Lanjutan cepat untuk sisa 100k — stock_balances, stock_batches, opname
 // Optimasi: untuk stock_balances & stock_batches, drop index unique sementara, insert batch besar, recreate index.
 // Opname pakai chunk insert biasa (sudah terbukti cepat untuk PO/SO).

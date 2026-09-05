@@ -135,7 +135,7 @@ export default function SalesOrderDetailPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-              SO {formatId(so.id)}
+              SO {(so as any).documentNo ?? (so as any).soNo ?? formatId(so.id)}
             </h1>
             <DocStatusBadge status={so.status} />
           </div>

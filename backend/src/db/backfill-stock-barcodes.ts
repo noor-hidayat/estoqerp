@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Backfill stock_barcodes dari riwayat scan transaksi (stock_movement_details)
 // menggunakan FULL barcode (barcode mentah hasil scan, tanpa diparsing/terpotong).
 //

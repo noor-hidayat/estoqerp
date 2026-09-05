@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
+import { toast } from "sonner";
 import {
   FormSection,
   FormGrid,
@@ -75,6 +76,7 @@ function SegmentRow({
   onCreateBatchFormat,
   onChange,
   onRemove,
+  disabled,
 }: {
   segment: BarcodeSegment;
   segments: BarcodeSegment[];
@@ -85,6 +87,7 @@ function SegmentRow({
   onCreateBatchFormat: () => void;
   onChange: (next: BarcodeSegment) => void;
   onRemove: () => void;
+  disabled?: boolean;
 }) {
   const c = fieldColor(segment.field);
   const issues = segmentIssues(segment, segments, barcodeLength);
@@ -111,6 +114,7 @@ function SegmentRow({
           value={segment.field}
           onChange={(e) => onChange({ ...segment, field: e.target.value as SegmentField })}
           className="h-9 w-full text-[13px] sm:w-auto sm:flex-1"
+          disabled={disabled}
         >
           {FIELD_OPTIONS.map((f) => (
             <option key={f} value={f}>
@@ -128,6 +132,7 @@ function SegmentRow({
               }
               className="h-9 w-full text-[13px]"
               aria-label="batch format"
+              disabled={disabled}
             >
               <option value="">
                 {batchFormatsLoading
@@ -179,6 +184,7 @@ function SegmentRow({
             }}
             className="h-9 w-14 shrink-0 text-center text-[13px]"
             aria-label="posisi mulai"
+            disabled={disabled}
           />
           <span className="shrink-0">s/d</span>
           <Input
@@ -196,6 +202,7 @@ function SegmentRow({
             }}
             className="h-9 w-14 shrink-0 text-center text-[13px]"
             aria-label="posisi akhir"
+            disabled={disabled}
           />
         </div>
 
@@ -204,7 +211,8 @@ function SegmentRow({
           onClick={onRemove}
           title="Delete segment"
           aria-label="Delete segment"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          disabled={disabled}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50 disabled:pointer-events-none"
         >
           <Trash2 size={15} strokeWidth={2} />
         </button>
@@ -219,7 +227,7 @@ function SegmentRow({
   );
 }
 
-export function FormatEditor({ format }: { format: BarcodeFormat }) {
+export function FormatEditor({ format, readOnly, hideInternalActions, onSaved }: { format: BarcodeFormat; readOnly?: boolean; hideInternalActions?: boolean; onSaved?: () => void }) {
   const navigate = useNavigate();
   const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
   const insert = useInsert("barcodeFormats");
@@ -313,6 +321,26 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
 
   const save = async (): Promise<boolean> => {
     if (!name.trim() || !validation.valid || saving) return false;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast.custom(
+        (t) => (
+          <div className="bg-background border border-border rounded-lg shadow-lg p-3 w-[300px]">
+            <div className="font-semibold text-xs">Confirm</div>
+            <div className="text-xs text-muted-foreground mt-1 leading-relaxed">This transaction will be made permanent, continue?</div>
+            <div className="flex justify-end gap-1.5 mt-3">
+              <Button variant="ghost" size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(false); }}>
+                No
+              </Button>
+              <Button size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(true); }}>
+                Yes
+              </Button>
+            </div>
+          </div>
+        ),
+        { duration: Infinity }
+      );
+    });
+    if (!confirmed) return false;
     setSaving(true);
     setSaveError("");
     const next: Omit<BarcodeFormat, "id"> = {
@@ -332,6 +360,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
       }
       setSaved(true);
       setSaving(false);
+      onSaved?.();
       return true;
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
@@ -345,20 +374,22 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
     if (ok) router.push("/app/setup/barcode-formats");
   };
 
-  useSaveShortcut(save, !saving);
+  useSaveShortcut(save, !saving && !readOnly);
 
-  const canSave = dirty && !!name.trim() && validation.valid && !saving;
+  const canSave = dirty && !!name.trim() && validation.valid && !saving && !readOnly;
 
   return (
     <div>
-      <div className="flex justify-end gap-2 mb-4">
-        <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={!canSave}>
-          Save
-        </Button>
-        <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit} disabled={!name.trim() || !validation.valid}>
-          Submit
-        </Button>
-      </div>
+      {!hideInternalActions && (
+        <div className="flex justify-end gap-2 mb-4">
+          <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={!canSave}>
+            Save
+          </Button>
+          <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit} disabled={!name.trim() || !validation.valid || !!readOnly}>
+            Submit
+          </Button>
+        </div>
+      )}
       {/* INFORMASI FORMAT */}
       <FormSection title="Format information">
         <FormGrid>
@@ -367,6 +398,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
             placeholder="e.g.: Retail Product"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            disabled={!!readOnly}
           />
           <Input
             label="Barcode length (digits)"
@@ -383,6 +415,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
                 if (!isNaN(n)) setLength(Math.min(40, Math.max(1, n)));
               }
             }}
+            disabled={!!readOnly}
           />
         </FormGrid>
         <div className="mt-5">
@@ -391,6 +424,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
             placeholder="Optional"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            disabled={!!readOnly}
           />
         </div>
 
@@ -399,16 +433,19 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
             label="Qty from master item"
             checked={qtyPerFormat}
             onChange={setQtyPerFormat}
+            disabled={!!readOnly}
           />
           <ToggleRow
             label="Barcode must be unique"
             checked={uniqueBarcode}
             onChange={setUniqueBarcode}
+            disabled={!!readOnly}
           />
           <ToggleRow
             label="Format active"
             checked={isActive}
             onChange={setIsActive}
+            disabled={!!readOnly}
           />
         </div>
       </FormSection>
@@ -417,10 +454,12 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
       <FormSection
         title="Segment definition"
         actions={
-          <Button variant="outline" size="sm" onClick={addSegment}>
-            <Plus size={14} strokeWidth={2} />
-            Add segment
-          </Button>
+          !readOnly ? (
+            <Button variant="outline" size="sm" onClick={addSegment}>
+              <Plus size={14} strokeWidth={2} />
+              Add segment
+            </Button>
+          ) : undefined
         }
       >
         <div className="flex flex-col gap-2">
@@ -443,6 +482,7 @@ export function FormatEditor({ format }: { format: BarcodeFormat }) {
               }
               onChange={(next) => updateSegment(seg.id, next)}
               onRemove={() => removeSegment(seg.id)}
+              disabled={!!readOnly}
             />
           ))}
         </div>
@@ -476,16 +516,18 @@ function ToggleRow({
   label,
   checked,
   onChange,
+  disabled,
 }: {
   label: string;
   checked: boolean;
   onChange: (next: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3">
       <span className="text-[13px] font-medium text-foreground">{label}</span>
       <div className="shrink-0">
-        <Toggle checked={checked} onChange={onChange} />
+        <Toggle checked={checked} onChange={disabled ? () => {} : onChange} />
       </div>
     </div>
   );

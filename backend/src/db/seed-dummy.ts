@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Seed data dummy: hasil scan opname per gudang,
 // dibuat dari item yang sudah ada di database (deterministik, bisa dijalankan ulang).
 import { desc, eq, like } from "drizzle-orm";

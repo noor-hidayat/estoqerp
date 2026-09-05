@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
+import { toast } from "sonner";
 import {
   FormSection,
   FormGrid,
@@ -102,11 +103,13 @@ function SegmentRow({
   segments,
   onChange,
   onRemove,
+  disabled,
 }: {
   segment: BatchSegment;
   segments: BatchSegment[];
   onChange: (next: BatchSegment) => void;
   onRemove: () => void;
+  disabled?: boolean;
 }) {
   const issues = segmentIssues(segment, segments);
   const chip = FIELD_CHIP[segment.field];
@@ -136,6 +139,7 @@ function SegmentRow({
           }
           className="h-9 w-full text-[13px] sm:w-auto sm:flex-1"
           aria-label="field"
+          disabled={disabled}
         >
           {FIELD_OPTIONS.map((f) => (
             <option key={f} value={f}>
@@ -151,6 +155,7 @@ function SegmentRow({
           }
           className="h-9 w-full text-[13px] sm:w-40"
           aria-label="mode"
+          disabled={disabled}
         >
           {MODE_OPTIONS.map((m) => (
             <option key={m} value={m}>
@@ -172,6 +177,7 @@ function SegmentRow({
               }}
               className="h-9 w-14 shrink-0 text-center text-[13px]"
               aria-label="posisi mulai"
+              disabled={disabled}
             />
             <span className="shrink-0">s/d</span>
             <Input
@@ -184,6 +190,7 @@ function SegmentRow({
               }}
               className="h-9 w-14 shrink-0 text-center text-[13px]"
               aria-label="posisi akhir"
+              disabled={disabled}
             />
           </div>
         ) : (
@@ -194,6 +201,7 @@ function SegmentRow({
               className="h-9 w-16 shrink-0 text-center text-[13px]"
               placeholder="-"
               aria-label="delimiter"
+              disabled={disabled}
             />
             <span className="shrink-0">#</span>
             <Input
@@ -206,6 +214,7 @@ function SegmentRow({
               }}
               className="h-9 w-12 shrink-0 text-center text-[13px]"
               aria-label="index segmen"
+              disabled={disabled}
             />
           </div>
         )}
@@ -218,6 +227,7 @@ function SegmentRow({
             }
             className="h-9 w-32 text-[13px]"
             aria-label="format tanggal"
+            disabled={disabled}
           >
             <option value="">Format tanggal…</option>
             {BATCH_DATE_FORMATS.map((f) => (
@@ -235,6 +245,7 @@ function SegmentRow({
             className="h-9 w-full text-[13px] sm:w-40"
             placeholder="Label (mis. Mesin)"
             aria-label="label custom"
+            disabled={disabled}
           />
         )}
 
@@ -243,7 +254,8 @@ function SegmentRow({
           onClick={onRemove}
           title="Delete segment"
           aria-label="Delete segment"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          disabled={disabled}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50 disabled:pointer-events-none"
         >
           <Trash2 size={15} strokeWidth={2} />
         </button>
@@ -258,7 +270,7 @@ function SegmentRow({
   );
 }
 
-export function BatchFormatEditor({ format }: { format: BatchFormat }) {
+export function BatchFormatEditor({ format, readOnly, hideInternalActions, onSaved }: { format: BatchFormat; readOnly?: boolean; hideInternalActions?: boolean; onSaved?: () => void }) {
   const navigate = useNavigate();
   const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
   const insert = useInsert("batchFormats");
@@ -333,6 +345,26 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
 
   const save = async (): Promise<boolean> => {
     if (!name.trim() || !valid || saving) return false;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast.custom(
+        (t) => (
+          <div className="bg-background border border-border rounded-lg shadow-lg p-3 w-[300px]">
+            <div className="font-semibold text-xs">Confirm</div>
+            <div className="text-xs text-muted-foreground mt-1 leading-relaxed">This transaction will be made permanent, continue?</div>
+            <div className="flex justify-end gap-1.5 mt-3">
+              <Button variant="ghost" size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(false); }}>
+                No
+              </Button>
+              <Button size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(true); }}>
+                Yes
+              </Button>
+            </div>
+          </div>
+        ),
+        { duration: Infinity }
+      );
+    });
+    if (!confirmed) return false;
     setSaving(true);
     setSaveError("");
     const next: Omit<BatchFormat, "id"> = {
@@ -350,6 +382,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
       }
       setSaved(true);
       setSaving(false);
+      onSaved?.();
       return true;
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
@@ -363,20 +396,22 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
     if (ok) router.push("/app/setup/batch-formats");
   };
 
-  useSaveShortcut(save, !saving);
+  useSaveShortcut(save, !saving && !readOnly);
 
-  const canSave = dirty && !!name.trim() && valid && !saving;
+  const canSave = dirty && !!name.trim() && valid && !saving && !readOnly;
 
   return (
     <div>
-      <div className="flex justify-end gap-2 mb-4">
-        <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={!canSave}>
-          Save
-        </Button>
-        <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit} disabled={!name.trim() || !valid}>
-          Submit
-        </Button>
-      </div>
+      {!hideInternalActions && (
+        <div className="flex justify-end gap-2 mb-4">
+          <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={!canSave}>
+            Save
+          </Button>
+          <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={handleSubmit} disabled={!name.trim() || !valid || !!readOnly}>
+            Submit
+          </Button>
+        </div>
+      )}
       {/* INFORMASI FORMAT */}
       <FormSection title="Format information">
         <FormGrid>
@@ -385,6 +420,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
             placeholder="e.g.: Batch Supplier"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            disabled={!!readOnly}
           />
         </FormGrid>
         <div className="mt-5">
@@ -393,6 +429,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
             placeholder="Optional"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            disabled={!!readOnly}
           />
         </div>
 
@@ -402,7 +439,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
               Format active
             </span>
             <div className="shrink-0">
-              <Toggle checked={isActive} onChange={setIsActive} />
+              <Toggle checked={isActive} onChange={readOnly ? () => {} : setIsActive} />
             </div>
           </div>
         </div>
@@ -412,10 +449,12 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
       <FormSection
         title="Segment definition"
         actions={
-          <Button variant="outline" size="sm" onClick={addSegment}>
-            <Plus size={14} strokeWidth={2} />
-            Add segment
-          </Button>
+          !readOnly ? (
+            <Button variant="outline" size="sm" onClick={addSegment}>
+              <Plus size={14} strokeWidth={2} />
+              Add segment
+            </Button>
+          ) : undefined
         }
       >
         <div className="flex flex-col gap-2">
@@ -431,6 +470,7 @@ export function BatchFormatEditor({ format }: { format: BatchFormat }) {
               segments={segments}
               onChange={(next) => updateSegment(seg.id, next)}
               onRemove={() => removeSegment(seg.id)}
+              disabled={!!readOnly}
             />
           ))}
         </div>

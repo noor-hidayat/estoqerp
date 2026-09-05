@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus } from "lucide-react";
 import { useInsert } from "@/lib/api/query";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
@@ -13,7 +12,7 @@ import {
   FormSection,
   FormGrid,
 } from "@/components/ui/form-page";
-import { useErrorToast } from "@/hooks/use-error-toast";
+import { toast } from "sonner";
 
 const KINDS = [
   { value: "RECEIPT", label: "Receipt (barang masuk)" },
@@ -24,37 +23,61 @@ const KINDS = [
 export default function NewTransactionTypePage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", kind: "RECEIPT", series: "SMV" });
-  const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
-  useErrorToast(error);
 
   const insertType = useInsert("movementTypes");
 
-  const save = async (): Promise<boolean> => {
+  const handleCreate = async () => {
     if (!form.name.trim()) {
-      setError("Name is required.");
-      return false;
+      toast.error("Name is required.");
+      return;
     }
     if (!form.series.trim()) {
-      setError("Series (prefix penomoran) wajib diisi.");
-      return false;
+      toast.error("Series (prefix penomoran) wajib diisi.");
+      return;
     }
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast.custom(
+        (t) => (
+          <div className="bg-background border border-border rounded-lg shadow-lg p-3 w-[300px]">
+            <div className="font-semibold text-xs">Confirm</div>
+            <div className="text-xs text-muted-foreground mt-1 leading-relaxed">This transaction will be made permanent, continue?</div>
+            <div className="flex justify-end gap-1.5 mt-3">
+              <Button variant="ghost" size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(false); }}>
+                No
+              </Button>
+              <Button size="sm" className="h-6 px-2.5 text-xs" onClick={() => { toast.dismiss(t); resolve(true); }}>
+                Yes
+              </Button>
+            </div>
+          </div>
+        ),
+        { duration: Infinity }
+      );
+    });
+    if (!confirmed) return;
     try {
       await insertType.mutateAsync({
         name: form.name.trim(),
         kind: form.kind,
         series: form.series.trim().toUpperCase(),
       });
-      setSaved(true);
-      return true;    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-      return false;
+      toast.success("Created");
+      navigate("/app/setup/transaction-types");
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
   return (
     <RoleGuard roles={MANAGER_ROLES} menus={["master.movementTypes"]}>
-      <FormPage title="Add Transaction Type">
+      <FormPage
+        title="Add Transaction Type"
+        actions={
+          <Button size="sm" onClick={handleCreate} disabled={insertType.isPending}>
+            {insertType.isPending ? "Saving..." : "Create"}
+          </Button>
+        }
+      >
         <FormSection>
           <FormGrid>
             <Field>

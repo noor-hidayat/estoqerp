@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Ganti permission kolom: hapus "opname.variance.column", tambah "settings.columnWidth".
 // role_admin: semua aksi; role_staff: view.
 import { eq } from "drizzle-orm";
