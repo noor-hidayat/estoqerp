@@ -34,9 +34,9 @@ export function TeamSwitcher() {
   const { isMobile } = useSidebar()
   const { workspaces, active, setActiveId } = useActiveWorkspace()
 
-  const activeIcon = active?.icon ?? "ClipboardList"
+  const activeIcon = active?.icon ?? "Warehouse"
   const activeLabel = active?.name ?? "Estoq"
-  const activeDesc = (active as unknown as { description?: string })?.description ?? "Stock Opname"
+  const activeDesc = (active as unknown as { description?: string })?.description ?? "Warehouse"
 
   return (
     <SidebarMenu>

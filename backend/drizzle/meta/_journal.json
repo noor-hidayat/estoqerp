@@ -246,6 +246,27 @@
       "when": 1788700000000,
       "tag": "0036_stock_movements_customer",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788575626225,
+      "tag": "0037_full-sync-schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788800000000,
+      "tag": "0038_remove_stockopname_workspace",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788591457543,
+      "tag": "0039_sharp_cardiac",
+      "breakpoints": true
     }
   ]
 }

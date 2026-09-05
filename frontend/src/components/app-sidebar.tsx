@@ -15,10 +15,13 @@ import { useActiveWorkspace } from "@/hooks/use-workspace"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { isSystem, permissions } = useSession()
-  const { activeId } = useActiveWorkspace()
+  const { active, activeId } = useActiveWorkspace()
   const canView = (menu: string) => can(isSystem, permissions, menu, "view")
   const canManage = (menu: string) => can(isSystem, permissions, menu, "manage")
-  const groups = navForPermissions(canView, canManage, activeId)
+  // Struktur warehouse baru dipicu key "wsp-warehouse"; workspace lain tidak difilter (perilaku lama).
+  const wsKey =
+    (active as unknown as { code?: string } | null)?.code === "warehouse" ? "wsp-warehouse" : activeId ?? null
+  const groups = navForPermissions(canView, canManage, wsKey)
 
   return (
     <Sidebar collapsible="icon" {...props}>

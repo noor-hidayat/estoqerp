@@ -1,6 +1,6 @@
 // @ts-nocheck
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, pool } from "./pool";
 import {
   branches,
@@ -118,16 +118,86 @@ async function ensureDocumentTypes() {
   }
 }
 
+/** Idempotent: pastikan document type Receiving + series RCV selalu ada
+ *  (dijalankan setiap seed, juga untuk DB lama yang sudah punya types lain). */
+async function ensureReceivingDocType() {
+  let [type] = await db.select().from(documentTypes).where(eq(documentTypes.name, "Receiving")).limit(1);
+  if (!type) {
+    [type] = await db.insert(documentTypes).values({ name: "Receiving", description: "Penerimaan awal (sebelum QC/GRN)", isActive: true }).returning();
+    console.log(`Document type Receiving created`);
+  }
+  const [series] = await db.select().from(documentSeries).where(eq(documentSeries.documentTypeId, type.id)).limit(1);
+  if (!series) {
+    await db.insert(documentSeries).values({
+      documentTypeId: type.id,
+      name: "Default Receiving",
+      prefix: "RCV",
+      format: "{PREFIX}-{YYMM}-{SEQ:4}",
+      padding: 4,
+      resetPolicy: "MONTHLY",
+      isDefault: true,
+      branchSpecific: false,
+      isActive: true,
+    });
+    console.log(`Default Receiving series (RCV) created`);
+  }
+}
+
 async function ensureBranchAccessForAdmin(adminId: number, roleMap: Map<string, number>) {
   // Ensure admin role has no branch restriction (isSystem bypass), but for non-system we add default?
   // Skip for sys admin
+}
+
+async function ensureWorkspaces() {
+  const { workspaces, workspaceAccesses, roles } = await import("./schema");
+  const fixed = [
+    { code: "warehouse", name: "Warehouse", description: "Stok, Ledger & Master Gudang", icon: "Warehouse", sortOrder: 1, publicId: "22222222-2222-4222-8222-222222222222" },
+    { code: "purchasing", name: "Purchasing", description: "Supplier, PO & Goods Receipt", icon: "ShoppingCart", sortOrder: 2, publicId: "33333333-3333-4333-8333-333333333333" },
+    { code: "marketing", name: "Marketing", description: "Customer & Sales Order", icon: "Megaphone", sortOrder: 3, publicId: "44444444-4444-4444-8444-444444444444" },
+  ];
+  for (const w of fixed) {
+    const [existing] = await db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.code, w.code)).limit(1);
+    if (!existing) {
+      await db.insert(workspaces).values({ code: w.code, name: w.name, description: w.description, icon: w.icon, sortOrder: w.sortOrder, publicId: w.publicId });
+      console.log(`Workspace created: ${w.code}`);
+    }
+  }
+  // Hapus workspace stockopname bila masih ada di DB lama (digantikan Warehouse).
+  // Dashboard-nya dipindahkan ke warehouse; workspace_access & ai_settings ikut cascade.
+  const { dashboards } = await import("./schema");
+  const [legacySo] = await db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.code, "stockopname")).limit(1);
+  if (legacySo) {
+    const [whWs] = await db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.code, "warehouse")).limit(1);
+    if (whWs) {
+      await db.update(dashboards).set({ workspaceId: whWs.id }).where(eq(dashboards.workspaceId, legacySo.id));
+    }
+    await db.delete(workspaces).where(eq(workspaces.id, legacySo.id));
+    console.log("Workspace stockopname dihapus (dashboard dipindah ke warehouse)");
+  }
+  // Semua role dapat semua workspace (biar tidak lockout), admin bisa kurangi nanti
+  const allRoles = await db.select({ id: roles.id }).from(roles);
+  const allWs = await db.select({ id: workspaces.id }).from(workspaces);
+  let added = 0;
+  for (const r of allRoles) {
+    for (const w of allWs) {
+      const [exists] = await db.select({ id: workspaceAccesses.id }).from(workspaceAccesses)
+        .where(and(eq(workspaceAccesses.roleId, r.id), eq(workspaceAccesses.workspaceId, w.id))).limit(1);
+      if (!exists) {
+        await db.insert(workspaceAccesses).values({ roleId: r.id, workspaceId: w.id });
+        added += 1;
+      }
+    }
+  }
+  if (added > 0) console.log(`Workspace access granted: ${added} rows`);
 }
 
 async function main() {
   console.log("Seeding start...");
   const roleMap = await ensureSystemRoles();
   const adminId = await ensureAdmin(roleMap);
+  await ensureWorkspaces();
   await ensureDocumentTypes();
+  await ensureReceivingDocType();
   // Note: dummy data intentionally not seeded per request (data dummy di hapus)
   // If you need to wipe old dummy data, uncomment truncate section below
   // await db.execute(sql`TRUNCATE ... CASCADE`)

@@ -6,7 +6,7 @@ export type WidgetType = "kpi" | "bar" | "line" | "pie" | "table";
 
 export interface WidgetTemplate {
   id: string; // templateId yang disimpan di dashboard_widgets.config.templateId
-  workspaceId: string; // wsp-stockopname | wsp-warehouse | wsp-purchasing | wsp-marketing | null (global)
+  workspaceId: string; // wsp-warehouse | wsp-purchasing | wsp-marketing | null (global)
   type: WidgetType;
   title: string;
   description: string;
@@ -23,10 +23,10 @@ export interface WidgetTemplate {
 }
 
 export const WIDGET_TEMPLATES: WidgetTemplate[] = [
-  // ---- wsp-stockopname: fokus opname_scan_details ----
+  // ---- ex wsp-stockopname (kini bagian Warehouse): fokus opname_scan_details ----
   {
     id: "tpl-kpi-total-scan",
-    workspaceId: "wsp-stockopname",
+    workspaceId: "wsp-warehouse",
     type: "kpi",
     title: "Total Qty Scan",
     description: "Jumlah quantity dari semua scan opname",
@@ -35,7 +35,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
   },
   {
     id: "tpl-bar-scan-warehouse",
-    workspaceId: "wsp-stockopname",
+    workspaceId: "wsp-warehouse",
     type: "bar",
     title: "Scan per Warehouse",
     description: "Qty scan dikelompokkan per gudang",
@@ -44,7 +44,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
   },
   {
     id: "tpl-pie-scan-itemgroup",
-    workspaceId: "wsp-stockopname",
+    workspaceId: "wsp-warehouse",
     type: "pie",
     title: "Scan per Item Group",
     description: "Qty scan per kategori barang",
@@ -53,7 +53,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
   },
   {
     id: "tpl-line-scan-day",
-    workspaceId: "wsp-stockopname",
+    workspaceId: "wsp-warehouse",
     type: "line",
     title: "Tren Scan Harian",
     description: "Qty scan per hari",
@@ -62,7 +62,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
   },
   {
     id: "tpl-table-scan-lokasi",
-    workspaceId: "wsp-stockopname",
+    workspaceId: "wsp-warehouse",
     type: "table",
     title: "Scan per Lokasi",
     description: "Qty scan per lokasi (top 20)",

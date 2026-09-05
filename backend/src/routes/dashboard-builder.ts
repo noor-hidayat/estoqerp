@@ -4,10 +4,95 @@ import { and, desc, eq, inArray, or, sql, sum, count, avg, min, max } from "driz
 import { db, pool } from "../db/pool";
 import * as s from "../db/schema";
 import { checkPermission, hasWorkspaceAccess } from "../middleware/rbac";
-import { nextRowId } from "../lib/id";
 import { TEMPLATE_BY_ID, templatesForWorkspace, WIDGET_TEMPLATES } from "../lib/dashboard-templates";
 
 export const dashboardBuilderRouter = Router();
+
+// ---------------------------------------------------------------------------
+// new-schema helpers: frontend bicara publicId (uuid), DB pakai bigint internal.
+// ---------------------------------------------------------------------------
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuidVal = (v: unknown): v is string => typeof v === "string" && UUID_RE.test(v);
+const isIntVal = (v: unknown) => typeof v === "number" || (typeof v === "string" && /^\d+$/.test(v));
+
+async function resolveDashboardInternalId(val: unknown): Promise<number | null> {
+  if (val === null || val === undefined || val === "") return null;
+  if (isIntVal(val)) return Number(val);
+  if (isUuidVal(val)) {
+    const [r] = await db.select({ id: s.dashboards.id }).from(s.dashboards).where(eq(s.dashboards.publicId, val)).limit(1);
+    return r?.id ?? null;
+  }
+  return null;
+}
+
+async function resolveWidgetInternalId(val: unknown): Promise<number | null> {
+  if (val === null || val === undefined || val === "") return null;
+  if (isIntVal(val)) return Number(val);
+  if (isUuidVal(val)) {
+    const [r] = await db.select({ id: s.dashboardWidgets.id }).from(s.dashboardWidgets).where(eq(s.dashboardWidgets.publicId, val)).limit(1);
+    return r?.id ?? null;
+  }
+  return null;
+}
+
+async function resolveWorkspace(val: unknown): Promise<{ id: number; code: string; publicId: string } | null> {
+  if (val === null || val === undefined || val === "") return null;
+  if (isIntVal(val)) {
+    const [r] = await db.select({ id: s.workspaces.id, code: s.workspaces.code, publicId: s.workspaces.publicId }).from(s.workspaces).where(eq(s.workspaces.id, Number(val))).limit(1);
+    return r ?? null;
+  }
+  if (isUuidVal(val)) {
+    const [r] = await db.select({ id: s.workspaces.id, code: s.workspaces.code, publicId: s.workspaces.publicId }).from(s.workspaces).where(eq(s.workspaces.publicId, val)).limit(1);
+    return r ?? null;
+  }
+  const [r] = await db.select({ id: s.workspaces.id, code: s.workspaces.code, publicId: s.workspaces.publicId }).from(s.workspaces).where(eq(s.workspaces.code, String(val))).limit(1);
+  return r ?? null;
+}
+
+async function resolveBranchInternalId(val: unknown): Promise<number | null> {
+  if (val === null || val === undefined || val === "") return null;
+  if (isIntVal(val)) return Number(val);
+  if (isUuidVal(val)) {
+    const [r] = await db.select({ id: s.branches.id }).from(s.branches).where(eq(s.branches.publicId, val)).limit(1);
+    return r?.id ?? null;
+  }
+  return null;
+}
+
+async function resolveUserInternalId(val: unknown): Promise<number | null> {
+  if (val === null || val === undefined || val === "") return null;
+  if (isIntVal(val)) return Number(val);
+  if (isUuidVal(val)) {
+    const [r] = await db.select({ id: s.users.id }).from(s.users).where(eq(s.users.publicId, val)).limit(1);
+    return r?.id ?? null;
+  }
+  return null;
+}
+
+/** workspace publicIds by internal id (untuk response API). */
+async function workspacePublicIdMap(ids: number[]): Promise<Map<number, string>> {
+  const map = new Map<number, string>();
+  if (ids.length === 0) return map;
+  const rows = await db.select({ id: s.workspaces.id, publicId: s.workspaces.publicId }).from(s.workspaces).where(inArray(s.workspaces.id, ids));
+  for (const r of rows) map.set(r.id, r.publicId);
+  return map;
+}
+
+function toPublicDashboard(row: typeof s.dashboards.$inferSelect, wsPublicId: string | null) {
+  return {
+    id: row.publicId,
+    name: row.name,
+    ownerId: null as string | null,
+    branchId: null as string | null,
+    workspaceId: wsPublicId,
+    isGlobal: row.isGlobal,
+    createdAt: row.createdAt,
+  };
+}
+
+function toPublicWidget(w: typeof s.dashboardWidgets.$inferSelect) {
+  return { ...w, id: w.publicId };
+}
 
 // ---------------------------------------------------------------------------
 // WHITELIST fact table — tidak ada SQL bebas. Hanya kombinasi
@@ -851,7 +936,9 @@ dashboardBuilderRouter.get("/dashboard-templates", async (req, res, next) => {
   if (!(await checkPermission(req, res, "dashboard", "view"))) return;
   try {
     const workspaceId = typeof req.query.workspaceId === "string" ? req.query.workspaceId : null;
-    const list = templatesForWorkspace(workspaceId);
+    // templates diregister per legacy key wsp-<code>; query datang sebagai publicId/uuid atau code
+    const ws = await resolveWorkspace(workspaceId);
+    const list = templatesForWorkspace(ws ? `wsp-${ws.code}` : workspaceId);
     res.json(list);
   } catch (e) {
     next(e);
@@ -928,11 +1015,14 @@ dashboardBuilderRouter.get("/dashboards", async (req, res, next) => {
     const workspaceId = typeof req.query.workspaceId === "string" ? req.query.workspaceId : null;
     let rows: (typeof s.dashboards.$inferSelect)[];
     if (workspaceId) {
-      rows = await db.select().from(s.dashboards).where(or(eq(s.dashboards.workspaceId, workspaceId), eq(s.dashboards.isGlobal, true))).orderBy(s.dashboards.name);
+      const ws = await resolveWorkspace(workspaceId);
+      if (!ws) return res.json([]);
+      rows = await db.select().from(s.dashboards).where(or(eq(s.dashboards.workspaceId, ws.id), eq(s.dashboards.isGlobal, true))).orderBy(s.dashboards.name);
     } else {
       rows = await db.select().from(s.dashboards).orderBy(s.dashboards.name);
     }
-    res.json(rows);
+    const wsMap = await workspacePublicIdMap([...new Set(rows.map((r) => r.workspaceId).filter((v): v is number => v !== null))]);
+    res.json(rows.map((r) => toPublicDashboard(r, r.workspaceId === null ? null : (wsMap.get(r.workspaceId) ?? null))));
   } catch (e) {
     next(e);
   }
@@ -943,21 +1033,23 @@ dashboardBuilderRouter.post("/dashboards", async (req, res, next) => {
   try {
     const name = String(req.body?.name ?? "").trim();
     if (!name) return res.status(400).json({ error: "Nama dashboard wajib." });
-    const workspaceId = typeof req.body?.workspaceId === "string" && req.body.workspaceId ? req.body.workspaceId : null;
-    if (workspaceId && !(await hasWorkspaceAccess(req as any, workspaceId))) {
+    const wsRaw = typeof req.body?.workspaceId === "string" && req.body.workspaceId ? req.body.workspaceId : null;
+    const ws = await resolveWorkspace(wsRaw);
+    if (wsRaw && !ws) return res.status(400).json({ error: "Workspace tidak ditemukan." });
+    if (ws && !(await hasWorkspaceAccess(req as any, String(ws.id)))) {
       res.status(403).json({ error: "Tidak punya akses workspace." });
       return;
     }
-    const id = await nextRowId(db, s.dashboards, "dsb");
-    await db.insert(s.dashboards).values({
-      id,
+    const ownerId = await resolveUserInternalId((req as any).user?.id ?? null);
+    const branchId = await resolveBranchInternalId(req.body?.branchId ?? null);
+    const [created] = await db.insert(s.dashboards).values({
       name,
-      ownerId: (req as any).user?.id ?? null,
-      branchId: req.body?.branchId ?? null,
-      workspaceId,
+      ownerId,
+      branchId,
+      workspaceId: ws?.id ?? null,
       isGlobal: req.body?.isGlobal === false ? false : true,
-    });
-    res.status(201).json({ id });
+    }).returning();
+    res.status(201).json({ id: created.publicId });
   } catch (e) {
     next(e);
   }
@@ -966,17 +1058,20 @@ dashboardBuilderRouter.post("/dashboards", async (req, res, next) => {
 dashboardBuilderRouter.get("/dashboards/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "dashboard", "view"))) return;
   try {
+    const internalId = await resolveDashboardInternalId(req.params.id);
+    if (internalId === null) return res.status(404).json({ error: "Dashboard tidak ditemukan." });
     const [row] = await db
       .select()
       .from(s.dashboards)
-      .where(eq(s.dashboards.id, req.params.id))
+      .where(eq(s.dashboards.id, internalId))
       .limit(1);
     if (!row) return res.status(404).json({ error: "Dashboard tidak ditemukan." });
     const widgets = await db
       .select()
       .from(s.dashboardWidgets)
-      .where(eq(s.dashboardWidgets.dashboardId, req.params.id));
-    res.json({ ...row, widgets });
+      .where(eq(s.dashboardWidgets.dashboardId, internalId));
+    const wsMap = await workspacePublicIdMap(row.workspaceId === null ? [] : [row.workspaceId]);
+    res.json({ ...toPublicDashboard(row, row.workspaceId === null ? null : (wsMap.get(row.workspaceId) ?? null)), createdAt: row.createdAt, widgets: widgets.map(toPublicWidget) });
   } catch (e) {
     next(e);
   }
@@ -987,7 +1082,8 @@ dashboardBuilderRouter.get("/dashboards/:id", async (req, res, next) => {
 dashboardBuilderRouter.get("/dashboards/:id/widgets/data", async (req, res, next) => {
   if (!(await checkPermission(req, res, "dashboard", "view"))) return;
   try {
-    const dashboardId = req.params.id;
+    const dashboardId = await resolveDashboardInternalId(req.params.id);
+    if (dashboardId === null) return res.json({ widgets: [] });
     const widgets = await db
       .select()
       .from(s.dashboardWidgets)
@@ -1007,7 +1103,7 @@ dashboardBuilderRouter.get("/dashboards/:id/widgets/data", async (req, res, next
         let effectiveTitle: string | undefined;
         if (templateId) {
           const tpl = TEMPLATE_BY_ID.get(templateId);
-          if (!tpl) return { id: w.id, type: w.type, layout: w.layout, title: w.type, rows: [] as unknown[], error: `Template ${templateId} tidak ditemukan` };
+          if (!tpl) return { id: w.publicId, type: w.type, layout: w.layout, title: w.type, rows: [] as unknown[], error: `Template ${templateId} tidak ditemukan` };
           effectiveConfig = tpl.config;
           effectiveType = tpl.type;
           effectiveTitle = tpl.title;
@@ -1025,9 +1121,9 @@ dashboardBuilderRouter.get("/dashboards/:id/widgets/data", async (req, res, next
         try {
           // Merge title ke config untuk label, tapi buildWidgetQuery tidak butuh title
           const result = await buildWidgetQuery(effectiveConfig, req);
-          return { id: w.id, type: effectiveType, layout: w.layout, title: effectiveTitle ?? w.type, templateId, rows: result.rows, percentChange: (result as any).percentChange ?? null, periodLabel: (result as any).periodLabel ?? null, previousValue: (result as any).previousValue ?? null, error: null as string | null, config: effectiveConfig };
+          return { id: w.publicId, type: effectiveType, layout: w.layout, title: effectiveTitle ?? w.type, templateId, rows: result.rows, percentChange: (result as any).percentChange ?? null, periodLabel: (result as any).periodLabel ?? null, previousValue: (result as any).previousValue ?? null, error: null as string | null, config: effectiveConfig };
         } catch (e) {
-          if (e instanceof InvalidConfig) return { id: w.id, type: effectiveType, layout: w.layout, title: effectiveTitle ?? w.type, templateId, rows: [] as unknown[], percentChange: null, periodLabel: null, previousValue: null, error: e.message, config: effectiveConfig };
+          if (e instanceof InvalidConfig) return { id: w.publicId, type: effectiveType, layout: w.layout, title: effectiveTitle ?? w.type, templateId, rows: [] as unknown[], percentChange: null, periodLabel: null, previousValue: null, error: e.message, config: effectiveConfig };
           throw e;
         }
       })
@@ -1043,9 +1139,11 @@ dashboardBuilderRouter.put("/dashboards/:id", async (req, res, next) => {
   try {
     const patch: Record<string, any> = {};
     if (req.body?.name !== undefined) patch.name = String(req.body.name);
-    if (req.body?.branchId !== undefined) patch.branchId = req.body.branchId ?? null;
+    if (req.body?.branchId !== undefined) patch.branchId = await resolveBranchInternalId(req.body.branchId);
     if (req.body?.isGlobal !== undefined) patch.isGlobal = Boolean(req.body.isGlobal);
-    await db.update(s.dashboards).set(patch).where(eq(s.dashboards.id, req.params.id));
+    const internalId = await resolveDashboardInternalId(req.params.id);
+    if (internalId === null) return res.status(404).json({ error: "Dashboard tidak ditemukan." });
+    await db.update(s.dashboards).set(patch).where(eq(s.dashboards.id, internalId));
     res.json({ ok: true });
   } catch (e) {
     next(e);
@@ -1055,7 +1153,9 @@ dashboardBuilderRouter.put("/dashboards/:id", async (req, res, next) => {
 dashboardBuilderRouter.delete("/dashboards/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "dashboard", "manage"))) return;
   try {
-    await db.delete(s.dashboards).where(eq(s.dashboards.id, req.params.id));
+    const internalId = await resolveDashboardInternalId(req.params.id);
+    if (internalId === null) return res.status(404).json({ error: "Dashboard tidak ditemukan." });
+    await db.delete(s.dashboards).where(eq(s.dashboards.id, internalId));
     res.json({ ok: true });
   } catch (e) {
     next(e);
@@ -1072,6 +1172,8 @@ dashboardBuilderRouter.post("/dashboards/:id/widgets", async (req, res, next) =>
     let config: unknown = req.body?.config;
     const layout = req.body?.layout ?? {};
 
+    const dashboardId = await resolveDashboardInternalId(req.params.id);
+    if (dashboardId === null) return res.status(404).json({ error: "Dashboard tidak ditemukan." });
     if (templateId) {
       const tpl = TEMPLATE_BY_ID.get(templateId);
       if (!tpl) return res.status(400).json({ error: `Template ${templateId} tidak dikenal.` });
@@ -1079,30 +1181,26 @@ dashboardBuilderRouter.post("/dashboards/:id/widgets", async (req, res, next) =>
       // Simpan minimal { templateId, title } — title boleh override
       const titleOverride = typeof req.body?.title === "string" ? String(req.body.title).trim() : undefined;
       config = { templateId, ...(titleOverride ? { title: titleOverride } : {}) };
-      // Validasi workspace cocok dengan dashboard
-      const [dash] = await db.select({ workspaceId: s.dashboards.workspaceId }).from(s.dashboards).where(eq(s.dashboards.id, req.params.id)).limit(1);
-      if (dash?.workspaceId && tpl.workspaceId !== dash.workspaceId) {
-        return res.status(400).json({ error: `Template ${templateId} untuk workspace ${tpl.workspaceId}, dashboard ini ${dash.workspaceId}.` });
+      // Validasi workspace cocok dengan dashboard (bandingkan via code)
+      const [dash] = await db.select({ workspaceId: s.dashboards.workspaceId }).from(s.dashboards).where(eq(s.dashboards.id, dashboardId)).limit(1);
+      if (dash?.workspaceId) {
+        const [dashWs] = await db.select({ code: s.workspaces.code }).from(s.workspaces).where(eq(s.workspaces.id, dash.workspaceId)).limit(1);
+        if (dashWs && tpl.workspaceId !== `wsp-${dashWs.code}`) {
+          return res.status(400).json({ error: `Template ${templateId} untuk workspace ${tpl.workspaceId}, dashboard ini ${dashWs.code}.` });
+        }
       }
     } else {
       if (!WIDGET_TYPES.includes(type)) return res.status(400).json({ error: "Tipe widget tidak valid." });
       if (!config) config = {};
     }
 
-    const id = await nextRowId(db, s.dashboardWidgets, "wgt");
-    await db.insert(s.dashboardWidgets).values({
-      id,
-      dashboardId: req.params.id,
+    const [w] = await db.insert(s.dashboardWidgets).values({
+      dashboardId,
       type,
       config: (config ?? {}) as object,
       layout: layout as object,
-    });
-    const [w] = await db
-      .select()
-      .from(s.dashboardWidgets)
-      .where(eq(s.dashboardWidgets.id, id))
-      .limit(1);
-    res.status(201).json(w);
+    }).returning();
+    res.status(201).json(toPublicWidget(w));
   } catch (e) {
     next(e);
   }
@@ -1127,19 +1225,26 @@ dashboardBuilderRouter.put("/dashboards/:id/widgets/:widgetId", async (req, res,
       if (req.body?.config !== undefined) patch.config = req.body.config;
       if (req.body?.title !== undefined && !patch.config) {
         // Title override tanpa ganti template — patch config.title
-        const [cur] = await db.select({ config: s.dashboardWidgets.config }).from(s.dashboardWidgets).where(and(eq(s.dashboardWidgets.id, req.params.widgetId), eq(s.dashboardWidgets.dashboardId, req.params.id))).limit(1);
+        const widgetIdLookup = await resolveWidgetInternalId(req.params.widgetId);
+        const dashboardIdLookup = await resolveDashboardInternalId(req.params.id);
+        const [cur] = widgetIdLookup !== null && dashboardIdLookup !== null
+          ? await db.select({ config: s.dashboardWidgets.config }).from(s.dashboardWidgets).where(and(eq(s.dashboardWidgets.id, widgetIdLookup), eq(s.dashboardWidgets.dashboardId, dashboardIdLookup))).limit(1)
+          : [];
         const curCfg = (cur?.config ?? {}) as Record<string, unknown>;
         patch.config = { ...curCfg, title: String(req.body.title) };
       }
     }
     if (Object.keys(patch).length === 0) return res.json({ ok: true });
+    const dashboardId = await resolveDashboardInternalId(req.params.id);
+    const widgetId = await resolveWidgetInternalId(req.params.widgetId);
+    if (dashboardId === null || widgetId === null) return res.status(404).json({ error: "Widget tidak ditemukan." });
     await db
       .update(s.dashboardWidgets)
       .set(patch)
       .where(
         and(
-          eq(s.dashboardWidgets.id, req.params.widgetId),
-          eq(s.dashboardWidgets.dashboardId, req.params.id)
+          eq(s.dashboardWidgets.id, widgetId),
+          eq(s.dashboardWidgets.dashboardId, dashboardId)
         )
       );
     res.json({ ok: true });
@@ -1151,12 +1256,15 @@ dashboardBuilderRouter.put("/dashboards/:id/widgets/:widgetId", async (req, res,
 dashboardBuilderRouter.delete("/dashboards/:id/widgets/:widgetId", async (req, res, next) => {
   if (!(await checkPermission(req, res, "dashboard", "manage"))) return;
   try {
+    const dashboardId = await resolveDashboardInternalId(req.params.id);
+    const widgetId = await resolveWidgetInternalId(req.params.widgetId);
+    if (dashboardId === null || widgetId === null) return res.status(404).json({ error: "Widget tidak ditemukan." });
     await db
       .delete(s.dashboardWidgets)
       .where(
         and(
-          eq(s.dashboardWidgets.id, req.params.widgetId),
-          eq(s.dashboardWidgets.dashboardId, req.params.id)
+          eq(s.dashboardWidgets.id, widgetId),
+          eq(s.dashboardWidgets.dashboardId, dashboardId)
         )
       );
     res.json({ ok: true });
@@ -1173,13 +1281,16 @@ dashboardBuilderRouter.patch("/dashboards/:id/layout", async (req, res, next) =>
       return res.status(400).json({ error: "widgets wajib berupa array." });
     for (const w of widgets) {
       if (!w || !w.id) continue;
+      const widgetId = await resolveWidgetInternalId(w.id);
+      const dashboardId = await resolveDashboardInternalId(req.params.id);
+      if (widgetId === null || dashboardId === null) continue;
       await db
         .update(s.dashboardWidgets)
         .set({ layout: w.layout ?? {} })
         .where(
           and(
-            eq(s.dashboardWidgets.id, w.id),
-            eq(s.dashboardWidgets.dashboardId, req.params.id)
+            eq(s.dashboardWidgets.id, widgetId),
+            eq(s.dashboardWidgets.dashboardId, dashboardId)
           )
         );
     }

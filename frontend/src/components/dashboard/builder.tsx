@@ -258,7 +258,7 @@ export function DashboardBuilder({
             {Object.entries(grouped).map(([wsId, tpls]) => (
               <div key={wsId} className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {wsId === "wsp-stockopname" ? "Stock Opname" : wsId === "wsp-warehouse" ? "Warehouse" : wsId === "wsp-purchasing" ? "Purchasing" : wsId === "wsp-marketing" ? "Marketing" : wsId}
+                  {wsId === "wsp-warehouse" ? "Warehouse" : wsId === "wsp-purchasing" ? "Purchasing" : wsId === "wsp-marketing" ? "Marketing" : wsId}
                 </h4>
                 <div className="grid gap-2">
                   {tpls.map((tpl) => {

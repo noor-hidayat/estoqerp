@@ -11,6 +11,7 @@ import type {
   ScanHistoryRow,
   Supplier, Customer, PurchaseOrder, PurchaseOrderLine,
   SalesOrder, SalesOrderLine, GoodsReceipt, GoodsReceiptLine,
+  Receiving,
   Delivery, DeliveryLine,
 } from "@/types";
 import type { DashboardMeta, WidgetConfig, WidgetRow } from "@/components/dashboard/types";
@@ -531,6 +532,71 @@ export function useCancelGoodsReceipt() {
     onSuccess: (_d, id) => {
       qc.invalidateQueries({ queryKey: ["goods-receipts"] });
       qc.invalidateQueries({ queryKey: ["goods-receipts", id] });
+    },
+  });
+}
+
+// ---- Supply Chain: Receivings (tahap awal inbound, bukan GR) ----
+
+export function useReceivings(params?: Record<string, unknown>) {
+  return useResourceList<Receiving>("receivings", params);
+}
+
+export function useReceiving(id?: string) {
+  return useResourceOne<Receiving>("receivings", id);
+}
+
+export function useCreateReceiving() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      api.post<{ id: string }>("/receivings", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["receivings"] });
+    },
+  });
+}
+
+export function useUpdateReceiving() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) =>
+      api.patch(`/receivings/${id}`, patch),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ["receivings"] });
+      qc.invalidateQueries({ queryKey: ["receivings", id] });
+    },
+  });
+}
+
+export function useRemoveReceiving() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/receivings/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["receivings"] });
+    },
+  });
+}
+
+export function usePostReceiving() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/receivings/${id}/post`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["receivings"] });
+      qc.invalidateQueries({ queryKey: ["receivings", id] });
+    },
+  });
+}
+
+export function useCancelReceiving() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/receivings/${id}/cancel`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["receivings"] });
+      qc.invalidateQueries({ queryKey: ["receivings", id] });
     },
   });
 }

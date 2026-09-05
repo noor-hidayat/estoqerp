@@ -17,6 +17,21 @@ const STATIC_TITLES: Record<string, string> = {
   "/app/setup/transaction-types/new": "New Transaction Type",
   "/app/setup/uom/new": "Add UOM",
   "/app/transaction/new": "New Transaction",
+  "/app/inbound": "Inbound",
+  "/app/outbound": "Outbound",
+  "/app/inbound/receiving": "Receiving",
+  "/app/inbound/receiving/new": "New Receiving",
+  "/app/inbound/qc": "QC Inspection",
+  "/app/inbound/putaway": "Putaway",
+  "/app/inbound/supplier-return": "Supplier Return",
+  "/app/outbound/picking": "Picking",
+  "/app/outbound/packing": "Packing",
+  "/app/outbound/customer-return": "Customer Return",
+  "/app/report/stock-aging": "Stock Aging",
+  "/app/report/batch-traceability": "Batch Traceability",
+  "/app/report/inventory-valuation": "Inventory Valuation",
+  "/app/report/receiving": "Receiving Report",
+  "/app/report/delivery-performance": "Picking / Delivery Performance",
   "/app/inventory/ledger": "Stock Ledger",
   "/app/inventory/batches": "Batch",
 };
@@ -35,6 +50,7 @@ const PATTERNS: { regex: RegExp; title: string }[] = [
   { regex: /^\/app\/setup\/transaction-types\/[^/]+$/, title: "Edit Transaction Type" },
   { regex: /^\/app\/setup\/uom\/[^/]+$/, title: "Edit UOM" },
   { regex: /^\/app\/transaction\/[^/]+$/, title: "Transaction Details" },
+  { regex: /^\/app\/inbound\/receiving\/[^/]+$/, title: "Receiving Details" },
 ];
 
 export function getPageTitle(pathname: string): string | null {

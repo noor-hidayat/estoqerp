@@ -939,6 +939,62 @@ export const goodsReceiptLines = pgTable(
   (t) => [index("idx_grl_gr").on(t.goodsReceiptId)]
 );
 
+// --- Receiving (tahap awal inbound: Receiving → QC → GRN → stok) ---
+// Catatan: receiving TIDAK menggerakkan stok. Stok bertambah saat GRN diposting.
+// Return barang masuk ke Supplier Return.
+
+export const receivings = pgTable(
+  "receivings",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    documentNo: text("document_no").unique(),
+    seriesId: bigint("series_id", { mode: "number" }).references(() => documentSeries.id),
+    purchaseOrderId: bigint("purchase_order_id", { mode: "number" })
+      .notNull()
+      .references(() => purchaseOrders.id),
+    supplierId: bigint("supplier_id", { mode: "number" }).references(() => suppliers.id),
+    warehouseId: bigint("warehouse_id", { mode: "number" })
+      .notNull()
+      .references(() => warehouses.id),
+    receiptDate: date("receipt_date").notNull(),
+    status: text("status", { enum: docStatuses }).notNull().default("DRAFT"),
+    notes: text("notes"),
+    createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
+    branchId: bigint("branch_id", { mode: "number" }).references(() => branches.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_receivings_po").on(t.purchaseOrderId),
+    index("idx_receivings_wh").on(t.warehouseId),
+    index("idx_receivings_status").on(t.status),
+    index("idx_receivings_document_no").on(t.documentNo),
+  ]
+);
+
+export const receivingLines = pgTable(
+  "receiving_lines",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    receivingId: bigint("receiving_id", { mode: "number" })
+      .notNull()
+      .references(() => receivings.id, { onDelete: "cascade" }),
+    itemId: bigint("item_id", { mode: "number" })
+      .notNull()
+      .references(() => items.id),
+    uomId: bigint("uom_id", { mode: "number" })
+      .notNull()
+      .references(() => uom.id),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
+    batchNumber: text("batch_number"),
+    note: text("note"),
+  },
+  (t) => [index("idx_rcl_receiving").on(t.receivingId)]
+);
+
 export const deliveries = pgTable(
   "deliveries",
   {

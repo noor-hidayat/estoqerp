@@ -604,6 +604,33 @@ export interface GoodsReceipt {
   lines?: GoodsReceiptLine[];
 }
 
+/** Receiving — tahap awal inbound (Receiving → QC → GRN → stok). Bukan Goods Receipt. */
+export interface ReceivingLine {
+  id: string;
+  receivingId?: string;
+  itemId: string;
+  uomId: string;
+  qty: string;
+  unitPrice?: string | null;
+  batchNumber?: string | null;
+  note?: string | null;
+}
+
+export interface Receiving {
+  id: string;
+  publicId?: string;
+  documentNo?: string | null;
+  rcvNo: string | number;
+  purchaseOrderId: string;
+  warehouseId: string;
+  receiptDate: string;
+  notes?: string | null;
+  status: DocStatus;
+  createdAt?: string;
+  updatedAt?: string;
+  lines?: ReceivingLine[];
+}
+
 export interface DeliveryLine {
   id: string;
   deliveryId?: string;

@@ -68,7 +68,7 @@ function periodKeyOf(date: Date, resetPolicy: string): string {
 
 /**
  * Generate next document number for a given document type / series.
- * - typeCode: code of documentTypes (e.g. "PO", "SO", "GR", "DLV", "SMV", "SOC", "OPJ")
+ * - typeCode: code of documentTypes (e.g. "PO", "SO", "RCV", "GR", "DLV", "SMV", "SOC", "OPJ")
  * - opts.seriesId / seriesCode: pick specific series within type; if omitted uses default series (isDefault)
  * - opts.branchId: required if series.branchSpecific=true; otherwise ignored
  * - opts.date: used for periodKey (monthly reset) and tokens; defaults to now
@@ -91,6 +91,7 @@ export async function nextDocumentNo(
   const TYPE_CODE_TO_NAME: Record<string, string> = {
     PO: "Purchase Order",
     SO: "Sales Order",
+    RCV: "Receiving",
     GR: "Goods Receipt",
     DLV: "Delivery",
     SMV: "Stock Movement",

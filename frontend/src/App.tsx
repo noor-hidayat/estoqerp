@@ -88,6 +88,22 @@ const GoodsReceiptDetailPage = lazy(() => import("@/app/app/goods-receipts/[id]/
 const DeliveriesPage = lazy(() => import("@/app/app/deliveries/page"));
 const NewDeliveryPage = lazy(() => import("@/app/app/deliveries/new/page"));
 const DeliveryDetailPage = lazy(() => import("@/app/app/deliveries/[id]/page"));
+const InboundPage = lazy(() => import("@/app/app/inbound/page"));
+const InboundReceivingPage = lazy(() => import("@/app/app/inbound/receiving/page"));
+const NewInboundReceivingPage = lazy(() => import("@/app/app/inbound/receiving/new/page"));
+const InboundReceivingDetailPage = lazy(() => import("@/app/app/inbound/receiving/[id]/page"));
+const InboundQcPage = lazy(() => import("@/app/app/inbound/qc/page"));
+const InboundPutawayPage = lazy(() => import("@/app/app/inbound/putaway/page"));
+const SupplierReturnPage = lazy(() => import("@/app/app/inbound/supplier-return/page"));
+const OutboundPickingPage = lazy(() => import("@/app/app/outbound/picking/page"));
+const OutboundPage = lazy(() => import("@/app/app/outbound/page"));
+const OutboundPackingPage = lazy(() => import("@/app/app/outbound/packing/page"));
+const CustomerReturnPage = lazy(() => import("@/app/app/outbound/customer-return/page"));
+const StockAgingReportPage = lazy(() => import("@/app/app/report/stock-aging/page"));
+const BatchTraceabilityReportPage = lazy(() => import("@/app/app/report/batch-traceability/page"));
+const InventoryValuationReportPage = lazy(() => import("@/app/app/report/inventory-valuation/page"));
+const ReceivingReportPage = lazy(() => import("@/app/app/report/receiving/page"));
+const DeliveryPerformanceReportPage = lazy(() => import("@/app/app/report/delivery-performance/page"));
 
 /** Halaman pertama "/app" — Dashboard bila punya aksesnya, selain itu
  *  diarahkan ke menu pertama yang boleh dibuka role-nya. */
@@ -197,6 +213,22 @@ export default function App() {
             <Route path="deliveries" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><DeliveriesPage /></LazyPage>} />
             <Route path="deliveries/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewDeliveryPage /></LazyPage>} />
             <Route path="deliveries/:id" element={<LazyPage fallback={<DetailSkeleton />}><DeliveryDetailPage /></LazyPage>} />
+            <Route path="inbound" element={<LazyPage fallback={<HubSkeleton cards={5} />}><InboundPage /></LazyPage>} />
+            <Route path="inbound/receiving" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><InboundReceivingPage /></LazyPage>} />
+            <Route path="inbound/receiving/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewInboundReceivingPage /></LazyPage>} />
+            <Route path="inbound/receiving/:id" element={<LazyPage fallback={<DetailSkeleton />}><InboundReceivingDetailPage /></LazyPage>} />
+            <Route path="inbound/qc" element={<LazyPage><InboundQcPage /></LazyPage>} />
+            <Route path="inbound/putaway" element={<LazyPage><InboundPutawayPage /></LazyPage>} />
+            <Route path="inbound/supplier-return" element={<LazyPage><SupplierReturnPage /></LazyPage>} />
+            <Route path="outbound" element={<LazyPage fallback={<HubSkeleton cards={5} />}><OutboundPage /></LazyPage>} />
+            <Route path="outbound/picking" element={<LazyPage><OutboundPickingPage /></LazyPage>} />
+            <Route path="outbound/packing" element={<LazyPage><OutboundPackingPage /></LazyPage>} />
+            <Route path="outbound/customer-return" element={<LazyPage><CustomerReturnPage /></LazyPage>} />
+            <Route path="report/stock-aging" element={<LazyPage><StockAgingReportPage /></LazyPage>} />
+            <Route path="report/batch-traceability" element={<LazyPage><BatchTraceabilityReportPage /></LazyPage>} />
+            <Route path="report/inventory-valuation" element={<LazyPage><InventoryValuationReportPage /></LazyPage>} />
+            <Route path="report/receiving" element={<LazyPage><ReceivingReportPage /></LazyPage>} />
+            <Route path="report/delivery-performance" element={<LazyPage><DeliveryPerformanceReportPage /></LazyPage>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/app" replace />} />

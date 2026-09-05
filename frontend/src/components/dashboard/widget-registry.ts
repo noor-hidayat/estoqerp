@@ -24,7 +24,7 @@ export interface WidgetTemplate {
 export const WIDGET_TEMPLATES: WidgetTemplate[] = [
   {
     id: "tpl-kpi-total-scan",
-    workspaceId: "wsp-stockopname",
+    workspaceId: "wsp-warehouse",
     type: "kpi",
     title: "Total Qty Scan",
     description: "Jumlah quantity dari semua scan opname",
@@ -33,7 +33,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
   },
   {
     id: "tpl-bar-scan-warehouse",
-    workspaceId: "wsp-stockopname",
+    workspaceId: "wsp-warehouse",
     type: "bar",
     title: "Scan per Warehouse",
     description: "Qty scan dikelompokkan per gudang",
@@ -42,7 +42,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
   },
   {
     id: "tpl-pie-scan-itemgroup",
-    workspaceId: "wsp-stockopname",
+    workspaceId: "wsp-warehouse",
     type: "pie",
     title: "Scan per Item Group",
     description: "Qty scan per kategori barang",
@@ -51,7 +51,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
   },
   {
     id: "tpl-line-scan-day",
-    workspaceId: "wsp-stockopname",
+    workspaceId: "wsp-warehouse",
     type: "line",
     title: "Tren Scan Harian",
     description: "Qty scan per hari",
@@ -60,7 +60,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
   },
   {
     id: "tpl-table-scan-lokasi",
-    workspaceId: "wsp-stockopname",
+    workspaceId: "wsp-warehouse",
     type: "table",
     title: "Scan per Lokasi",
     description: "Qty scan per lokasi (top 20)",

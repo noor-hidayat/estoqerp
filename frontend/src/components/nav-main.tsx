@@ -1,29 +1,42 @@
-import { useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import {
   Archive,
+  ArrowDownToLine,
   ArrowLeftRight,
   ArrowRightLeft,
+  ArrowUpFromLine,
   Barcode,
   Boxes,
   Building2,
   ChartColumn,
   ChevronRight,
+  ClipboardCheck,
+  Coins,
   Database,
+  Diff,
   FileSpreadsheet,
   FileText,
   FolderKanban,
+  Gauge,
   History,
+  Hourglass,
+  Inbox,
   Layers,
   LayoutDashboard,
   LayoutGrid,
+  ListChecks,
   MapPin,
   Megaphone,
   NotebookText,
   Package,
+  PackageSearch,
+  RotateCcw,
+  Route,
   Settings,
   SquareAsterisk,
   Tag,
   TriangleAlert,
+  Undo2,
   Users,
   Warehouse,
   Bot,
@@ -88,6 +101,19 @@ const ICONS: Record<string, LucideIcon> = {
   Receipt,
   PackageCheck,
   Megaphone,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Inbox,
+  ClipboardCheck,
+  PackageSearch,
+  Undo2,
+  ListChecks,
+  RotateCcw,
+  Diff,
+  Hourglass,
+  Route,
+  Coins,
+  Gauge,
 }
 
 function isActive(href: string, pathname: string): boolean {
@@ -99,6 +125,8 @@ function isActive(href: string, pathname: string): boolean {
 const PREFETCH: Record<string, () => Promise<unknown>> = {
   "/app": () => import("@/app/app/page"),
   "/app/transaction": () => import("@/app/app/transaction/page"),
+  "/app/inbound": () => import("@/app/app/inbound/page"),
+  "/app/outbound": () => import("@/app/app/outbound/page"),
   "/app/so": () => import("@/app/app/so/page"),
   "/app/project": () => import("@/app/app/project/page"),
   "/app/report": () => import("@/app/app/report/page"),
@@ -174,9 +202,10 @@ export function NavMain({ groups }: { groups: NavGroup[] }) {
   return (
     <>
       {groups.map((group) => (
-        <SidebarGroup key={group.title}>
+        <Fragment key={group.title}>
+          <SidebarGroup>
           {!isCollapsed &&
-          (group.title === "Menu" || group.title === "Settings") ? (
+          (group.title === "Menu" || group.title === "Setting") ? (
             <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
           ) : null}
           <SidebarMenu>
@@ -228,7 +257,8 @@ export function NavMain({ groups }: { groups: NavGroup[] }) {
               )
             })}
           </SidebarMenu>
-        </SidebarGroup>
+          </SidebarGroup>
+        </Fragment>
       ))}
     </>
   )

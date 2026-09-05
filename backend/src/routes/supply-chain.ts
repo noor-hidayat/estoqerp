@@ -669,6 +669,148 @@ supplyChainRouter.post("/goods-receipts/:id/cancel", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ---------------------------------------------------------------------------
+// RECEIVINGS — tahap awal inbound (Receiving → QC → GRN → stok).
+// BUKAN Goods Receipt: tidak menggerakkan stok. Post/cancel hanya ubah status.
+// ---------------------------------------------------------------------------
+
+async function receivingLines(tx: any, receivingId: number) { return tx.select().from(s.receivingLines).where(eq(s.receivingLines.receivingId, receivingId)); }
+async function replaceReceivingLines(tx: any, receivingId: number, lines: any[]) {
+  validateRequireUnitPrice(lines, "RCV");
+  await tx.delete(s.receivingLines).where(eq(s.receivingLines.receivingId, receivingId));
+  for (const l of lines) {
+    const itemId = await resolveInternalId(s.items, l.itemId);
+    const uomId = await resolveInternalId(s.uom, l.uomId);
+    if (!itemId || !uomId) throw new Error("Item/UOM tidak valid");
+    await tx.insert(s.receivingLines).values({ receivingId, itemId, uomId, qty: String(l.qty), unitPrice: l.unitPrice != null ? String(l.unitPrice) : null, batchNumber: l.batchNumber ?? null, note: l.note ?? null });
+  }
+}
+async function mapReceivingLines(lines: any[]) {
+  const itemIds = [...new Set(lines.map((l: any) => l.itemId))];
+  const uomIds = [...new Set(lines.map((l: any) => l.uomId).filter(Boolean))];
+  const itemMap = new Map<number, string>();
+  const uomMap = new Map<number, string>();
+  if (itemIds.length) {
+    const items = await db.select({ id: s.items.id, publicId: s.items.publicId }).from(s.items).where(inArray(s.items.id, itemIds));
+    items.forEach((it) => itemMap.set(it.id, it.publicId));
+  }
+  if (uomIds.length) {
+    const uoms = await db.select({ id: s.uom.id, publicId: s.uom.publicId }).from(s.uom).where(inArray(s.uom.id, uomIds as number[]));
+    uoms.forEach((u) => uomMap.set(u.id, u.publicId));
+  }
+  return lines.map((l: any) => ({ ...l, id: l.publicId, _internalId: l.id, receivingId: undefined, itemId: itemMap.get(l.itemId) ?? l.itemId, uomId: l.uomId ? (uomMap.get(l.uomId) ?? l.uomId) : null }));
+}
+supplyChainRouter.post("/receivings", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const b = req.body ?? {};
+    if (!b.purchaseOrderId || !b.warehouseId || !b.receiptDate) return res.status(400).json({ error: "purchaseOrderId, warehouseId, receiptDate wajib." });
+    if (Array.isArray(b.lines) && b.lines.length > 0) { try { validateRequireUnitPrice(b.lines, "RCV"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); } }
+    const poId = await resolveInternalId(s.purchaseOrders, String(b.purchaseOrderId));
+    const warehouseId = await resolveInternalId(s.warehouses, String(b.warehouseId));
+    if (!poId || !warehouseId) return res.status(400).json({ error: "PO/warehouse tidak valid." });
+    const [po] = await db.select({ supplierId: s.purchaseOrders.supplierId, branchId: s.purchaseOrders.branchId }).from(s.purchaseOrders).where(eq(s.purchaseOrders.id, poId)).limit(1);
+    if (!po) return res.status(400).json({ error: "Purchase Order tidak ditemukan." });
+    const seriesRaw = b.seriesId ?? b.seriesCode ?? null;
+    let seriesId: number | null = null;
+    if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
+    const { documentNo } = await db.transaction(async (tx) => {
+      const doc = await nextDocumentNo(tx as any, "RCV", { seriesId: seriesId ?? undefined, branchId: po.branchId ?? undefined, date: b.receiptDate ? new Date(b.receiptDate) : new Date() });
+      const [rcv] = await tx.insert(s.receivings).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, purchaseOrderId: poId, supplierId: po.supplierId, warehouseId, receiptDate: b.receiptDate, status: "DRAFT", notes: b.notes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId: po.branchId }).returning();
+      if (Array.isArray(b.lines)) await replaceReceivingLines(tx, rcv.id, b.lines);
+      return { documentNo: doc.documentNo, id: rcv.id };
+    });
+    const [created] = await db.select({ publicId: s.receivings.publicId }).from(s.receivings).where(eq(s.receivings.documentNo, documentNo)).limit(1);
+    res.status(201).json({ id: created.publicId, documentNo });
+  } catch (e) { next(e); }
+});
+supplyChainRouter.get("/receivings", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
+  try {
+    const conds: any[] = [];
+    if (req.query.status) conds.push(eq(s.receivings.status as any, String(req.query.status)));
+    if (req.query.warehouseId) {
+      const wid = await resolveInternalId(s.warehouses, String(req.query.warehouseId));
+      if (wid) conds.push(eq(s.receivings.warehouseId, wid));
+    }
+    if (req.query.purchaseOrderId) {
+      const pid = await resolveInternalId(s.purchaseOrders, String(req.query.purchaseOrderId));
+      if (pid) conds.push(eq(s.receivings.purchaseOrderId, pid));
+    }
+    const rows = await db.select().from(s.receivings).where(conds.length ? and(...conds) : undefined).orderBy(desc(s.receivings.receiptDate));
+    res.json(rows.map((r: any) => ({ ...r, id: r.publicId, _internalId: r.id, documentNo: r.documentNo, rcvNo: r.documentNo })));
+  } catch (e) { next(e); }
+});
+supplyChainRouter.get("/receivings/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = isUuid(pid) ? eq(s.receivings.publicId, pid) : eq(s.receivings.id, Number(pid));
+    const [row] = await db.select().from(s.receivings).where(where).limit(1);
+    if (!row) return res.status(404).json({ error: "Receiving tidak ditemukan." });
+    const lines = await receivingLines(db, row.id);
+    res.json({ ...row, id: row.publicId, _internalId: row.id, documentNo: row.documentNo, rcvNo: row.documentNo, lines: await mapReceivingLines(lines) });
+  } catch (e) { next(e); }
+});
+supplyChainRouter.put("/receivings/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = isUuid(pid) ? eq(s.receivings.publicId, pid) : eq(s.receivings.id, Number(pid));
+    const [cur] = await db.select({ id: s.receivings.id, status: s.receivings.status }).from(s.receivings).where(where).limit(1);
+    if (!cur) return res.status(404).json({ error: "Receiving tidak ditemukan." });
+    if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya receiving berstatus DRAFT yang dapat diubah." });
+    const b = req.body ?? {};
+    if (Array.isArray(b.lines) && b.lines.length > 0) { try { validateRequireUnitPrice(b.lines, "RCV"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); } }
+    const patch: Record<string, any> = {};
+    if (b.warehouseId !== undefined) patch.warehouseId = await resolveInternalId(s.warehouses, String(b.warehouseId));
+    if (b.receiptDate !== undefined) patch.receiptDate = b.receiptDate;
+    if (b.notes !== undefined) patch.notes = b.notes ?? null;
+    if (b.purchaseOrderId !== undefined) patch.purchaseOrderId = await resolveInternalId(s.purchaseOrders, String(b.purchaseOrderId));
+    patch.updatedAt = new Date();
+    await db.update(s.receivings).set(patch).where(eq(s.receivings.id, cur.id));
+    if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceReceivingLines(tx, cur.id, b.lines); });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+supplyChainRouter.delete("/receivings/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = isUuid(pid) ? eq(s.receivings.publicId, pid) : eq(s.receivings.id, Number(pid));
+    const [cur] = await db.select({ id: s.receivings.id }).from(s.receivings).where(where).limit(1);
+    if (!cur) return res.status(404).json({ error: "Receiving tidak ditemukan." });
+    await db.delete(s.receivings).where(eq(s.receivings.id, cur.id));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+supplyChainRouter.post("/receivings/:id/post", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = isUuid(pid) ? eq(s.receivings.publicId, pid) : eq(s.receivings.id, Number(pid));
+    const [rcv] = await db.select().from(s.receivings).where(where).limit(1);
+    if (!rcv) return res.status(404).json({ error: "Receiving tidak ditemukan." });
+    if (rcv.status === "CANCELED") return res.status(400).json({ error: "Receiving dibatalkan tidak dapat diposting." });
+    if (rcv.status === "POSTED") return res.status(400).json({ error: "Receiving sudah diposting." });
+    // Sengaja tanpa movement stok — stok baru bertambah saat GRN diposting.
+    await db.update(s.receivings).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+supplyChainRouter.post("/receivings/:id/cancel", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = isUuid(pid) ? eq(s.receivings.publicId, pid) : eq(s.receivings.id, Number(pid));
+    const [cur] = await db.select({ id: s.receivings.id, status: s.receivings.status }).from(s.receivings).where(where).limit(1);
+    if (!cur) return res.status(404).json({ error: "Receiving tidak ditemukan." });
+    if (cur.status === "CANCELED") return res.status(400).json({ error: "Receiving sudah dibatalkan." });
+    await db.update(s.receivings).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.receivings.id, cur.id));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 // Deliveries
 async function deliveryLines(tx: any, deliveryId: number) { return tx.select().from(s.deliveryLines).where(eq(s.deliveryLines.deliveryId, deliveryId)); }
 async function replaceDeliveryLines(tx: any, deliveryId: number, lines: any[]) {

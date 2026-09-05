@@ -9,7 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { NAV } from "./nav";
+import { NAV, WAREHOUSE_NAV } from "./nav";
 
 interface PageEntry {
   label: string;
@@ -19,7 +19,7 @@ interface PageEntry {
 
 function buildPages(): PageEntry[] {
   const out: PageEntry[] = [];
-  for (const g of NAV) {
+  for (const g of [...NAV, ...WAREHOUSE_NAV]) {
     for (const item of g.items) {
       out.push({ label: item.label, href: item.href, group: g.title });
       item.children?.forEach((c) =>

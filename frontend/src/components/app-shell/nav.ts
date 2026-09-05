@@ -20,7 +20,6 @@ export interface NavGroup {
 }
 
 export const WORKSPACES = [
-  { id: "wsp-stockopname", code: "stockopname", label: "Stock Opname", icon: "ClipboardList", description: "Project, Scan & Laporan" },
   { id: "wsp-warehouse", code: "warehouse", label: "Warehouse", icon: "Warehouse", description: "Stok, Ledger & Master" },
   { id: "wsp-purchasing", code: "purchasing", label: "Purchasing", icon: "ShoppingCart", description: "Supplier, PO & GR" },
   { id: "wsp-marketing", code: "marketing", label: "Marketing", icon: "Megaphone", description: "Customer & Sales Order" },
@@ -180,7 +179,7 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
-    title: "Settings",
+    title: "Setting",
     shared: true,
     items: [
       {
@@ -282,11 +281,92 @@ export const NAV: NavGroup[] = [
 ];
 
 export const WORKSPACE_MENU_MAP: Record<string, string[]> = {
-  "wsp-stockopname": ["dashboard", "opname", "reports", "ai"],
-  "wsp-warehouse": ["dashboard", "inventory", "master", "ai", "inventory.transactions", "inventory.stockBalance", "inventory.stockLedger", "inventory.batches", "inventory.warehouses", "inventory.locations", "inventory.branches", "supply.deliveries"],
   "wsp-purchasing": ["dashboard", "supply.suppliers", "supply.purchaseOrders", "supply.goodsReceipts", "supply.deliveries", "ai"],
   "wsp-marketing": ["dashboard", "supply.customers", "supply.salesOrders", "supply.deliveries", "ai"],
 };
+
+// ---------------------------------------------------------------------------
+// Struktur khusus workspace Warehouse (5 grup sejajar, tanpa parent Transaction).
+// Halaman reuse pakai menu key lama (tanpa migrasi RBAC); halaman placeholder
+// memakai menu key induknya hingga modul granular fase 2 siap.
+// ---------------------------------------------------------------------------
+export const WAREHOUSE_NAV: NavGroup[] = [
+  {
+    title: "Dashboards",
+    items: [
+      { label: "Dashboard", href: "/app", icon: "LayoutDashboard", menu: "dashboard" },
+      { label: "AI Assistant", href: "/app/ai", icon: "Bot", menu: "ai" },
+    ],
+  },
+  {
+    title: "Menu",
+    items: [
+      {
+        label: "Inbound",
+        href: "/app/inbound",
+        icon: "ArrowDownToLine",
+        menu: "supply.purchaseOrders",
+        children: [
+          { label: "Receiving", href: "/app/inbound/receiving", icon: "Inbox", menu: "supply.purchaseOrders" },
+          { label: "QC Inspection", href: "/app/inbound/qc", icon: "ClipboardCheck", menu: "supply.goodsReceipts" },
+          { label: "GRN", href: "/app/goods-receipts", icon: "PackageCheck", menu: "supply.goodsReceipts" },
+          { label: "Putaway", href: "/app/inbound/putaway", icon: "PackageSearch", menu: "supply.goodsReceipts" },
+          { label: "Supplier Return", href: "/app/inbound/supplier-return", icon: "Undo2", menu: "supply.goodsReceipts" },
+        ],
+      },
+      {
+        label: "Outbound",
+        href: "/app/outbound",
+        icon: "ArrowUpFromLine",
+        menu: "supply.salesOrders",
+        children: [
+          { label: "Delivery Order", href: "/app/sales-orders", icon: "Receipt", menu: "supply.salesOrders" },
+          { label: "Picking", href: "/app/outbound/picking", icon: "ListChecks", menu: "supply.deliveries" },
+          { label: "Packing", href: "/app/outbound/packing", icon: "Package", menu: "supply.deliveries" },
+          { label: "Dispatch / Shipment", href: "/app/deliveries", icon: "Truck", menu: "supply.deliveries" },
+          { label: "Customer Return", href: "/app/outbound/customer-return", icon: "RotateCcw", menu: "supply.deliveries" },
+        ],
+      },
+      {
+        label: "Inventory",
+        href: "/app/inventory",
+        icon: "Boxes",
+        menu: "inventory",
+        children: [
+          { label: "Stock Balance", href: "/app/inventory/balance", icon: "Boxes", menu: "inventory.stockBalance" },
+          { label: "Stock Ledger", href: "/app/inventory/ledger", icon: "NotebookText", menu: "inventory.stockLedger" },
+          { label: "Batch / Lot", href: "/app/inventory/batches", icon: "Layers", menu: "inventory.batches" },
+        ],
+      },
+      {
+        label: "Stock Opname",
+        href: "/app/so",
+        icon: "ClipboardList",
+        menu: "opname",
+        children: [
+          { label: "Opname Project", href: "/app/project", icon: "FolderKanban", menu: "opname" },
+          { label: "Stock Opname", href: "/app/so", icon: "ClipboardList", menu: "opname" },
+          { label: "Stock Adjustment", href: "/app/so/variance", icon: "Diff", menu: "opname.variance" },
+        ],
+      },
+      {
+        label: "Report",
+        href: "/app/report",
+        icon: "ChartColumn",
+        menu: "reports",
+        children: [
+          { label: "Stock Balance", href: "/app/inventory/balance", icon: "Boxes", menu: "inventory.stockBalance" },
+          { label: "Stock Movement", href: "/app/inventory/ledger", icon: "ArrowLeftRight", menu: "inventory.stockLedger" },
+          { label: "Stock Aging", href: "/app/report/stock-aging", icon: "Hourglass", menu: "reports" },
+          { label: "Batch Traceability", href: "/app/report/batch-traceability", icon: "Route", menu: "reports" },
+          { label: "Inventory Valuation", href: "/app/report/inventory-valuation", icon: "Coins", menu: "reports" },
+          { label: "Receiving Report", href: "/app/report/receiving", icon: "FileText", menu: "reports" },
+          { label: "Picking / Delivery Performance", href: "/app/report/delivery-performance", icon: "Gauge", menu: "reports" },
+        ],
+      },
+    ],
+  },
+];
 
 function menuAllowedForWorkspace(menu: string, workspaceId: string | null): boolean {
   if (!workspaceId) return true;
@@ -301,7 +381,15 @@ export function navForPermissions(
   canManage?: (menu: string) => boolean,
   workspaceId?: string | null
 ): NavGroup[] {
-  return NAV.map((group) => {
+  // Warehouse punya struktur dedicated (5 grup sejajar) — sudah warehouse-scoped,
+  // jadi filter workspace dilewati dan hanya permission yang berlaku.
+  // Grup shared (Settings/Setup) ikut disertakan agar master data tetap terjangkau.
+  const base =
+    workspaceId === "wsp-warehouse"
+      ? [...WAREHOUSE_NAV, ...NAV.filter((g) => (g as unknown as { shared?: boolean }).shared)]
+      : NAV;
+  const skipWorkspaceFilter = workspaceId === "wsp-warehouse";
+  return base.map((group) => {
     // Shared group selalu tampil (filter hanya by permission, bukan workspace)
     const isShared = (group as unknown as { shared?: boolean }).shared;
     if (!isShared && workspaceId) {
@@ -314,10 +402,10 @@ export function navForPermissions(
       items: group.items
         .map((item) => ({
           ...item,
-          children: item.children?.filter((child) => canView(child.menu) && menuAllowedForWorkspace(child.menu, workspaceId ?? null)),
+          children: item.children?.filter((child) => canView(child.menu) && (skipWorkspaceFilter || menuAllowedForWorkspace(child.menu, workspaceId ?? null))),
         }))
         .filter((item) => {
-          const wsOk = menuAllowedForWorkspace(item.menu, workspaceId ?? null) || (item.children?.length ?? 0) > 0;
+          const wsOk = skipWorkspaceFilter || menuAllowedForWorkspace(item.menu, workspaceId ?? null) || (item.children?.length ?? 0) > 0;
           if (!wsOk && !isShared) return false;
           const visible = item.manage
             ? canManage?.(item.menu) ?? false
