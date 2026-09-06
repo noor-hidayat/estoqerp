@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Save } from "lucide-react";
 import {
   usePurchaseOrders,
@@ -7,6 +7,7 @@ import {
   useAllWarehouses,
   useUoms,
   useCreateGoodsReceipt,
+  useReceivings,
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ function todayISO() {
 
 export default function NewGoodsReceiptPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data: pos = [], isLoading: posLoading } = usePurchaseOrders();
   const { data: warehouses = [], isLoading: warehousesLoading } = useAllWarehouses();
   const { isLoading: uomsLoading } = useUoms();
@@ -32,13 +34,23 @@ export default function NewGoodsReceiptPage() {
   const [error, setError] = useState("");
   useErrorToast(error);
 
-  const [poId, setPoId] = useState("");
+  const [poId, setPoId] = useState(searchParams.get("purchaseOrderId") ?? "");
   const [warehouseId, setWarehouseId] = useState("");
   const [receiptDate, setReceiptDate] = useState(todayISO());
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<OrderLineInput[]>([]);
+  const { data: allReceivings = [] } = useReceivings();
 
   const { data: poDetail } = usePurchaseOrder(poId || undefined);
+  const receivingsForPo = poId ? (allReceivings as any[]).filter((r) => r.purchaseOrderId === poId) : [];
+  const hasPendingQc = receivingsForPo.some((r) => r.status === "PENDING_QC" || r.status === "DRAFT");
+  const hasCompleted = receivingsForPo.some((r) => r.status === "COMPLETED" || r.status === "POSTED");
+  const gnrBlocked = receivingsForPo.length > 0 && (hasPendingQc || !hasCompleted);
+  const gnrBlockReason = hasPendingQc
+    ? "Receiving untuk PO ini masih Pending QC / Draft — selesaikan QC hingga COMPLETED dulu sebelum buat GNR (stock masuk gudang)."
+    : receivingsForPo.length > 0 && !hasCompleted
+      ? "Receiving belum COMPLETED — selesaikan QC dulu."
+      : null;
 
   // Auto-fill warehouse + lines when a PO is chosen.
   useEffect(() => {
@@ -81,7 +93,7 @@ export default function NewGoodsReceiptPage() {
           note: l.note || null,
         })),
       });
-      navigate(`/app/goods-receipts/${res.id}`);
+      navigate(`/app/goods-receipts/${(res as any).documentNo ?? res.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create goods receipt.");
     }
@@ -98,6 +110,11 @@ export default function NewGoodsReceiptPage() {
   return (
     <RoleGuard roles={[]} menus={["supply.goodsReceipts"]}>
       <FormPage title="New Goods Receipt">
+        {gnrBlocked && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <strong>QC belum completed:</strong> {gnrBlockReason} GNR tidak akan menggerakkan stock.
+          </div>
+        )}
         <FormSection>
           <FormGrid>
             <SearchableSelect
@@ -139,7 +156,7 @@ export default function NewGoodsReceiptPage() {
             <ArrowLeft size={15} strokeWidth={2} />
             Back
           </Button>
-          <Button variant="primary" onClick={submit} disabled={create.isPending}>
+          <Button variant="primary" onClick={submit} disabled={create.isPending || !!gnrBlocked}>
             <Save size={15} strokeWidth={2} />
             Save
           </Button>

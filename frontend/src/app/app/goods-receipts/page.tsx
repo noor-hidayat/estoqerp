@@ -37,8 +37,8 @@ export default function GoodsReceiptsPage() {
     {
       id: "grNo",
       header: "GR No",
-      cell: (r) => <span className="text-xs font-semibold">{formatId(r.id)}</span>,
-      sortValue: (r) => String(r.grNo),
+      cell: (r) => <span className="text-xs font-semibold">{(r as any).documentNo ?? r.grNo ?? formatId(r.id)}</span>,
+      sortValue: (r) => String((r as any).documentNo ?? r.grNo),
     },
     {
       id: "po",
@@ -73,7 +73,7 @@ export default function GoodsReceiptsPage() {
           variant="ghost"
           size="sm"
           className="h-7 px-2.5 text-xs"
-          onClick={() => navigate(`/app/goods-receipts/${r.id}`)}
+          onClick={() => navigate(`/app/goods-receipts/${(r as any).documentNo ?? r.id}`)}
         >
           View
         </Button>
@@ -98,8 +98,9 @@ export default function GoodsReceiptsPage() {
         data={filtered}
         getRowId={(r) => r.id}
         loading={isLoading}
+        onRowClick={(r) => navigate(`/app/goods-receipts/${(r as any).documentNo ?? r.id}`)}
         searchPlaceholder="Search goods receipts..."
-        getSearchText={(r) => `${formatId(r.id)} ${poNo(r.purchaseOrderId)} ${warehouseName(r.warehouseId)}`}
+        getSearchText={(r) => `${(r as any).documentNo ?? formatId(r.id)} ${poNo(r.purchaseOrderId)} ${warehouseName(r.warehouseId)}`}
         filters={
           <div className="flex gap-2">
             <Select

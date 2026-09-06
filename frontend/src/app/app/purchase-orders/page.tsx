@@ -104,6 +104,7 @@ export default function PurchaseOrdersPage() {
         data={filtered}
         getRowId={(o) => o.id}
         loading={isLoading}
+        onRowClick={(o) => navigate(`/app/purchase-orders/${o.id}`)}
         searchPlaceholder="Search purchase orders..."
         getSearchText={(o) =>
           `${o.documentNo ?? o.poNo ?? formatId(o.id)} ${supplierName(o.supplierId)} ${warehouseName(o.warehouseId)}`

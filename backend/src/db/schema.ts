@@ -749,6 +749,9 @@ export const opnameCountDetails = pgTable(
 export const docStatuses = ["DRAFT", "POSTED", "CANCELED"] as const;
 export type DocStatus = (typeof docStatuses)[number];
 
+export const receivingStatuses = ["DRAFT", "PENDING_QC", "COMPLETED", "CANCELED", "POSTED"] as const;
+export type ReceivingStatus = (typeof receivingStatuses)[number];
+
 export const suppliers = pgTable("suppliers", {
   id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
   publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
@@ -958,8 +961,13 @@ export const receivings = pgTable(
       .notNull()
       .references(() => warehouses.id),
     receiptDate: date("receipt_date").notNull(),
-    status: text("status", { enum: docStatuses }).notNull().default("DRAFT"),
+    status: text("status", { enum: receivingStatuses }).notNull().default("DRAFT"),
     notes: text("notes"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    submittedBy: bigint("submitted_by", { mode: "number" }).references(() => users.id),
+    qcInspectedAt: timestamp("qc_inspected_at", { withTimezone: true }),
+    qcInspectedBy: bigint("qc_inspected_by", { mode: "number" }).references(() => users.id),
+    qcNotes: text("qc_notes"),
     createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
     branchId: bigint("branch_id", { mode: "number" }).references(() => branches.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -988,11 +996,101 @@ export const receivingLines = pgTable(
       .notNull()
       .references(() => uom.id),
     qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    qtyAccepted: numeric("qty_accepted", { precision: 15, scale: 3 }),
+    qtyRejected: numeric("qty_rejected", { precision: 15, scale: 3 }),
     unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
     batchNumber: text("batch_number"),
     note: text("note"),
+    rejectReason: text("reject_reason"),
   },
   (t) => [index("idx_rcl_receiving").on(t.receivingId)]
+);
+
+export const qcInspectionStatuses = ["DRAFT", "COMPLETED", "CANCELED"] as const;
+export type QcInspectionStatus = (typeof qcInspectionStatuses)[number];
+
+export const qcInspections = pgTable(
+  "qc_inspections",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    documentNo: text("document_no").unique(),
+    seriesId: bigint("series_id", { mode: "number" }).references(() => documentSeries.id),
+    receivingId: bigint("receiving_id", { mode: "number" })
+      .notNull()
+      .references(() => receivings.id, { onDelete: "cascade" }),
+    purchaseOrderId: bigint("purchase_order_id", { mode: "number" }).references(() => purchaseOrders.id),
+    supplierId: bigint("supplier_id", { mode: "number" }).references(() => suppliers.id),
+    warehouseId: bigint("warehouse_id", { mode: "number" }).references(() => warehouses.id),
+    inspectionDate: date("inspection_date").notNull(),
+    status: text("status", { enum: qcInspectionStatuses }).notNull().default("DRAFT"),
+    notes: text("notes"),
+    qcNotes: text("qc_notes"),
+    createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
+    branchId: bigint("branch_id", { mode: "number" }).references(() => branches.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_qc_inspections_receiving").on(t.receivingId),
+    index("idx_qc_inspections_po").on(t.purchaseOrderId),
+    index("idx_qc_inspections_status").on(t.status),
+    index("idx_qc_inspections_document_no").on(t.documentNo),
+  ]
+);
+
+export const qcInspectionLines = pgTable(
+  "qc_inspection_lines",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    qcInspectionId: bigint("qc_inspection_id", { mode: "number" })
+      .notNull()
+      .references(() => qcInspections.id, { onDelete: "cascade" }),
+    receivingLineId: bigint("receiving_line_id", { mode: "number" }).references(() => receivingLines.id, { onDelete: "set null" }),
+    itemId: bigint("item_id", { mode: "number" })
+      .notNull()
+      .references(() => items.id),
+    uomId: bigint("uom_id", { mode: "number" }).references(() => uom.id),
+    qtyReceived: numeric("qty_received", { precision: 15, scale: 3 }).notNull(),
+    qtyRejected: numeric("qty_rejected", { precision: 15, scale: 3 }).notNull().default("0"),
+    qtyAccepted: numeric("qty_accepted", { precision: 15, scale: 3 }).notNull(),
+    batchNumber: text("batch_number"),
+    rejectReason: text("reject_reason"),
+  },
+  (t) => [index("idx_qcl_qc").on(t.qcInspectionId)]
+);
+
+export const qcParameters = pgTable(
+  "qc_parameters",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    code: text("code").notNull().unique(),
+    name: text("name").notNull(),
+    description: text("description"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_qc_params_code").on(t.code)]
+);
+
+export const qcInspectionLineParams = pgTable(
+  "qc_inspection_line_params",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    qcInspectionLineId: bigint("qc_inspection_line_id", { mode: "number" })
+      .notNull()
+      .references(() => qcInspectionLines.id, { onDelete: "cascade" }),
+    parameterId: bigint("parameter_id", { mode: "number" })
+      .notNull()
+      .references(() => qcParameters.id, { onDelete: "restrict" }),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    note: text("note"),
+  },
+  (t) => [index("idx_qcilp_line").on(t.qcInspectionLineId), index("idx_qcilp_param").on(t.parameterId)]
 );
 
 export const deliveries = pgTable(

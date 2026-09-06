@@ -69,13 +69,13 @@ export default function TransactionsPage() {
     {
       id: "number",
       header: "Movement No",
-      sortValue: (m) => m.id,
+      sortValue: (m) => (m as any).documentNo ?? m.id,
       cell: (m) => (
         <button
           className="text-xs font-medium text-primary hover:underline"
-          onClick={() => navigate(`/app/transaction/${m.id}`)}
+          onClick={() => navigate(`/app/transaction/${(m as any).documentNo ?? m.id}`)}
         >
-          {m.id}
+          {(m as any).documentNo ?? m.id}
         </button>
       ),
       className: "whitespace-nowrap",
@@ -154,6 +154,7 @@ export default function TransactionsPage() {
         columns={columns}
         data={rows}
         getRowId={(m) => m.id}
+        onRowClick={(m) => navigate(`/app/transaction/${(m as any).documentNo ?? m.id}`)}
         loading={isLoading}
         pagination="none"
         // sort lazy: tidak kirim sort di awal (backend pakai index createdAt), hanya pas klik header

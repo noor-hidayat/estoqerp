@@ -68,7 +68,7 @@ export default function NewPurchaseOrderPage() {
           deliveryDate: (l.deliveryDate || form.expectedDate) || null,
         })),
       });
-      navigate(`/app/purchase-orders/${res.id}`);
+      navigate(`/app/purchase-orders/${(res as any).id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create purchase order.");
     }

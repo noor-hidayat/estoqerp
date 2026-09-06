@@ -590,6 +590,29 @@ export function usePostReceiving() {
   });
 }
 
+export function useSubmitReceiving() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/receivings/${id}/submit`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["receivings"] });
+      qc.invalidateQueries({ queryKey: ["receivings", id] });
+    },
+  });
+}
+
+export function useQcReceiving() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, lines, qcNotes }: { id: string; lines: Array<{ id: string; qtyRejected: string | number; rejectReason?: string | null }>; qcNotes?: string | null }) =>
+      api.post(`/receivings/${id}/qc`, { lines, qcNotes }),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ["receivings"] });
+      qc.invalidateQueries({ queryKey: ["receivings", id] });
+    },
+  });
+}
+
 export function useCancelReceiving() {
   const qc = useQueryClient();
   return useMutation({
@@ -598,6 +621,66 @@ export function useCancelReceiving() {
       qc.invalidateQueries({ queryKey: ["receivings"] });
       qc.invalidateQueries({ queryKey: ["receivings", id] });
     },
+  });
+}
+
+// ---- QC Inspections (history, document No QC-...) ----
+export function useQcInspections(params?: Record<string, unknown>) {
+  return useResourceList<import("@/types").QcInspection>("qc-inspections", params);
+}
+export function useQcInspection(id?: string) {
+  return useResourceOne<import("@/types").QcInspection>("qc-inspections", id);
+}
+export function useCreateQcInspection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => api.post<{ id: string; documentNo: string }>("/qc-inspections", body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); qc.invalidateQueries({ queryKey: ["receivings"] }); },
+  });
+}
+export function useUpdateQcInspection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/qc-inspections/${id}`, patch),
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); qc.invalidateQueries({ queryKey: ["qc-inspections", id] }); },
+  });
+}
+export function useSubmitQcInspection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/qc-inspections/${id}/submit`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); qc.invalidateQueries({ queryKey: ["qc-inspections", id] }); qc.invalidateQueries({ queryKey: ["receivings"] }); },
+  });
+}
+export function useCancelQcInspection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/qc-inspections/${id}/cancel`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); qc.invalidateQueries({ queryKey: ["qc-inspections", id] }); },
+  });
+}
+export function useQcParameters() {
+  return useResourceList<import("@/types").QcParameter>("qc-parameters");
+}
+export function useCreateQcParameter() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => api.post("/qc-parameters", body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-parameters"] }); },
+  });
+}
+export function useUpdateQcParameter() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/qc-parameters/${id}`, patch),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-parameters"] }); },
+  });
+}
+export function useDeleteQcParameter() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/qc-parameters/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-parameters"] }); },
   });
 }
 

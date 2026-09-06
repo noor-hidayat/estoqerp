@@ -5,6 +5,7 @@ import {
   useAllWarehouses,
   useReceivings,
   usePurchaseOrders,
+  useSuppliers,
 } from "@/lib/api/query";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoleGuard } from "@/components/ui/role-guard";
@@ -12,30 +13,46 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { formatId, formatTime } from "@/lib/utils";
+import { formatId, timeAgo } from "@/lib/utils";
+import { cx } from "@/lib/utils";
 import type { Receiving } from "@/types";
 
-/** Tanggal dari receiptDate, jam dari createdAt (kolom receipt_date di DB bertipe DATE). */
-function postingLabel(r: Receiving) {
-  const date = r.receiptDate?.slice(0, 10) ?? "—";
-  const time = r.createdAt ? formatTime(r.createdAt) : "--:--";
-  return `${date} · ${time}`;
+function returnPctOf(r: any): number {
+  if (typeof r.returnPct === "number") return r.returnPct;
+  const totalQty = Number(r.totalQty ?? 0);
+  const totalRejected = Number(r.totalRejected ?? 0);
+  if (totalQty > 0) return Math.round((totalRejected / totalQty) * 100);
+  // fallback status based if no qty data
+  const s = String(r.status ?? "").toUpperCase();
+  if (s === "COMPLETED" || s === "POSTED") return 0; // if no reject data, assume 0% reject
+  if (s === "PENDING_QC") return 0;
+  return 0;
 }
 
 export default function InboundReceivingPage() {
   const navigate = useNavigate();
   const { data: receipts = [], isLoading } = useReceivings();
   const { data: pos = [] } = usePurchaseOrders();
+  const { data: suppliers = [] } = useSuppliers();
   const { data: warehouses = [] } = useAllWarehouses();
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [warehouseFilter, setWarehouseFilter] = useState("all");
 
-  const poNo = (purchaseOrderId: string) =>
-    pos.find((p) => p.id === purchaseOrderId)?.documentNo ??
-    pos.find((p) => p.id === purchaseOrderId)?.poNo ??
-    "—";
-  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "—";
+  const supplierName = (r: Receiving) => {
+    const sid = (r as any).supplierId as string | undefined;
+    if (sid) {
+      const s = suppliers.find((x) => x.id === sid);
+      if (s) return s.name;
+    }
+    // fallback via PO
+    const po = pos.find((p) => p.id === (r as any).purchaseOrderId);
+    if (po?.supplierId) {
+      const s = suppliers.find((x) => x.id === po.supplierId);
+      if (s) return s.name;
+    }
+    return "—";
+  };
   const rcvNo = (r: Receiving) =>
     r.documentNo ?? (r as unknown as { rcvNo?: string }).rcvNo ?? formatId(r.id);
 
@@ -51,28 +68,10 @@ export default function InboundReceivingPage() {
 
   const columns: DataTableColumn<Receiving>[] = [
     {
-      id: "rcvNo",
-      header: "No Receiving",
-      cell: (r) => <span className="text-xs font-semibold">{rcvNo(r)}</span>,
-      sortValue: (r) => String(rcvNo(r)),
-    },
-    {
-      id: "po",
-      header: "No PO",
-      cell: (r) => <span className="font-medium text-foreground">{String(poNo(r.purchaseOrderId))}</span>,
-      sortValue: (r) => String(poNo(r.purchaseOrderId)),
-    },
-    {
-      id: "posting",
-      header: "Tanggal & Jam",
-      cell: (r) => <span className="whitespace-nowrap text-muted-foreground">{postingLabel(r)}</span>,
-      sortValue: (r) => `${r.receiptDate} ${r.createdAt ?? ""}`,
-    },
-    {
-      id: "warehouse",
-      header: "Gudang Simpan",
-      cell: (r) => <span className="text-muted-foreground">{warehouseName(r.warehouseId)}</span>,
-      sortValue: (r) => warehouseName(r.warehouseId),
+      id: "supplier",
+      header: "Supplier Name",
+      cell: (r) => <span className="text-sm text-foreground">{supplierName(r)}</span>,
+      sortValue: (r) => supplierName(r),
     },
     {
       id: "status",
@@ -81,19 +80,32 @@ export default function InboundReceivingPage() {
       sortValue: (r) => r.status,
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (r) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2.5 text-xs"
-          onClick={() => navigate(`/app/inbound/receiving/${r.id}`)}
-        >
-          View
-        </Button>
-      ),
+      id: "return",
+      header: "Return",
+      cell: (r) => {
+        const pct = returnPctOf(r as any);
+        return (
+          <div className="flex min-w-[100px] items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+              <div className={cx("h-full rounded-full", pct > 50 ? "bg-destructive" : pct > 0 ? "bg-amber-500" : "bg-primary/30")} style={{ width: `${pct}%` }} />
+            </div>
+            <span className="shrink-0 text-[11px] font-semibold text-muted-foreground">{pct}%</span>
+          </div>
+        );
+      },
+      sortValue: (r) => returnPctOf(r as any),
+    },
+    {
+      id: "rcvNo",
+      header: "ID",
+      cell: (r) => <span className="text-xs font-semibold">{rcvNo(r)}</span>,
+      sortValue: (r) => String(rcvNo(r)),
+    },
+    {
+      id: "created",
+      header: "Created",
+      cell: (r) => <span className="text-muted-foreground text-xs">{r.createdAt ? timeAgo(r.createdAt) : "—"}</span>,
+      sortValue: (r) => r.createdAt ?? "",
     },
   ];
 
@@ -101,7 +113,6 @@ export default function InboundReceivingPage() {
     <RoleGuard roles={[]} menus={["supply.purchaseOrders"]}>
       <PageHeader
         title="Receiving"
-        description="Riwayat penerimaan barang dari Purchase Order. Jam diambil dari waktu simpan (posting)."
         actions={
           <Button size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/inbound/receiving/new")}>
             <Plus size={14} strokeWidth={2} />
@@ -115,19 +126,21 @@ export default function InboundReceivingPage() {
         data={filtered}
         getRowId={(r) => r.id}
         loading={isLoading}
-        searchPlaceholder="Cari no receiving / PO / gudang..."
-        getSearchText={(r) => `${rcvNo(r)} ${poNo(r.purchaseOrderId)} ${warehouseName(r.warehouseId)}`}
-        onRowClick={(r) => navigate(`/app/inbound/receiving/${r.id}`)}
+        searchPlaceholder="Cari supplier / ID..."
+        getSearchText={(r) => `${rcvNo(r)} ${supplierName(r)}`}
+        onRowClick={(r) => navigate(`/app/inbound/receiving/${r.documentNo ?? r.id}`)}
         filters={
           <div className="flex gap-2">
             <Select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-8 w-40 text-xs"
+              className="h-8 w-48 text-xs"
             >
               <option value="all">All status</option>
               <option value="DRAFT">Draft</option>
-              <option value="POSTED">Posted</option>
+              <option value="PENDING_QC">Pending QC</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="POSTED">Posted (legacy)</option>
               <option value="CANCELED">Canceled</option>
             </Select>
             <Select

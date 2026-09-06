@@ -39,8 +39,8 @@ export default function DeliveriesPage() {
     {
       id: "deliveryNo",
       header: "Delivery No",
-      cell: (d) => <span className="text-xs font-semibold">{formatId(d.id)}</span>,
-      sortValue: (d) => String(d.deliveryNo),
+      cell: (d) => <span className="text-xs font-semibold">{(d as any).documentNo ?? d.deliveryNo ?? formatId(d.id)}</span>,
+      sortValue: (d) => String((d as any).documentNo ?? d.deliveryNo),
     },
     {
       id: "salesOrder",
@@ -77,7 +77,7 @@ export default function DeliveriesPage() {
       header: "",
       align: "right",
       cell: (d) => (
-        <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate(`/app/deliveries/${d.id}`)}>
+        <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate(`/app/deliveries/${(d as any).documentNo ?? d.id}`)}>
           View
         </Button>
       ),
@@ -101,8 +101,9 @@ export default function DeliveriesPage() {
         data={filtered}
         getRowId={(d) => d.id}
         loading={isLoading}
+        onRowClick={(d) => navigate(`/app/deliveries/${(d as any).documentNo ?? d.id}`)}
         searchPlaceholder="Search deliveries..."
-        getSearchText={(d) => `${formatId(d.id)} ${customerName(d.customerId)} ${warehouseName(d.warehouseId)}`}
+        getSearchText={(d) => `${(d as any).documentNo ?? formatId(d.id)} ${customerName(d.customerId)} ${warehouseName(d.warehouseId)}`}
         filters={
           <div className="flex gap-2">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 w-40 text-xs">

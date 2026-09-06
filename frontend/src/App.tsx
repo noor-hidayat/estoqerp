@@ -93,6 +93,8 @@ const InboundReceivingPage = lazy(() => import("@/app/app/inbound/receiving/page
 const NewInboundReceivingPage = lazy(() => import("@/app/app/inbound/receiving/new/page"));
 const InboundReceivingDetailPage = lazy(() => import("@/app/app/inbound/receiving/[id]/page"));
 const InboundQcPage = lazy(() => import("@/app/app/inbound/qc/page"));
+const NewQcInspectionPage = lazy(() => import("@/app/app/inbound/qc/new/page"));
+const QcInspectionDetailPage = lazy(() => import("@/app/app/inbound/qc/[id]/page"));
 const InboundPutawayPage = lazy(() => import("@/app/app/inbound/putaway/page"));
 const SupplierReturnPage = lazy(() => import("@/app/app/inbound/supplier-return/page"));
 const OutboundPickingPage = lazy(() => import("@/app/app/outbound/picking/page"));
@@ -218,6 +220,8 @@ export default function App() {
             <Route path="inbound/receiving/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewInboundReceivingPage /></LazyPage>} />
             <Route path="inbound/receiving/:id" element={<LazyPage fallback={<DetailSkeleton />}><InboundReceivingDetailPage /></LazyPage>} />
             <Route path="inbound/qc" element={<LazyPage><InboundQcPage /></LazyPage>} />
+            <Route path="inbound/qc/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewQcInspectionPage /></LazyPage>} />
+            <Route path="inbound/qc/:id" element={<LazyPage fallback={<DetailSkeleton />}><QcInspectionDetailPage /></LazyPage>} />
             <Route path="inbound/putaway" element={<LazyPage><InboundPutawayPage /></LazyPage>} />
             <Route path="inbound/supplier-return" element={<LazyPage><SupplierReturnPage /></LazyPage>} />
             <Route path="outbound" element={<LazyPage fallback={<HubSkeleton cards={5} />}><OutboundPage /></LazyPage>} />

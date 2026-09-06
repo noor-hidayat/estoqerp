@@ -98,6 +98,7 @@ export default function SalesOrdersPage() {
         data={filtered}
         getRowId={(o) => o.id}
         loading={isLoading}
+        onRowClick={(o) => navigate(`/app/sales-orders/${o.id}`)}
         searchPlaceholder="Search sales orders..."
         getSearchText={(o) =>
           `${(o as any).documentNo ?? formatId(o.id)} ${customerName(o.customerId)} ${warehouseName(o.warehouseId)}`

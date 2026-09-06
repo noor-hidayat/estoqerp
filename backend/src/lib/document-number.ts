@@ -92,6 +92,7 @@ export async function nextDocumentNo(
     PO: "Purchase Order",
     SO: "Sales Order",
     RCV: "Receiving",
+    QC: "QC Inspection",
     GR: "Goods Receipt",
     DLV: "Delivery",
     SMV: "Stock Movement",

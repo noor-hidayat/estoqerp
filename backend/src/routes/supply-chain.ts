@@ -18,6 +18,41 @@ type DocStatus = "DRAFT" | "POSTED" | "CANCELED";
 function isUuid(v: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 }
+function isDocumentNo(v: string): boolean {
+  // RCV-2609-0001, PR-2609-0001, PO-2609-0001, etc — prefix 2-5 huruf + YYMM + SEQ
+  return /^[A-Z]{2,5}-\d{2,4}-?\d{1,6}$/i.test(v) || /^[A-Z]{2,5}-\d{4,}-\d+$/i.test(v) || /^[A-Z]+\-\d+.*$/i.test(v);
+}
+function receivingWhere(pid: string) {
+  if (isUuid(pid)) return eq(s.receivings.publicId, pid);
+  if (isDocumentNo(pid)) return eq(s.receivings.documentNo, pid);
+  if (/^\d+$/.test(pid)) return eq(s.receivings.id, Number(pid));
+  // fallback: coba documentNo dulu, lalu publicId
+  return eq(s.receivings.documentNo, pid);
+}
+function poWhere(pid: string) {
+  if (isUuid(pid)) return eq(s.purchaseOrders.publicId, pid);
+  if (isDocumentNo(pid)) return eq(s.purchaseOrders.documentNo, pid);
+  if (/^\d+$/.test(pid)) return eq(s.purchaseOrders.id, Number(pid));
+  return eq(s.purchaseOrders.documentNo, pid);
+}
+function soWhere(pid: string) {
+  if (isUuid(pid)) return eq(s.salesOrders.publicId, pid);
+  if (isDocumentNo(pid)) return eq(s.salesOrders.documentNo, pid);
+  if (/^\d+$/.test(pid)) return eq(s.salesOrders.id, Number(pid));
+  return eq(s.salesOrders.documentNo, pid);
+}
+function grWhere(pid: string) {
+  if (isUuid(pid)) return eq(s.goodsReceipts.publicId, pid);
+  if (isDocumentNo(pid)) return eq(s.goodsReceipts.documentNo, pid);
+  if (/^\d+$/.test(pid)) return eq(s.goodsReceipts.id, Number(pid));
+  return eq(s.goodsReceipts.documentNo, pid);
+}
+function deliveryWhere(pid: string) {
+  if (isUuid(pid)) return eq(s.deliveries.publicId, pid);
+  if (isDocumentNo(pid)) return eq(s.deliveries.documentNo, pid);
+  if (/^\d+$/.test(pid)) return eq(s.deliveries.id, Number(pid));
+  return eq(s.deliveries.documentNo, pid);
+}
 async function resolveInternalId(table: any, publicOrInternal: string | number | undefined | null): Promise<number | null> {
   if (publicOrInternal == null || publicOrInternal === "") return null;
   const str = String(publicOrInternal).trim();
@@ -224,10 +259,7 @@ supplyChainRouter.get("/purchase-orders/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = undefined;
-    if (isUuid(pid)) where = eq(s.purchaseOrders.publicId, pid);
-    else if (/^\d+$/.test(pid)) where = eq(s.purchaseOrders.id, Number(pid));
-    else where = eq(s.purchaseOrders.publicId, pid);
+    let where: any = poWhere(pid);
     const [row] = await db.select().from(s.purchaseOrders).where(where).limit(1);
     if (!row) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
     const lines = await poLines(db, row.id);
@@ -273,9 +305,7 @@ supplyChainRouter.put("/purchase-orders/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = undefined;
-    if (isUuid(pid)) where = eq(s.purchaseOrders.publicId, pid);
-    else where = eq(s.purchaseOrders.id, Number(pid));
+    let where: any = poWhere(pid);
     const [cur] = await db.select({ id: s.purchaseOrders.id, status: s.purchaseOrders.status }).from(s.purchaseOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya PO berstatus DRAFT yang dapat diubah." });
@@ -298,9 +328,7 @@ supplyChainRouter.delete("/purchase-orders/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = undefined;
-    if (isUuid(pid)) where = eq(s.purchaseOrders.publicId, pid);
-    else where = eq(s.purchaseOrders.id, Number(pid));
+    let where: any = poWhere(pid);
     const [cur] = await db.select({ id: s.purchaseOrders.id }).from(s.purchaseOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
     await db.delete(s.purchaseOrders).where(eq(s.purchaseOrders.id, cur.id));
@@ -312,9 +340,7 @@ supplyChainRouter.post("/purchase-orders/:id/post", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = undefined;
-    if (isUuid(pid)) where = eq(s.purchaseOrders.publicId, pid);
-    else where = eq(s.purchaseOrders.id, Number(pid));
+    let where: any = poWhere(pid);
     const [cur] = await db.select({ id: s.purchaseOrders.id, status: s.purchaseOrders.status }).from(s.purchaseOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "PO dibatalkan tidak dapat diposting." });
@@ -327,9 +353,7 @@ supplyChainRouter.post("/purchase-orders/:id/cancel", async (req, res, next) => 
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = undefined;
-    if (isUuid(pid)) where = eq(s.purchaseOrders.publicId, pid);
-    else where = eq(s.purchaseOrders.id, Number(pid));
+    let where: any = poWhere(pid);
     const [cur] = await db.select({ id: s.purchaseOrders.id, status: s.purchaseOrders.status }).from(s.purchaseOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "PO sudah dibatalkan." });
@@ -452,7 +476,7 @@ supplyChainRouter.get("/sales-orders/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.salesOrders", "view"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.salesOrders.publicId, pid) : eq(s.salesOrders.id, Number(pid));
+    let where: any = soWhere(pid);
     const [row] = await db.select().from(s.salesOrders).where(where).limit(1);
     if (!row) return res.status(404).json({ error: "Sales Order tidak ditemukan." });
     const lines = await soLines(db, row.id);
@@ -463,7 +487,7 @@ supplyChainRouter.put("/sales-orders/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.salesOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.salesOrders.publicId, pid) : eq(s.salesOrders.id, Number(pid));
+    let where: any = soWhere(pid);
     const [cur] = await db.select({ id: s.salesOrders.id, status: s.salesOrders.status }).from(s.salesOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Sales Order tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya SO berstatus DRAFT yang dapat diubah." });
@@ -484,7 +508,7 @@ supplyChainRouter.delete("/sales-orders/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.salesOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.salesOrders.publicId, pid) : eq(s.salesOrders.id, Number(pid));
+    let where: any = soWhere(pid);
     const [cur] = await db.select({ id: s.salesOrders.id }).from(s.salesOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Sales Order tidak ditemukan." });
     await db.delete(s.salesOrders).where(eq(s.salesOrders.id, cur.id));
@@ -495,7 +519,7 @@ supplyChainRouter.post("/sales-orders/:id/post", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.salesOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.salesOrders.publicId, pid) : eq(s.salesOrders.id, Number(pid));
+    let where: any = soWhere(pid);
     const [so] = await db.select().from(s.salesOrders).where(where).limit(1);
     if (!so) return res.status(404).json({ error: "Sales Order tidak ditemukan." });
     if (so.status === "CANCELED") return res.status(400).json({ error: "SO dibatalkan tidak dapat diposting." });
@@ -513,7 +537,7 @@ supplyChainRouter.post("/sales-orders/:id/cancel", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.salesOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.salesOrders.publicId, pid) : eq(s.salesOrders.id, Number(pid));
+    let where: any = soWhere(pid);
     const [cur] = await db.select({ id: s.salesOrders.id, status: s.salesOrders.status }).from(s.salesOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Sales Order tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "SO sudah dibatalkan." });
@@ -556,6 +580,14 @@ supplyChainRouter.post("/goods-receipts", async (req, res, next) => {
     if (!poId || !warehouseId) return res.status(400).json({ error: "PO/warehouse tidak valid." });
     const [po] = await db.select({ supplierId: s.purchaseOrders.supplierId, branchId: s.purchaseOrders.branchId }).from(s.purchaseOrders).where(eq(s.purchaseOrders.id, poId)).limit(1);
     if (!po) return res.status(400).json({ error: "Purchase Order tidak ditemukan." });
+    // Guard: jika ada receiving untuk PO ini yang belum COMPLETED/POSTED, tolak GNR
+    const pendingReceivings = await db.select({ id: s.receivings.id, status: s.receivings.status }).from(s.receivings).where(eq(s.receivings.purchaseOrderId, poId));
+    if (pendingReceivings.length > 0) {
+      const hasCompleted = pendingReceivings.some((r) => r.status === "COMPLETED" || r.status === "POSTED");
+      const hasPending = pendingReceivings.some((r) => r.status === "PENDING_QC" || r.status === "DRAFT");
+      if (hasPending) return res.status(400).json({ error: "Receiving untuk PO ini masih Pending QC / Draft — selesaikan QC hingga COMPLETED dulu sebelum buat GNR." });
+      if (!hasCompleted) return res.status(400).json({ error: "Receiving untuk PO ini belum COMPLETED — selesaikan QC dulu sebelum buat GNR." });
+    }
     const seriesRaw = b.seriesId ?? b.seriesCode ?? null;
     let seriesId: number | null = null;
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
@@ -590,7 +622,7 @@ supplyChainRouter.get("/goods-receipts/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.goodsReceipts", "view"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.goodsReceipts.publicId, pid) : eq(s.goodsReceipts.id, Number(pid));
+    let where: any = grWhere(pid);
     const [row] = await db.select().from(s.goodsReceipts).where(where).limit(1);
     if (!row) return res.status(404).json({ error: "Goods Receipt tidak ditemukan." });
     const lines = await grLines(db, row.id);
@@ -601,7 +633,7 @@ supplyChainRouter.put("/goods-receipts/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.goodsReceipts", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.goodsReceipts.publicId, pid) : eq(s.goodsReceipts.id, Number(pid));
+    let where: any = grWhere(pid);
     const [cur] = await db.select({ id: s.goodsReceipts.id, status: s.goodsReceipts.status }).from(s.goodsReceipts).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Goods Receipt tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya GR berstatus DRAFT yang dapat diubah." });
@@ -622,7 +654,7 @@ supplyChainRouter.delete("/goods-receipts/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.goodsReceipts", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.goodsReceipts.publicId, pid) : eq(s.goodsReceipts.id, Number(pid));
+    let where: any = grWhere(pid);
     const [cur] = await db.select({ id: s.goodsReceipts.id }).from(s.goodsReceipts).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Goods Receipt tidak ditemukan." });
     await db.delete(s.goodsReceipts).where(eq(s.goodsReceipts.id, cur.id));
@@ -633,11 +665,20 @@ supplyChainRouter.post("/goods-receipts/:id/post", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.goodsReceipts", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.goodsReceipts.publicId, pid) : eq(s.goodsReceipts.id, Number(pid));
+    let where: any = grWhere(pid);
     const [gr] = await db.select().from(s.goodsReceipts).where(where).limit(1);
     if (!gr) return res.status(404).json({ error: "Goods Receipt tidak ditemukan." });
     if (gr.status === "CANCELED") return res.status(400).json({ error: "GR dibatalkan tidak dapat diposting." });
     if (gr.status === "POSTED") return res.status(400).json({ error: "GR sudah diposting." });
+    // Guard: receiving untuk PO ini harus COMPLETED/POSTED dulu
+    if (gr.purchaseOrderId) {
+      const recs = await db.select({ status: s.receivings.status }).from(s.receivings).where(eq(s.receivings.purchaseOrderId, gr.purchaseOrderId));
+      if (recs.length > 0) {
+        const hasPending = recs.some((r) => r.status === "PENDING_QC" || r.status === "DRAFT");
+        const hasCompleted = recs.some((r) => r.status === "COMPLETED" || r.status === "POSTED");
+        if (hasPending || !hasCompleted) return res.status(400).json({ error: "QC Receiving belum COMPLETED — selesaikan QC dulu sebelum posting GNR (stock masuk gudang)." });
+      }
+    }
     const lines = await grLines(db, gr.id);
     validateRequireUnitPrice(lines, "GR");
     const typeId = await getMovementTypeId("RECEIPT");
@@ -652,7 +693,7 @@ supplyChainRouter.post("/goods-receipts/:id/cancel", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.goodsReceipts", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.goodsReceipts.publicId, pid) : eq(s.goodsReceipts.id, Number(pid));
+    let where: any = grWhere(pid);
     const [cur] = await db.select({ id: s.goodsReceipts.id, status: s.goodsReceipts.status }).from(s.goodsReceipts).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Goods Receipt tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "GR sudah dibatalkan." });
@@ -682,7 +723,7 @@ async function replaceReceivingLines(tx: any, receivingId: number, lines: any[])
     const itemId = await resolveInternalId(s.items, l.itemId);
     const uomId = await resolveInternalId(s.uom, l.uomId);
     if (!itemId || !uomId) throw new Error("Item/UOM tidak valid");
-    await tx.insert(s.receivingLines).values({ receivingId, itemId, uomId, qty: String(l.qty), unitPrice: l.unitPrice != null ? String(l.unitPrice) : null, batchNumber: l.batchNumber ?? null, note: l.note ?? null });
+    await tx.insert(s.receivingLines).values({ receivingId, itemId, uomId, qty: String(l.qty), qtyAccepted: l.qtyAccepted != null ? String(l.qtyAccepted) : null, qtyRejected: l.qtyRejected != null ? String(l.qtyRejected) : null, unitPrice: l.unitPrice != null ? String(l.unitPrice) : null, batchNumber: l.batchNumber ?? null, note: l.note ?? null, rejectReason: l.rejectReason ?? null });
   }
 }
 async function mapReceivingLines(lines: any[]) {
@@ -698,7 +739,7 @@ async function mapReceivingLines(lines: any[]) {
     const uoms = await db.select({ id: s.uom.id, publicId: s.uom.publicId }).from(s.uom).where(inArray(s.uom.id, uomIds as number[]));
     uoms.forEach((u) => uomMap.set(u.id, u.publicId));
   }
-  return lines.map((l: any) => ({ ...l, id: l.publicId, _internalId: l.id, receivingId: undefined, itemId: itemMap.get(l.itemId) ?? l.itemId, uomId: l.uomId ? (uomMap.get(l.uomId) ?? l.uomId) : null }));
+  return lines.map((l: any) => ({ ...l, id: l.publicId, _internalId: l.id, receivingId: undefined, itemId: itemMap.get(l.itemId) ?? l.itemId, uomId: l.uomId ? (uomMap.get(l.uomId) ?? l.uomId) : null, qtyAccepted: l.qtyAccepted != null ? String(l.qtyAccepted) : null, qtyRejected: l.qtyRejected != null ? String(l.qtyRejected) : null, rejectReason: l.rejectReason ?? null }));
 }
 supplyChainRouter.post("/receivings", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
@@ -738,25 +779,88 @@ supplyChainRouter.get("/receivings", async (req, res, next) => {
       if (pid) conds.push(eq(s.receivings.purchaseOrderId, pid));
     }
     const rows = await db.select().from(s.receivings).where(conds.length ? and(...conds) : undefined).orderBy(desc(s.receivings.receiptDate));
-    res.json(rows.map((r: any) => ({ ...r, id: r.publicId, _internalId: r.id, documentNo: r.documentNo, rcvNo: r.documentNo })));
+    // map FK internal ids to publicIds for frontend convenience
+    const purchaseOrderIds = [...new Set(rows.map((r: any) => r.purchaseOrderId).filter(Boolean))];
+    const supplierIds = [...new Set(rows.map((r: any) => r.supplierId).filter(Boolean))];
+    const warehouseIds = [...new Set(rows.map((r: any) => r.warehouseId).filter(Boolean))];
+    const poMap = new Map<number, string>();
+    const supMap = new Map<number, string>();
+    const whMap = new Map<number, string>();
+    if (purchaseOrderIds.length) {
+      const pos = await db.select({ id: s.purchaseOrders.id, publicId: s.purchaseOrders.publicId }).from(s.purchaseOrders).where(inArray(s.purchaseOrders.id, purchaseOrderIds as number[]));
+      pos.forEach((x) => poMap.set(x.id, x.publicId));
+    }
+    if (supplierIds.length) {
+      const sups = await db.select({ id: s.suppliers.id, publicId: s.suppliers.publicId }).from(s.suppliers).where(inArray(s.suppliers.id, supplierIds as number[]));
+      sups.forEach((x) => supMap.set(x.id, x.publicId));
+    }
+    if (warehouseIds.length) {
+      const whs = await db.select({ id: s.warehouses.id, publicId: s.warehouses.publicId }).from(s.warehouses).where(inArray(s.warehouses.id, warehouseIds as number[]));
+      whs.forEach((x) => whMap.set(x.id, x.publicId));
+    }
+    // aggregate qtyReceived / qtyRejected for Return progress (qtyRejected / qtyReceived)
+    const receivingInternalIds = rows.map((r: any) => r.id);
+    const sumMap = new Map<number, { totalQty: number; totalRejected: number }>();
+    if (receivingInternalIds.length) {
+      const sums = await db.select({
+        receivingId: s.receivingLines.receivingId,
+        totalQty: sql<string>`COALESCE(SUM(${s.receivingLines.qty}::numeric),0)`,
+        totalRejected: sql<string>`COALESCE(SUM(COALESCE(${s.receivingLines.qtyRejected}::numeric,0)),0)`,
+      }).from(s.receivingLines).where(inArray(s.receivingLines.receivingId, receivingInternalIds as number[])).groupBy(s.receivingLines.receivingId);
+      sums.forEach((x: any) => sumMap.set(x.receivingId, { totalQty: Number(x.totalQty), totalRejected: Number(x.totalRejected) }));
+    }
+    const out = rows.map((r: any) => {
+      const agg = sumMap.get(r.id) ?? { totalQty: 0, totalRejected: 0 };
+      const pct = agg.totalQty > 0 ? Math.round((agg.totalRejected / agg.totalQty) * 100) : 0;
+      return {
+        ...r,
+        id: r.publicId,
+        _internalId: r.id,
+        documentNo: r.documentNo,
+        rcvNo: r.documentNo,
+        purchaseOrderId: poMap.get(r.purchaseOrderId) ?? r.purchaseOrderId,
+        supplierId: supMap.get(r.supplierId) ?? r.supplierId,
+        warehouseId: whMap.get(r.warehouseId) ?? r.warehouseId,
+        totalQty: agg.totalQty,
+        totalRejected: agg.totalRejected,
+        returnPct: pct,
+      };
+    });
+    res.json(out);
   } catch (e) { next(e); }
 });
 supplyChainRouter.get("/receivings/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.receivings.publicId, pid) : eq(s.receivings.id, Number(pid));
+    let where: any = receivingWhere(pid);
     const [row] = await db.select().from(s.receivings).where(where).limit(1);
     if (!row) return res.status(404).json({ error: "Receiving tidak ditemukan." });
     const lines = await receivingLines(db, row.id);
-    res.json({ ...row, id: row.publicId, _internalId: row.id, documentNo: row.documentNo, rcvNo: row.documentNo, lines: await mapReceivingLines(lines) });
+    // map FKs to publicId
+    let purchaseOrderPublic: string | number = row.purchaseOrderId;
+    let supplierPublic: string | number | null = row.supplierId;
+    let warehousePublic: string | number = row.warehouseId;
+    if (row.purchaseOrderId) {
+      const [po] = await db.select({ publicId: s.purchaseOrders.publicId }).from(s.purchaseOrders).where(eq(s.purchaseOrders.id, row.purchaseOrderId)).limit(1);
+      if (po) purchaseOrderPublic = po.publicId;
+    }
+    if (row.supplierId) {
+      const [sup] = await db.select({ publicId: s.suppliers.publicId }).from(s.suppliers).where(eq(s.suppliers.id, row.supplierId)).limit(1);
+      if (sup) supplierPublic = sup.publicId;
+    }
+    if (row.warehouseId) {
+      const [wh] = await db.select({ publicId: s.warehouses.publicId }).from(s.warehouses).where(eq(s.warehouses.id, row.warehouseId)).limit(1);
+      if (wh) warehousePublic = wh.publicId;
+    }
+    res.json({ ...row, id: row.publicId, _internalId: row.id, documentNo: row.documentNo, rcvNo: row.documentNo, purchaseOrderId: purchaseOrderPublic, supplierId: supplierPublic, warehouseId: warehousePublic, lines: await mapReceivingLines(lines) });
   } catch (e) { next(e); }
 });
 supplyChainRouter.put("/receivings/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.receivings.publicId, pid) : eq(s.receivings.id, Number(pid));
+    let where: any = receivingWhere(pid);
     const [cur] = await db.select({ id: s.receivings.id, status: s.receivings.status }).from(s.receivings).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Receiving tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya receiving berstatus DRAFT yang dapat diubah." });
@@ -777,7 +881,7 @@ supplyChainRouter.delete("/receivings/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.receivings.publicId, pid) : eq(s.receivings.id, Number(pid));
+    let where: any = receivingWhere(pid);
     const [cur] = await db.select({ id: s.receivings.id }).from(s.receivings).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Receiving tidak ditemukan." });
     await db.delete(s.receivings).where(eq(s.receivings.id, cur.id));
@@ -788,13 +892,96 @@ supplyChainRouter.post("/receivings/:id/post", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.receivings.publicId, pid) : eq(s.receivings.id, Number(pid));
+    let where: any = receivingWhere(pid);
     const [rcv] = await db.select().from(s.receivings).where(where).limit(1);
     if (!rcv) return res.status(404).json({ error: "Receiving tidak ditemukan." });
     if (rcv.status === "CANCELED") return res.status(400).json({ error: "Receiving dibatalkan tidak dapat diposting." });
-    if (rcv.status === "POSTED") return res.status(400).json({ error: "Receiving sudah diposting." });
-    // Sengaja tanpa movement stok — stok baru bertambah saat GRN diposting.
-    await db.update(s.receivings).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
+    if (rcv.status === "POSTED" || rcv.status === "COMPLETED") return res.status(400).json({ error: "Receiving sudah selesai/posted." });
+    if (rcv.status === "PENDING_QC") {
+      // Legacy post from PENDING_QC → COMPLETED (tanpa QC detail, accepted = received)
+      const lines = await receivingLines(db, rcv.id);
+      await db.transaction(async (tx) => {
+        for (const l of lines) {
+          await tx.update(s.receivingLines).set({ qtyAccepted: l.qty, qtyRejected: "0" }).where(eq(s.receivingLines.id, l.id));
+        }
+        await tx.update(s.receivings).set({ status: "COMPLETED", qcInspectedAt: new Date(), qcInspectedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
+      });
+      return res.json({ ok: true });
+    }
+    // DRAFT → PENDING_QC via legacy post (alias submit)
+    await db.update(s.receivings).set({ status: "PENDING_QC", submittedAt: new Date(), submittedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+supplyChainRouter.post("/receivings/:id/submit", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = receivingWhere(pid);
+    const [rcv] = await db.select().from(s.receivings).where(where).limit(1);
+    if (!rcv) return res.status(404).json({ error: "Receiving tidak ditemukan." });
+    if (rcv.status !== "DRAFT") return res.status(400).json({ error: `Hanya DRAFT yang bisa di-submit. Status sekarang: ${rcv.status}` });
+    const lines = await receivingLines(db, rcv.id);
+    if (!lines.length) return res.status(400).json({ error: "Receiving tanpa item tidak bisa di-submit." });
+    for (const l of lines) {
+      if (Number(l.qty) <= 0) return res.status(400).json({ error: "Qty Received harus > 0." });
+    }
+    await db.update(s.receivings).set({ status: "PENDING_QC", submittedAt: new Date(), submittedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+supplyChainRouter.post("/receivings/:id/qc", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = receivingWhere(pid);
+    const [rcv] = await db.select().from(s.receivings).where(where).limit(1);
+    if (!rcv) return res.status(404).json({ error: "Receiving tidak ditemukan." });
+    if (rcv.status !== "PENDING_QC") return res.status(400).json({ error: `Hanya PENDING_QC yang bisa di-QC. Status sekarang: ${rcv.status}` });
+    const body = req.body ?? {};
+    const qcLines: Array<{ id?: string; receivingLineId?: string; lineId?: string; qtyRejected?: number | string; rejectReason?: string | null }> = body.lines ?? body.qcLines ?? [];
+    const qcNotes: string | null = body.qcNotes ?? body.notes ?? null;
+    const lines = await receivingLines(db, rcv.id);
+    // Map by publicId or internal id
+    const lineByPublic = new Map<string, any>();
+    const lineById = new Map<number, any>();
+    for (const l of lines) {
+      lineByPublic.set(l.publicId, l);
+      lineById.set(l.id, l);
+    }
+    // If body provides reject per line, update; else assume 0 reject (all accepted)
+    await db.transaction(async (tx) => {
+      for (const l of lines) {
+        const match = qcLines.find((q: any) => {
+          const qid = q.id ?? q.receivingLineId ?? q.lineId ?? q.publicId;
+          return qid && (qid === l.publicId || qid === String(l.id));
+        });
+        // If no explicit entry, treat as 0 reject (fully accepted)
+        // If qcLines empty but body has single reject? fallback: use first entry if only one line
+        let qtyRejected = 0;
+        let rejectReason: string | null = null;
+        if (match) {
+          qtyRejected = Number(match.qtyRejected ?? match.qtyReject ?? 0);
+          rejectReason = match.rejectReason ?? match.reason ?? null;
+        } else if (qcLines.length === 0) {
+          qtyRejected = 0;
+        } else if (qcLines.length === lines.length) {
+          // order-based fallback: index mapping
+          const idx = lines.indexOf(l);
+          const q = qcLines[idx];
+          if (q) {
+            qtyRejected = Number(q.qtyRejected ?? q.qtyReject ?? 0);
+            rejectReason = q.rejectReason ?? q.reason ?? null;
+          }
+        }
+        if (!Number.isFinite(qtyRejected) || qtyRejected < 0) throw new Error(`Qty Reject tidak valid untuk line ${l.publicId}`);
+        const qtyReceived = Number(l.qty);
+        if (qtyRejected > qtyReceived) throw new Error(`Qty Reject (${qtyRejected}) melebihi Qty Received (${qtyReceived}) untuk line ${l.publicId}`);
+        const qtyAccepted = qtyReceived - qtyRejected;
+        await tx.update(s.receivingLines).set({ qtyAccepted: String(qtyAccepted), qtyRejected: String(qtyRejected), rejectReason: rejectReason || null }).where(eq(s.receivingLines.id, l.id));
+      }
+      await tx.update(s.receivings).set({ status: "COMPLETED", qcInspectedAt: new Date(), qcInspectedBy: (req as any).user?.internalId ?? null, qcNotes: qcNotes || null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
+    });
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -802,11 +989,382 @@ supplyChainRouter.post("/receivings/:id/cancel", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.receivings.publicId, pid) : eq(s.receivings.id, Number(pid));
+    let where: any = receivingWhere(pid);
     const [cur] = await db.select({ id: s.receivings.id, status: s.receivings.status }).from(s.receivings).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Receiving tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "Receiving sudah dibatalkan." });
+    if (cur.status === "COMPLETED" || cur.status === "POSTED") return res.status(400).json({ error: "Receiving COMPLETED tidak bisa dibatalkan." });
     await db.update(s.receivings).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.receivings.id, cur.id));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// ---------------------------------------------------------------------------
+// QC INSPECTIONS — dokumen terpisah dengan nomor QC-..., history di menu QC
+// Flow: Receiving(PENDING_QC) → QC Inspection (DRAFT→COMPLETED) → Receiving(COMPLETED) → GNR
+// ---------------------------------------------------------------------------
+function qcWhere(pid: string) {
+  if (isUuid(pid)) return eq(s.qcInspections.publicId, pid);
+  if (isDocumentNo(pid)) return eq(s.qcInspections.documentNo, pid);
+  if (/^\d+$/.test(pid)) return eq(s.qcInspections.id, Number(pid));
+  return eq(s.qcInspections.documentNo, pid);
+}
+async function qcInspectionLines(tx: any, qcId: number) {
+  return tx.select().from(s.qcInspectionLines).where(eq(s.qcInspectionLines.qcInspectionId, qcId));
+}
+async function replaceQcLines(tx: any, qcId: number, lines: any[]) {
+  // delete child params first via cascade, but also clear via delete lines
+  await tx.delete(s.qcInspectionLines).where(eq(s.qcInspectionLines.qcInspectionId, qcId));
+  for (const l of lines) {
+    const itemId = await resolveInternalId(s.items, l.itemId);
+    const uomId = l.uomId ? await resolveInternalId(s.uom, l.uomId) : null;
+    if (!itemId) throw new Error("Item tidak valid");
+    let qtyReceived = Number(l.qtyReceived ?? l.qty ?? 0);
+    // if params provided, sum rejected from params
+    let qtyRejected: number;
+    let params = l.params ?? l.parameters ?? null;
+    if (Array.isArray(params) && params.length > 0) {
+      qtyRejected = params.reduce((sum: number, p: any) => sum + Number(p.qty ?? 0), 0);
+    } else {
+      qtyRejected = Number(l.qtyRejected ?? 0);
+    }
+    const qtyAccepted = qtyReceived - qtyRejected;
+    if (qtyRejected < 0 || qtyRejected > qtyReceived) throw new Error("Qty reject tidak valid");
+    const [inserted] = await tx.insert(s.qcInspectionLines).values({
+      qcInspectionId: qcId,
+      receivingLineId: l.receivingLineId ? await resolveInternalId(s.receivingLines, String(l.receivingLineId)) : null,
+      itemId,
+      uomId,
+      qtyReceived: String(qtyReceived),
+      qtyRejected: String(qtyRejected),
+      qtyAccepted: String(qtyAccepted),
+      batchNumber: l.batchNumber ?? null,
+      rejectReason: l.rejectReason ?? (Array.isArray(params) ? params.map((p: any) => `${p.parameterCode ?? p.parameterId ?? ""}: ${p.qty}`).join(", ") : null),
+    }).returning();
+    // insert params breakdown if any
+    if (Array.isArray(params) && params.length > 0) {
+      for (const p of params) {
+        const paramId = await resolveInternalId(s.qcParameters, String(p.parameterId ?? p.parameterCode ?? ""));
+        // also try by code if not uuid
+        let pid = paramId;
+        if (!pid && p.parameterCode) {
+          const [byCode] = await tx.select({ id: s.qcParameters.id }).from(s.qcParameters).where(eq(s.qcParameters.code, String(p.parameterCode))).limit(1);
+          pid = byCode?.id ?? null;
+        }
+        if (!pid) {
+          // try by name
+          if (p.parameterName) {
+            const [byName] = await tx.select({ id: s.qcParameters.id }).from(s.qcParameters).where(eq(s.qcParameters.name, String(p.parameterName))).limit(1);
+            pid = byName?.id ?? null;
+          }
+        }
+        if (!pid) throw new Error(`Parameter QC tidak valid: ${p.parameterId ?? p.parameterCode ?? ""}`);
+        await tx.insert(s.qcInspectionLineParams).values({
+          qcInspectionLineId: inserted.id,
+          parameterId: pid,
+          qty: String(p.qty ?? 0),
+          note: p.note ?? null,
+        });
+      }
+    }
+  }
+}
+async function mapQcLines(lines: any[]) {
+  const itemIds = [...new Set(lines.map((l: any) => l.itemId))];
+  const itemMap = new Map<number, string>();
+  if (itemIds.length) {
+    const items = await db.select({ id: s.items.id, publicId: s.items.publicId }).from(s.items).where(inArray(s.items.id, itemIds));
+    items.forEach((it) => itemMap.set(it.id, it.publicId));
+  }
+  const uomIds = [...new Set(lines.map((l: any) => l.uomId).filter(Boolean))];
+  const uomMap = new Map<number, string>();
+  if (uomIds.length) {
+    const uoms = await db.select({ id: s.uom.id, publicId: s.uom.publicId }).from(s.uom).where(inArray(s.uom.id, uomIds as number[]));
+    uoms.forEach((u) => uomMap.set(u.id, u.publicId));
+  }
+  // fetch params for these lines
+  const lineIds = lines.map((l: any) => l.id);
+  let paramsByLine = new Map<number, any[]>();
+  if (lineIds.length) {
+    const params = await db.select().from(s.qcInspectionLineParams).where(inArray(s.qcInspectionLineParams.qcInspectionLineId, lineIds));
+    // map parameterId to publicId/code/name
+    const paramIds = [...new Set(params.map((p: any) => p.parameterId))];
+    const paramMap = new Map<number, any>();
+    if (paramIds.length) {
+      const paramRows = await db.select().from(s.qcParameters).where(inArray(s.qcParameters.id, paramIds));
+      paramRows.forEach((pr: any) => paramMap.set(pr.id, pr));
+    }
+    for (const p of params) {
+      const pr = paramMap.get(p.parameterId);
+      const arr = paramsByLine.get(p.qcInspectionLineId) ?? [];
+      arr.push({ id: p.publicId, _internalId: p.id, parameterId: pr?.publicId ?? p.parameterId, parameterCode: pr?.code ?? null, parameterName: pr?.name ?? null, qty: p.qty, note: p.note });
+      paramsByLine.set(p.qcInspectionLineId, arr);
+    }
+  }
+  return lines.map((l: any) => ({ ...l, id: l.publicId, _internalId: l.id, qcInspectionId: undefined, itemId: itemMap.get(l.itemId) ?? l.itemId, uomId: l.uomId ? (uomMap.get(l.uomId) ?? l.uomId) : null, params: paramsByLine.get(l.id) ?? [] }));
+}
+
+supplyChainRouter.post("/qc-inspections", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const b = req.body ?? {};
+    if (!b.receivingId) return res.status(400).json({ error: "receivingId wajib." });
+    if (!b.inspectionDate) return res.status(400).json({ error: "inspectionDate wajib." });
+    let receivingId: number | null = await resolveInternalId(s.receivings, String(b.receivingId));
+    if (!receivingId) {
+      const [byDoc] = await db.select({ id: s.receivings.id }).from(s.receivings).where(eq(s.receivings.documentNo, String(b.receivingId))).limit(1);
+      receivingId = byDoc?.id ?? null;
+    }
+    if (!receivingId) return res.status(400).json({ error: "Receiving tidak valid." });
+    const [rcv] = await db.select().from(s.receivings).where(eq(s.receivings.id, receivingId)).limit(1);
+    if (!rcv) return res.status(404).json({ error: "Receiving tidak ditemukan." });
+    if (rcv.status !== "PENDING_QC") return res.status(400).json({ error: `Hanya Receiving PENDING_QC yang bisa di-QC. Status sekarang: ${rcv.status}` });
+    // cegah double QC draft untuk receiving yang sama
+    const existing = await db.select({ id: s.qcInspections.id }).from(s.qcInspections).where(and(eq(s.qcInspections.receivingId, receivingId), eq(s.qcInspections.status as any, "DRAFT"))).limit(1);
+    if (existing.length) return res.status(400).json({ error: "Sudah ada QC Inspection DRAFT untuk Receiving ini." });
+    const warehouseId = rcv.warehouseId;
+    const supplierId = rcv.supplierId;
+    const purchaseOrderId = rcv.purchaseOrderId;
+    const branchId = rcv.branchId;
+    const seriesRaw = b.seriesId ?? b.seriesCode ?? null;
+    let seriesId: number | null = null;
+    if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
+    const { documentNo } = await db.transaction(async (tx) => {
+      const doc = await nextDocumentNo(tx as any, "QC", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.inspectionDate ? new Date(b.inspectionDate) : new Date() });
+      const [qc] = await tx.insert(s.qcInspections).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, receivingId, purchaseOrderId, supplierId, warehouseId, inspectionDate: b.inspectionDate, status: "DRAFT", notes: b.notes ?? null, qcNotes: b.qcNotes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId }).returning();
+      // lines: jika tidak dikirim, auto dari receivingLines dengan qtyRejected=0
+      let lines = b.lines;
+      if (!Array.isArray(lines) || lines.length === 0) {
+        const rcvLines = await qcInspectionLines(tx as any, qc.id); // empty now, fetch from receiving
+        const rLines = await tx.select().from(s.receivingLines).where(eq(s.receivingLines.receivingId, receivingId));
+        lines = rLines.map((rl: any) => ({ itemId: rl.itemId, uomId: rl.uomId, qtyReceived: rl.qty, qtyRejected: "0", batchNumber: rl.batchNumber, receivingLineId: rl.id }));
+        // need to map itemId/uomId from internal to public for replaceQcLines? replaceQcLines expects publicId and will resolveInternalId again, so we pass publicId via map
+        // Convert internal ids to public ids for replaceQcLines
+        const mapped = await Promise.all(lines.map(async (l: any) => {
+          const [it] = await tx.select({ publicId: s.items.publicId }).from(s.items).where(eq(s.items.id, l.itemId)).limit(1);
+          let uomPublic = null;
+          if (l.uomId) {
+            const [u] = await tx.select({ publicId: s.uom.publicId }).from(s.uom).where(eq(s.uom.id, l.uomId)).limit(1);
+            uomPublic = u?.publicId ?? l.uomId;
+          }
+          const [rl] = await tx.select({ publicId: s.receivingLines.publicId }).from(s.receivingLines).where(eq(s.receivingLines.id, l.receivingLineId ?? l.id)).limit(1);
+          return { ...l, itemId: it?.publicId ?? l.itemId, uomId: uomPublic, receivingLineId: rl?.publicId ?? l.receivingLineId };
+        }));
+        lines = mapped;
+      }
+      if (Array.isArray(lines) && lines.length) await replaceQcLines(tx, qc.id, lines);
+      return { documentNo: doc.documentNo, id: qc.id };
+    });
+    const [created] = await db.select({ publicId: s.qcInspections.publicId }).from(s.qcInspections).where(eq(s.qcInspections.documentNo, documentNo)).limit(1);
+    res.status(201).json({ id: created.publicId, documentNo });
+  } catch (e) { next(e); }
+});
+
+supplyChainRouter.get("/qc-inspections", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
+  try {
+    const conds: any[] = [];
+    if (req.query.status) conds.push(eq(s.qcInspections.status as any, String(req.query.status)));
+    if (req.query.receivingId) {
+      const rid = await resolveInternalId(s.receivings, String(req.query.receivingId));
+      if (rid) conds.push(eq(s.qcInspections.receivingId, rid));
+    }
+    const rows = await db.select().from(s.qcInspections).where(conds.length ? and(...conds) : undefined).orderBy(desc(s.qcInspections.inspectionDate));
+    // map FKs to publicId
+    const receivingIds = [...new Set(rows.map((r: any) => r.receivingId).filter(Boolean))];
+    const poIds = [...new Set(rows.map((r: any) => r.purchaseOrderId).filter(Boolean))];
+    const supIds = [...new Set(rows.map((r: any) => r.supplierId).filter(Boolean))];
+    const whIds = [...new Set(rows.map((r: any) => r.warehouseId).filter(Boolean))];
+    const rcvMap = new Map<number, string>();
+    const poMap = new Map<number, string>();
+    const supMap = new Map<number, string>();
+    const whMap = new Map<number, string>();
+    if (receivingIds.length) {
+      const rcvs = await db.select({ id: s.receivings.id, publicId: s.receivings.publicId }).from(s.receivings).where(inArray(s.receivings.id, receivingIds as number[]));
+      rcvs.forEach((x) => rcvMap.set(x.id, x.publicId));
+    }
+    if (poIds.length) {
+      const pos = await db.select({ id: s.purchaseOrders.id, publicId: s.purchaseOrders.publicId }).from(s.purchaseOrders).where(inArray(s.purchaseOrders.id, poIds as number[]));
+      pos.forEach((x) => poMap.set(x.id, x.publicId));
+    }
+    if (supIds.length) {
+      const sups = await db.select({ id: s.suppliers.id, publicId: s.suppliers.publicId }).from(s.suppliers).where(inArray(s.suppliers.id, supIds as number[]));
+      sups.forEach((x) => supMap.set(x.id, x.publicId));
+    }
+    if (whIds.length) {
+      const whs = await db.select({ id: s.warehouses.id, publicId: s.warehouses.publicId }).from(s.warehouses).where(inArray(s.warehouses.id, whIds as number[]));
+      whs.forEach((x) => whMap.set(x.id, x.publicId));
+    }
+    const out = rows.map((r: any) => ({
+      ...r,
+      id: r.publicId,
+      _internalId: r.id,
+      documentNo: r.documentNo,
+      receivingId: rcvMap.get(r.receivingId) ?? r.receivingId,
+      purchaseOrderId: r.purchaseOrderId ? (poMap.get(r.purchaseOrderId) ?? r.purchaseOrderId) : null,
+      supplierId: r.supplierId ? (supMap.get(r.supplierId) ?? r.supplierId) : null,
+      warehouseId: r.warehouseId ? (whMap.get(r.warehouseId) ?? r.warehouseId) : null,
+    }));
+    res.json(out);
+  } catch (e) { next(e); }
+});
+
+supplyChainRouter.get("/qc-inspections/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = qcWhere(pid);
+    const [row] = await db.select().from(s.qcInspections).where(where).limit(1);
+    if (!row) return res.status(404).json({ error: "QC Inspection tidak ditemukan." });
+    const lines = await qcInspectionLines(db, row.id);
+    // map FKs to publicId
+    let receivingPublic: string | number = row.receivingId;
+    let poPublic: string | number | null = row.purchaseOrderId;
+    let supplierPublic: string | number | null = row.supplierId;
+    let warehousePublic: string | number | null = row.warehouseId;
+    if (row.receivingId) {
+      const [rcv] = await db.select({ publicId: s.receivings.publicId }).from(s.receivings).where(eq(s.receivings.id, row.receivingId)).limit(1);
+      if (rcv) receivingPublic = rcv.publicId;
+    }
+    if (row.purchaseOrderId) {
+      const [po] = await db.select({ publicId: s.purchaseOrders.publicId }).from(s.purchaseOrders).where(eq(s.purchaseOrders.id, row.purchaseOrderId)).limit(1);
+      if (po) poPublic = po.publicId;
+    }
+    if (row.supplierId) {
+      const [sup] = await db.select({ publicId: s.suppliers.publicId }).from(s.suppliers).where(eq(s.suppliers.id, row.supplierId)).limit(1);
+      if (sup) supplierPublic = sup.publicId;
+    }
+    if (row.warehouseId) {
+      const [wh] = await db.select({ publicId: s.warehouses.publicId }).from(s.warehouses).where(eq(s.warehouses.id, row.warehouseId)).limit(1);
+      if (wh) warehousePublic = wh.publicId;
+    }
+    res.json({ ...row, id: row.publicId, _internalId: row.id, documentNo: row.documentNo, receivingId: receivingPublic, purchaseOrderId: poPublic, supplierId: supplierPublic, warehouseId: warehousePublic, lines: await mapQcLines(lines) });
+  } catch (e) { next(e); }
+});
+
+supplyChainRouter.put("/qc-inspections/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = qcWhere(pid);
+    const [cur] = await db.select({ id: s.qcInspections.id, status: s.qcInspections.status }).from(s.qcInspections).where(where).limit(1);
+    if (!cur) return res.status(404).json({ error: "QC Inspection tidak ditemukan." });
+    if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya DRAFT yang bisa diubah." });
+    const b = req.body ?? {};
+    const patch: Record<string, any> = {};
+    if (b.inspectionDate !== undefined) patch.inspectionDate = b.inspectionDate;
+    if (b.notes !== undefined) patch.notes = b.notes ?? null;
+    if (b.qcNotes !== undefined) patch.qcNotes = b.qcNotes ?? null;
+    patch.updatedAt = new Date();
+    await db.update(s.qcInspections).set(patch).where(eq(s.qcInspections.id, cur.id));
+    if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceQcLines(tx, cur.id, b.lines); });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+supplyChainRouter.delete("/qc-inspections/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = qcWhere(pid);
+    const [cur] = await db.select({ id: s.qcInspections.id }).from(s.qcInspections).where(where).limit(1);
+    if (!cur) return res.status(404).json({ error: "QC Inspection tidak ditemukan." });
+    await db.delete(s.qcInspections).where(eq(s.qcInspections.id, cur.id));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+supplyChainRouter.post("/qc-inspections/:id/submit", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = qcWhere(pid);
+    const [qc] = await db.select().from(s.qcInspections).where(where).limit(1);
+    if (!qc) return res.status(404).json({ error: "QC Inspection tidak ditemukan." });
+    if (qc.status !== "DRAFT") return res.status(400).json({ error: `Hanya DRAFT yang bisa di-submit. Status: ${qc.status}` });
+    const lines = await qcInspectionLines(db, qc.id);
+    if (!lines.length) return res.status(400).json({ error: "QC tanpa item tidak bisa di-submit." });
+    for (const l of lines) {
+      if (Number(l.qtyRejected) < 0 || Number(l.qtyRejected) > Number(l.qtyReceived)) return res.status(400).json({ error: `Qty reject tidak valid untuk ${l.publicId}` });
+    }
+    await db.transaction(async (tx) => {
+      // update qc status
+      await tx.update(s.qcInspections).set({ status: "COMPLETED", updatedAt: new Date() }).where(eq(s.qcInspections.id, qc.id));
+      // propagate to receiving_lines and receiving status
+      for (const l of lines) {
+        const qtyAccepted = Number(l.qtyReceived) - Number(l.qtyRejected);
+        if (l.receivingLineId) {
+          await tx.update(s.receivingLines).set({ qtyAccepted: String(qtyAccepted), qtyRejected: String(l.qtyRejected), rejectReason: l.rejectReason ?? null }).where(eq(s.receivingLines.id, l.receivingLineId as any));
+        }
+      }
+      // if all qc lines have been inspected, mark receiving completed
+      await tx.update(s.receivings).set({ status: "COMPLETED", qcInspectedAt: new Date(), qcInspectedBy: (req as any).user?.internalId ?? null, qcNotes: qc.qcNotes ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, qc.receivingId));
+    });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+supplyChainRouter.post("/qc-inspections/:id/cancel", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = qcWhere(pid);
+    const [cur] = await db.select({ id: s.qcInspections.id, status: s.qcInspections.status }).from(s.qcInspections).where(where).limit(1);
+    if (!cur) return res.status(404).json({ error: "QC Inspection tidak ditemukan." });
+    if (cur.status === "CANCELED") return res.status(400).json({ error: "Sudah dibatalkan." });
+    await db.update(s.qcInspections).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.qcInspections.id, cur.id));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// QC Parameters master
+function qcParamWhere(pid: string) {
+  if (isUuid(pid)) return eq(s.qcParameters.publicId, pid);
+  if (/^\d+$/.test(pid)) return eq(s.qcParameters.id, Number(pid));
+  return eq(s.qcParameters.code, pid);
+}
+supplyChainRouter.get("/qc-parameters", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
+  try {
+    const rows = await db.select().from(s.qcParameters).orderBy(s.qcParameters.code);
+    res.json(rows.map((r: any) => ({ ...r, id: r.publicId, _internalId: r.id })));
+  } catch (e) { next(e); }
+});
+supplyChainRouter.post("/qc-parameters", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const b = req.body ?? {};
+    if (!b.code || !b.name) return res.status(400).json({ error: "code & name wajib." });
+    const [row] = await db.insert(s.qcParameters).values({ code: String(b.code).toUpperCase().trim(), name: String(b.name).trim(), description: b.description ?? null, isActive: b.isActive ?? true }).returning();
+    res.status(201).json({ id: row.publicId, code: row.code });
+  } catch (e) { next(e); }
+});
+supplyChainRouter.put("/qc-parameters/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = qcParamWhere(pid);
+    const [cur] = await db.select({ id: s.qcParameters.id }).from(s.qcParameters).where(where).limit(1);
+    if (!cur) return res.status(404).json({ error: "QC Parameter tidak ditemukan." });
+    const b = req.body ?? {};
+    const patch: Record<string, any> = {};
+    if (b.code !== undefined) patch.code = String(b.code).toUpperCase().trim();
+    if (b.name !== undefined) patch.name = String(b.name).trim();
+    if (b.description !== undefined) patch.description = b.description ?? null;
+    if (b.isActive !== undefined) patch.isActive = !!b.isActive;
+    patch.updatedAt = new Date();
+    await db.update(s.qcParameters).set(patch).where(eq(s.qcParameters.id, cur.id));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+supplyChainRouter.delete("/qc-parameters/:id", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = qcParamWhere(pid);
+    const [cur] = await db.select({ id: s.qcParameters.id }).from(s.qcParameters).where(where).limit(1);
+    if (!cur) return res.status(404).json({ error: "QC Parameter tidak ditemukan." });
+    await db.delete(s.qcParameters).where(eq(s.qcParameters.id, cur.id));
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -879,7 +1437,7 @@ supplyChainRouter.get("/deliveries/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.deliveries", "view"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.deliveries.publicId, pid) : eq(s.deliveries.id, Number(pid));
+    let where: any = deliveryWhere(pid);
     const [row] = await db.select().from(s.deliveries).where(where).limit(1);
     if (!row) return res.status(404).json({ error: "Delivery tidak ditemukan." });
     const lines = await deliveryLines(db, row.id);
@@ -890,7 +1448,7 @@ supplyChainRouter.put("/deliveries/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.deliveries.publicId, pid) : eq(s.deliveries.id, Number(pid));
+    let where: any = deliveryWhere(pid);
     const [cur] = await db.select({ id: s.deliveries.id, status: s.deliveries.status }).from(s.deliveries).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Delivery tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya delivery DRAFT yang dapat diubah." });
@@ -911,7 +1469,7 @@ supplyChainRouter.delete("/deliveries/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.deliveries.publicId, pid) : eq(s.deliveries.id, Number(pid));
+    let where: any = deliveryWhere(pid);
     const [cur] = await db.select({ id: s.deliveries.id }).from(s.deliveries).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Delivery tidak ditemukan." });
     await db.delete(s.deliveries).where(eq(s.deliveries.id, cur.id));
@@ -922,7 +1480,7 @@ supplyChainRouter.post("/deliveries/:id/post", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.deliveries.publicId, pid) : eq(s.deliveries.id, Number(pid));
+    let where: any = deliveryWhere(pid);
     const [dlv] = await db.select().from(s.deliveries).where(where).limit(1);
     if (!dlv) return res.status(404).json({ error: "Delivery tidak ditemukan." });
     if (dlv.status === "CANCELED") return res.status(400).json({ error: "Delivery dibatalkan tidak dapat diposting." });
@@ -941,7 +1499,7 @@ supplyChainRouter.post("/deliveries/:id/cancel", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.deliveries.publicId, pid) : eq(s.deliveries.id, Number(pid));
+    let where: any = deliveryWhere(pid);
     const [cur] = await db.select({ id: s.deliveries.id, status: s.deliveries.status }).from(s.deliveries).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Delivery tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "Delivery sudah dibatalkan." });
@@ -961,7 +1519,7 @@ supplyChainRouter.post("/sales-orders/:id/create-delivery", async (req, res, nex
   if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
   try {
     const pid = String(req.params.id);
-    let where: any = isUuid(pid) ? eq(s.salesOrders.publicId, pid) : eq(s.salesOrders.id, Number(pid));
+    let where: any = soWhere(pid);
     const [so] = await db.select().from(s.salesOrders).where(where).limit(1);
     if (!so) return res.status(404).json({ error: "Sales Order tidak ditemukan." });
     const lines = await soLines(db, so.id);

@@ -64,7 +64,7 @@ export default function NewSalesOrderPage() {
           note: l.note || null,
         })),
       });
-      navigate(`/app/sales-orders/${res.id}`);
+      navigate(`/app/sales-orders/${(res as any).id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create sales order.");
     }

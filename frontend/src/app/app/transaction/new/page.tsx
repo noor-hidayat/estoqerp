@@ -28,10 +28,12 @@ export default function NewTransactionPage() {
             navigate(`/app/transaction/${savedId}`, { replace: true });
           } else {
             const res = await create.mutateAsync(input);
+            const docNo = (res as { documentNo?: string }).documentNo;
             const id = (res as { id?: string }).id;
-            if (id) {
-              setSavedId(id);
-              navigate(`/app/transaction/${id}`, { replace: true });
+            const navId = docNo ?? id;
+            if (navId) {
+              if (id) setSavedId(id);
+              navigate(`/app/transaction/${navId}`, { replace: true });
             }
           }
         }}

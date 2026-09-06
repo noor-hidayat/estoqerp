@@ -497,6 +497,7 @@ export interface MovementInput {
 // ---- Supply Chain ----
 
 export type DocStatus = "DRAFT" | "POSTED" | "CANCELED";
+export type ReceivingStatus = "DRAFT" | "PENDING_QC" | "COMPLETED" | "CANCELED" | "POSTED";
 
 /** Suppliers & Customers share an identical field shape. */
 export interface Party {
@@ -610,10 +611,13 @@ export interface ReceivingLine {
   receivingId?: string;
   itemId: string;
   uomId: string;
-  qty: string;
+  qty: string; // qtyReceived
+  qtyAccepted?: string | null;
+  qtyRejected?: string | null;
   unitPrice?: string | null;
   batchNumber?: string | null;
   note?: string | null;
+  rejectReason?: string | null;
 }
 
 export interface Receiving {
@@ -625,10 +629,63 @@ export interface Receiving {
   warehouseId: string;
   receiptDate: string;
   notes?: string | null;
-  status: DocStatus;
+  status: ReceivingStatus;
+  submittedAt?: string | null;
+  submittedBy?: string | null;
+  qcInspectedAt?: string | null;
+  qcInspectedBy?: string | null;
+  qcNotes?: string | null;
   createdAt?: string;
   updatedAt?: string;
   lines?: ReceivingLine[];
+}
+
+export type QcInspectionStatus = "DRAFT" | "COMPLETED" | "CANCELED";
+export interface QcParameter {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+export interface QcInspectionLineParam {
+  id: string;
+  parameterId: string;
+  parameterCode?: string | null;
+  parameterName?: string | null;
+  qty: string;
+  note?: string | null;
+}
+export interface QcInspectionLine {
+  id: string;
+  qcInspectionId?: string;
+  receivingLineId?: string | null;
+  itemId: string;
+  uomId?: string | null;
+  qtyReceived: string;
+  qtyRejected: string;
+  qtyAccepted: string;
+  batchNumber?: string | null;
+  rejectReason?: string | null;
+  params?: QcInspectionLineParam[];
+}
+export interface QcInspection {
+  id: string;
+  publicId?: string;
+  documentNo?: string | null;
+  receivingId: string;
+  purchaseOrderId?: string | null;
+  supplierId?: string | null;
+  warehouseId?: string | null;
+  inspectionDate: string;
+  status: QcInspectionStatus;
+  notes?: string | null;
+  qcNotes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  lines?: QcInspectionLine[];
 }
 
 export interface DeliveryLine {

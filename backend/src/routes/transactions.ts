@@ -99,6 +99,18 @@ function param(req: Request, name: string): string {
   const v = req.params[name];
   return Array.isArray(v) ? String(v[0]) : String(v);
 }
+function isUuid(v: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+}
+function isDocumentNo(v: string): boolean {
+  return /^[A-Z]{2,5}-\d{2,4}-?\d{1,6}$/i.test(v) || /^[A-Z]{2,5}-\d{4,}-\d+$/i.test(v) || /^[A-Z]+\-\d+.*$/i.test(v);
+}
+function movementWhere(pid: string) {
+  if (isUuid(pid)) return eq(schema.stockMovements.publicId, pid);
+  if (isDocumentNo(pid)) return eq(schema.stockMovements.documentNo, pid);
+  if (/^\d+$/.test(pid)) return eq(schema.stockMovements.id, Number(pid) as any);
+  return eq(schema.stockMovements.documentNo, pid);
+}
 
 function parseBody(body: unknown): { ok: true; value: MovementInput } | { ok: false; error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
@@ -1002,6 +1014,8 @@ transactionsRouter.get("/", async (req: Request, res: Response) => {
   let qb = db
     .select({
       id: s.stockMovements.publicId,
+      publicId: s.stockMovements.publicId,
+      documentNo: s.stockMovements.documentNo,
       internalId: s.stockMovements.id,
       typeId: s.stockMovements.typeId,
       typeCode: s.movementTypes.code,
@@ -1233,9 +1247,13 @@ transactionsRouter.get("/:id", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "inventory.transactions", "view"))) return;
 
   const s = schema;
+  const pid = param(req, "id");
+  const whereMov = movementWhere(pid);
   const [movement] = await db
     .select({
       id: s.stockMovements.id,
+      publicId: s.stockMovements.publicId,
+      documentNo: s.stockMovements.documentNo,
       typeId: s.stockMovements.typeId,
       typeCode: s.movementTypes.code,
       typeName: s.movementTypes.name,
@@ -1252,7 +1270,7 @@ transactionsRouter.get("/:id", async (req: Request, res: Response) => {
     .from(s.stockMovements)
     .leftJoin(s.movementTypes, eq(s.movementTypes.id, s.stockMovements.typeId))
     .leftJoin(s.users, eq(s.users.id, s.stockMovements.createdBy))
-    .where(eq(s.stockMovements.id, param(req, "id")))
+    .where(whereMov)
     .limit(1);
 
   if (!movement) {
@@ -1329,7 +1347,8 @@ transactionsRouter.post("/", async (req: Request, res: Response) => {
   try {
     await assertUniqueBarcodes(input.details, input.typeId);
     const id = await db.transaction((tx) => insertMovementWithDetails(tx, input, (req as any).user?.internalId ?? req.user!.id));
-    res.status(201).json({ id });
+    const [row] = await db.select({ documentNo: schema.stockMovements.documentNo }).from(schema.stockMovements).where(eq(schema.stockMovements.publicId, id)).limit(1);
+    res.status(201).json({ id, documentNo: row?.documentNo ?? null });
   } catch (e) {
     console.error("POST /transactions", e);
     if (e instanceof StockError) {
@@ -1346,10 +1365,12 @@ transactionsRouter.post("/", async (req: Request, res: Response) => {
 transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "inventory.transactions", "update"))) return;
 
+  const pidPatch = param(req, "id");
+  const wherePatch = movementWhere(pidPatch);
   const [existing] = await db
-    .select({ status: schema.stockMovements.status })
+    .select({ id: schema.stockMovements.id, status: schema.stockMovements.status })
     .from(schema.stockMovements)
-    .where(eq(schema.stockMovements.id, param(req, "id")))
+    .where(wherePatch)
     .limit(1);
   if (!existing) {
     res.status(404).json({ error: "Transaksi tidak ditemukan." });
@@ -1386,7 +1407,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
       return;
     }
      await db.transaction(async (tx) => {
-      await tx.delete(schema.stockMovementDetails).where(eq(schema.stockMovementDetails.movementId, param(req, "id")));
+      await tx.delete(schema.stockMovementDetails).where(eq(schema.stockMovementDetails.movementId, existing.id));
       await tx
         .update(schema.stockMovements)
         .set({
@@ -1398,7 +1419,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
           description: input.description,
           updatedAt: new Date(),
         })
-        .where(eq(schema.stockMovements.id, param(req, "id")));
+        .where(eq(schema.stockMovements.id, existing.id));
       const effectDetails: EffectDetail[] = [];
       const batchFormatsCache = (await db
         .select()
@@ -1423,7 +1444,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
         const detailId = `${baseSmdPatch}${String(nextSmdPatchN++).padStart(4, "0")}`;
         detailRowsPatch.push({
           id: detailId,
-          movementId: param(req, "id"),
+          movementId: existing.id,
           itemId: d.itemId,
           fromWarehouseId: d.fromWarehouseId,
           toWarehouseId: d.toWarehouseId,
@@ -1450,7 +1471,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
         await applyMovementEffect(
           tx,
           {
-            id: param(req, "id"),
+            id: existing.id,
             typeId: input.typeId,
             movementDate: input.movementDate ? new Date(input.movementDate) : new Date(),
             referenceType: input.referenceType,
@@ -1479,6 +1500,8 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
 transactionsRouter.post("/:id/post", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "inventory.transactions", "update"))) return;
 
+  const pidPost = param(req, "id");
+  const wherePost = movementWhere(pidPost);
   const [movement] = await db
     .select({
       id: schema.stockMovements.id,
@@ -1489,7 +1512,7 @@ transactionsRouter.post("/:id/post", async (req: Request, res: Response) => {
       referenceId: schema.stockMovements.referenceId,
     })
     .from(schema.stockMovements)
-    .where(eq(schema.stockMovements.id, param(req, "id")))
+    .where(wherePost)
     .limit(1);
   if (!movement) {
     res.status(404).json({ error: "Transaksi tidak ditemukan." });
@@ -1562,10 +1585,12 @@ transactionsRouter.post("/:id/post", async (req: Request, res: Response) => {
 transactionsRouter.post("/:id/unpost", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "inventory.transactions", "update"))) return;
 
+  const pidUnpost = param(req, "id");
+  const whereUnpost = movementWhere(pidUnpost);
   const [movement] = await db
     .select({ id: schema.stockMovements.id, status: schema.stockMovements.status, movementDate: schema.stockMovements.movementDate })
     .from(schema.stockMovements)
-    .where(eq(schema.stockMovements.id, param(req, "id")))
+    .where(whereUnpost)
     .limit(1);
   if (!movement) {
     res.status(404).json({ error: "Transaksi tidak ditemukan." });
@@ -1701,10 +1726,12 @@ transactionsRouter.post("/:id/unpost", async (req: Request, res: Response) => {
 transactionsRouter.post("/:id/amend", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "inventory.transactions", "update"))) return;
 
+  const pidAmend = param(req, "id");
+  const whereAmend = movementWhere(pidAmend);
   const [movement] = await db
     .select({ id: schema.stockMovements.id, status: schema.stockMovements.status })
     .from(schema.stockMovements)
-    .where(eq(schema.stockMovements.id, param(req, "id")))
+    .where(whereAmend)
     .limit(1);
   if (!movement) {
     res.status(404).json({ error: "Transaksi tidak ditemukan." });
@@ -1732,10 +1759,12 @@ transactionsRouter.post("/:id/amend", async (req: Request, res: Response) => {
 transactionsRouter.delete("/:id", async (req: Request, res: Response) => {
   if (!(await checkPermission(req, res, "inventory.transactions", "delete"))) return;
 
+  const pidDel = param(req, "id");
+  const whereDel = movementWhere(pidDel);
   const [movement] = await db
-    .select({ status: schema.stockMovements.status })
+    .select({ id: schema.stockMovements.id, status: schema.stockMovements.status })
     .from(schema.stockMovements)
-    .where(eq(schema.stockMovements.id, param(req, "id")))
+    .where(whereDel)
     .limit(1);
   if (!movement) {
     res.status(404).json({ error: "Transaksi tidak ditemukan." });
@@ -1746,7 +1775,7 @@ transactionsRouter.delete("/:id", async (req: Request, res: Response) => {
     return;
   }
   try {
-    await db.delete(schema.stockMovements).where(eq(schema.stockMovements.id, param(req, "id")));
+    await db.delete(schema.stockMovements).where(eq(schema.stockMovements.id, movement.id));
     res.json({ ok: true });
   } catch (e) {
     console.error("DELETE /transactions", e);

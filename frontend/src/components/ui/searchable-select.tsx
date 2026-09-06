@@ -19,6 +19,7 @@ export function SearchableSelect({
   disabled = false,
   excludeSelected = true,
   compact = false,
+  table = false,
   inputId,
   inputRef,
   onBlur,
@@ -35,6 +36,7 @@ export function SearchableSelect({
   disabled?: boolean;
   excludeSelected?: boolean;
   compact?: boolean;
+  table?: boolean;
   inputId?: string;
   inputRef?: React.Ref<HTMLInputElement>;
   onBlur?: () => void;
@@ -147,7 +149,7 @@ export function SearchableSelect({
   };
 
   return (
-    <div className={cx("flex flex-col gap-1.5", className)}>
+    <div className={cx(table ? "" : "flex flex-col gap-1.5", className)}>
       {label && (
         <label className="text-sm font-medium leading-none">{label}</label>
       )}
@@ -159,9 +161,13 @@ export function SearchableSelect({
             value={open ? query : selected?.label ?? (value === "" && emptyLabel ? emptyLabel : "")}
             onFocus={() => {
               if (disabled) return;
-              setOpen(true);
               setHighlight(0);
               if (selected && query === selected.label) setQuery("");
+              if (!table) setOpen(true);
+            }}
+            onClick={() => {
+              if (disabled) return;
+              if (!table) setOpen(true);
             }}
             onChange={(e) => {
               const v = e.target.value;
@@ -175,8 +181,11 @@ export function SearchableSelect({
             disabled={disabled}
             readOnly={disabled}
             className={cx(
-              "flex w-full items-center rounded-md border border-input bg-zinc-200/60 text-sm text-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring disabled:cursor-not-allowed disabled:opacity-50",
-              compact ? "h-8 px-2.5 pr-7 text-xs" : "h-8 px-3.5 pr-9"
+              table
+                ? "flex h-9 w-full items-center border-0 bg-transparent px-3 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+                : "flex w-full items-center rounded-md border border-input bg-white dark:bg-zinc-900 text-sm text-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring disabled:cursor-not-allowed disabled:opacity-50",
+              !table && (compact ? "h-8 px-2.5 pr-7 text-xs" : "h-8 px-3.5 pr-9"),
+              table && "h-9 px-3 pr-9"
             )}
           />
           <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">

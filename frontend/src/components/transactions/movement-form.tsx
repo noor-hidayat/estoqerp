@@ -56,7 +56,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/table"
+import { TableInput } from "@/components/ui/table-input";
 import {
   FormPage,
   FormSection,
@@ -965,7 +966,7 @@ export function MovementForm({
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[12.5px]">
-                <thead className="bg-muted/40 text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                <thead className="bg-zinc-100 dark:bg-zinc-800 text-[10.5px] uppercase tracking-wider text-muted-foreground">
                   <tr>
                     <th className="px-4 py-2.5 font-semibold">No.</th>
                     <th className="px-4 py-2.5 font-semibold">Barcode</th>
@@ -1162,12 +1163,12 @@ export function MovementForm({
               <div className="mb-2">
                 <span className="text-[13px] font-medium text-foreground">Last barcode</span>
               </div>
-              <div className="overflow-hidden rounded-md border border-border bg-zinc-100 dark:bg-muted/40">
+              <div className="overflow-hidden rounded-md border border-border bg-zinc-100 dark:bg-zinc-100 dark:bg-zinc-800">
                 <div className="max-h-[280px] overflow-y-auto">
                   {scanHistory.slice(-10).reverse().map((h) => (
                     <div
                       key={h.key}
-                      className="break-all border-b border-border/60 bg-card px-3 py-1.5 text-[11.5px] text-foreground last:border-0 even:bg-zinc-50 dark:even:bg-muted/20"
+                      className="break-all border-b border-border bg-card px-3 py-1.5 text-[11.5px] text-foreground last:border-0 even:bg-zinc-50 dark:even:bg-muted/20"
                     >
                       {h.barcode}
                     </div>
@@ -1179,7 +1180,7 @@ export function MovementForm({
         </div>
 
         <div className="overflow-hidden rounded-lg border border-border">
-          <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border bg-muted/40 px-3 py-2">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border bg-zinc-100 dark:bg-zinc-800 px-3 py-2">
             <div className="flex items-center gap-2">
               {!readOnly && (
                 <DropdownMenu>
@@ -1230,8 +1231,8 @@ export function MovementForm({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table className="table-fixed border-collapse text-left text-sm [&_th]:border-r [&_th]:border-border/60 [&_td]:border-r [&_td]:border-border/60 [&_th]:last:border-r-0 [&_td]:last:border-r-0">
-                <TableHeader className="bg-muted/40 [&_tr]:border-border">
+              <Table className="table-fixed border-collapse text-left text-sm [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0">
+                <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
                   <TableRow className="border-border hover:bg-transparent">
                     {!readOnly && (
                       <TableHead className="w-10 px-3">

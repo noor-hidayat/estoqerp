@@ -77,9 +77,9 @@ export function formatCompact(n: number, decimals = 1) {
 }
 
 /** Format id internal (ses_2608_0001) → tampilan rapi (SES-2608-0001). */
-export function formatId(id?: string | null): string {
-  if (!id) return "—";
-  return id.toUpperCase().replace(/_/g, "-");
+export function formatId(id?: string | number | null): string {
+  if (id == null || id === "") return "—";
+  return String(id).toUpperCase().replace(/_/g, "-");
 }
 
 export function formatRupiah(n: number) {

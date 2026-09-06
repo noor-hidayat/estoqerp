@@ -267,6 +267,27 @@
       "when": 1788591457543,
       "tag": "0039_sharp_cardiac",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788608773773,
+      "tag": "0040_receiving-qc-workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788610026212,
+      "tag": "0041_qc-inspection-docs",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1788610969333,
+      "tag": "0042_qc-params",
+      "breakpoints": true
     }
   ]
 }

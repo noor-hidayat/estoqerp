@@ -68,7 +68,7 @@ export default function NewDeliveryPage() {
           note: l.note || null,
         })),
       });
-      navigate(`/app/deliveries/${res.id}`);
+      navigate(`/app/deliveries/${(res as any).documentNo ?? res.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create delivery.");
     }

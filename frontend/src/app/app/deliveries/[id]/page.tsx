@@ -131,7 +131,7 @@ export default function DeliveryDetailPage() {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">DLV {formatId(dlv.id)}</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{(dlv as any).documentNo ?? `DLV ${formatId(dlv.id)}`}</h1>
             <DocStatusBadge status={dlv.status} />
           </div>
           <p className="mt-1 text-sm text-muted-foreground">

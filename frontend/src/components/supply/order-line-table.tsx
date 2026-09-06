@@ -10,7 +10,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/table"
+import { TableInput } from "@/components/ui/table-input";
 import { cn, formatNumber } from "@/lib/utils";
 
 function PoTableSelect({
@@ -200,7 +201,7 @@ export function OrderLineTable({
     return (
       <div className="overflow-x-auto rounded-lg border border-border">
         <Table className="text-[13px]">
-          <TableHeader className="bg-muted/40 [&_tr]:border-border">
+          <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
             <TableRow className="border-border hover:bg-transparent">
               <TableHead className="px-3">#</TableHead>
               <TableHead className="px-3">Item</TableHead>
@@ -245,8 +246,8 @@ export function OrderLineTable({
   return (
     <div className="overflow-hidden rounded-lg border border-border">
       <div className="overflow-x-auto">
-        <Table className="min-w-[960px] table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border/60 [&_td]:border-r [&_td]:border-border/60 [&_th]:last:border-r-0 [&_td]:last:border-r-0">
-          <TableHeader className="bg-muted/40 [&_tr]:border-border">
+        <Table className="min-w-[960px] table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0">
+          <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
             <TableRow className="border-border hover:bg-transparent">
               <TableHead className="w-10 px-3">#</TableHead>
               <TableHead className="min-w-[220px] px-3">Item</TableHead>
