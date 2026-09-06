@@ -128,7 +128,7 @@ export default function NewReceivingPage() {
 
   const onSave = async () => {
     const docNo = await doCreate();
-    if (docNo) navigate(`/app/inbound/receiving/${docNo}`, { replace: true });
+    if (docNo) navigate(`/app/receiving/${docNo}`, { replace: true });
   };
 
   useEffect(() => {

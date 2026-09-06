@@ -10,10 +10,12 @@ import {
   useUpdatePurchaseOrder,
   usePostPurchaseOrder,
   useCancelPurchaseOrder,
+  useRemovePurchaseOrder,
   useCreateReceiptFromPo,
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -39,6 +41,7 @@ export default function PurchaseOrderDetailPage() {
   const update = useUpdatePurchaseOrder();
   const post = usePostPurchaseOrder();
   const cancel = useCancelPurchaseOrder();
+  const remove = useRemovePurchaseOrder();
   const createReceipt = useCreateReceiptFromPo();
   const [error, setError] = useState("");
   useErrorToast(error);
@@ -77,6 +80,7 @@ export default function PurchaseOrderDetailPage() {
         update={update}
         post={post}
         cancel={cancel}
+        remove={remove}
         createReceipt={createReceipt}
         navigate={navigate}
       />
@@ -96,6 +100,7 @@ function POBody({
   update,
   post,
   cancel,
+  remove,
   createReceipt,
   navigate,
 }: {
@@ -110,6 +115,7 @@ function POBody({
   update: ReturnType<typeof useUpdatePurchaseOrder>;
   post: ReturnType<typeof usePostPurchaseOrder>;
   cancel: ReturnType<typeof useCancelPurchaseOrder>;
+  remove: ReturnType<typeof useRemovePurchaseOrder>;
   createReceipt: ReturnType<typeof useCreateReceiptFromPo>;
   navigate: (to: string) => void;
 }) {
@@ -178,6 +184,15 @@ function POBody({
       setErr(e instanceof Error ? e.message : "Failed to cancel.");
     }
   };
+  const onDelete = async () => {
+    if (!confirm("Delete this purchase order? Data akan dihapus dari database.")) return;
+    try {
+      await remove.mutateAsync(po.id);
+      navigate("/app/purchase-orders");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to delete.");
+    }
+  };
   const onReceipt = async () => {
     if (!confirm("Create a Goods Receipt from this PO?")) return;
     try {
@@ -211,9 +226,11 @@ function POBody({
             </Button>
           )}
           {!editing && (
-            <Button variant="outline" size="sm" onClick={onCancel} disabled={po.status === "CANCELED" || post.isPending}>
-              Cancel
-            </Button>
+            <DocMenu
+              onCancel={onCancel}
+              onDelete={onDelete}
+              cancelDisabled={po.status === "CANCELED" || post.isPending}
+            />
           )}
           {!editing && (
             <Button variant="primary" size="sm" onClick={onPost} disabled={!isDraft || post.isPending}>

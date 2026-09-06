@@ -4,6 +4,7 @@ import { ArrowLeft, Save } from "lucide-react";
 import { useCustomers, useAllWarehouses, useUoms, useCreateDelivery, useSalesOrders } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -34,6 +35,12 @@ export default function NewDeliveryPage() {
     notes: "",
   });
   const [lines, setLines] = useState<OrderLineInput[]>([emptyOrderLine()]);
+
+  const resetForm = () => {
+    if (!confirm("Hapus semua isian form ini?")) return;
+    setForm({ salesOrderId: "", customerId: "", warehouseId: "", deliveryDate: todayISO(), notes: "" });
+    setLines([emptyOrderLine()]);
+  };
 
   const handleSoChange = (soId: string) => {
     setForm((prev) => ({ ...prev, salesOrderId: soId }));

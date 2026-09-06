@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -38,6 +39,12 @@ export default function NewSalesOrderPage() {
     notes: "",
   });
   const [lines, setLines] = useState<OrderLineInput[]>([emptyOrderLine()]);
+
+  const resetForm = () => {
+    if (!confirm("Hapus semua isian form ini?")) return;
+    setForm({ customerId: "", warehouseId: "", orderDate: todayISO(), expectedDate: "", notes: "" });
+    setLines([emptyOrderLine()]);
+  };
 
   const submit = async () => {
     if (!form.customerId) return setError("Customer is required.");
@@ -80,7 +87,15 @@ export default function NewSalesOrderPage() {
 
   return (
     <RoleGuard roles={[]} menus={["supply.salesOrders"]}>
-      <FormPage title="New Sales Order">
+      <FormPage
+        title="New Sales Order"
+        actions={
+          <DocMenu
+            onCancel={() => navigate("/app/sales-orders")}
+            onDelete={resetForm}
+          />
+        }
+      >
         <FormSection>
           <FormGrid>
             <SearchableSelect

@@ -9,9 +9,11 @@ import {
   useUpdateDelivery,
   usePostDelivery,
   useCancelDelivery,
+  useRemoveDelivery,
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -34,6 +36,7 @@ export default function DeliveryDetailPage() {
   const update = useUpdateDelivery();
   const post = usePostDelivery();
   const cancel = useCancelDelivery();
+  const remove = useRemoveDelivery();
   const [error, setError] = useState("");
   useErrorToast(error);
   const [editing, setEditing] = useState(false);
@@ -125,6 +128,15 @@ export default function DeliveryDetailPage() {
       setError(e instanceof Error ? e.message : "Failed to cancel.");
     }
   };
+  const onDelete = async () => {
+    if (!confirm("Delete this delivery? Data akan dihapus dari database.")) return;
+    try {
+      await remove.mutateAsync(dlv.id);
+      navigate("/app/deliveries");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete.");
+    }
+  };
 
   return (
     <RoleGuard roles={[]} menus={["supply.deliveries"]}>
@@ -146,9 +158,11 @@ export default function DeliveryDetailPage() {
             </Button>
           )}
           {!editing && (
-            <Button variant="outline" size="sm" onClick={onCancel} disabled={dlv.status === "CANCELED" || post.isPending}>
-              Cancel
-            </Button>
+            <DocMenu
+              onCancel={onCancel}
+              onDelete={onDelete}
+              cancelDisabled={dlv.status === "CANCELED" || post.isPending}
+            />
           )}
           {!editing && (
             <Button variant="primary" size="sm" onClick={onPost} disabled={!isDraft || post.isPending}>

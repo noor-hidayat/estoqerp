@@ -8,10 +8,12 @@ import {
   useUpdateSalesOrder,
   usePostSalesOrder,
   useCancelSalesOrder,
+  useRemoveSalesOrder,
   useCreateDeliveryFromSo,
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -34,6 +36,7 @@ export default function SalesOrderDetailPage() {
   const update = useUpdateSalesOrder();
   const post = usePostSalesOrder();
   const cancel = useCancelSalesOrder();
+  const remove = useRemoveSalesOrder();
   const createDelivery = useCreateDeliveryFromSo();
   const [error, setError] = useState("");
   useErrorToast(error);
@@ -119,6 +122,15 @@ export default function SalesOrderDetailPage() {
       setError(e instanceof Error ? e.message : "Failed to cancel.");
     }
   };
+  const onDelete = async () => {
+    if (!confirm("Delete this sales order? Data akan dihapus dari database.")) return;
+    try {
+      await remove.mutateAsync(so.id);
+      navigate("/app/sales-orders");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete.");
+    }
+  };
   const onCreateDelivery = async () => {
     if (!confirm("Create delivery from this SO?")) return;
     try {
@@ -155,9 +167,11 @@ export default function SalesOrderDetailPage() {
             </Button>
           )}
           {!editing && (
-            <Button variant="outline" size="sm" onClick={onCancel} disabled={so.status === "CANCELED" || post.isPending}>
-              Cancel
-            </Button>
+            <DocMenu
+              onCancel={onCancel}
+              onDelete={onDelete}
+              cancelDisabled={so.status === "CANCELED" || post.isPending}
+            />
           )}
           {!editing && (
             <Button variant="primary" size="sm" onClick={onPost} disabled={!isDraft || post.isPending}>

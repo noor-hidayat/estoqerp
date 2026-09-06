@@ -659,6 +659,13 @@ export function useCancelQcInspection() {
     onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); qc.invalidateQueries({ queryKey: ["qc-inspections", id] }); },
   });
 }
+export function useRemoveQcInspection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/qc-inspections/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); },
+  });
+}
 export function useQcParameters() {
   return useResourceList<import("@/types").QcParameter>("qc-parameters");
 }

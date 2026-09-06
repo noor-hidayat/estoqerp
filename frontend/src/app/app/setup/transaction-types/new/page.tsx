@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useInsert } from "@/lib/api/query";
+import { useDocumentSeries, useInsert } from "@/lib/api/query";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,19 @@ const KINDS = [
 
 export default function NewTransactionTypePage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", kind: "RECEIPT", series: "SMV" });
+  const [form, setForm] = useState({ name: "", kind: "RECEIPT", series: "" });
 
   const insertType = useInsert("movementTypes");
+  const { data: smvSeries = [], isLoading: loadingSeries } = useDocumentSeries({
+    documentTypeCode: "Stock Movement",
+  });
+
+  // Default series = series default (isDefault) di Document Numbering doctype Stock Movement.
+  useEffect(() => {
+    if (form.series || smvSeries.length === 0) return;
+    const def = smvSeries.find((s) => s.isDefault) ?? smvSeries[0];
+    if (def) setForm((prev) => ({ ...prev, series: prev.series || def.prefix }));
+  }, [smvSeries, form.series]);
 
   const handleCreate = async () => {
     if (!form.name.trim()) {
@@ -32,7 +42,7 @@ export default function NewTransactionTypePage() {
       return;
     }
     if (!form.series.trim()) {
-      toast.error("Series (prefix penomoran) wajib diisi.");
+      toast.error("Series wajib dipilih dari document numbering.");
       return;
     }
     const confirmed = await new Promise<boolean>((resolve) => {
@@ -97,14 +107,27 @@ export default function NewTransactionTypePage() {
               </FieldDescription>
             </Field>
             <Field>
-              <FieldLabel>Series (prefix penomoran)</FieldLabel>
-              <Input
-                placeholder="mis. TRF, RCV, ISS, TRF-DDMMYY"
+              <FieldLabel>Series (document numbering)</FieldLabel>
+              <Select
                 value={form.series}
                 onChange={(e) => setForm({ ...form, series: e.target.value })}
-              />
+                disabled={loadingSeries || smvSeries.length === 0}
+              >
+                <option value="" disabled>
+                  {loadingSeries ? "Memuat series..." : "Pilih series"}
+                </option>
+                {smvSeries.map((s) => {
+                  const preview = s.format.replace("{PREFIX}", s.prefix);
+                  return (
+                    <option key={s.id} value={s.prefix}>
+                      {s.name} — {preview}
+                      {s.isDefault ? " (Default)" : ""}
+                    </option>
+                  );
+                })}
+              </Select>
               <FieldDescription>
-                Awalan nomor transaksi. Bisa pakai token tanggal: <code className="rounded bg-muted px-1 text-[11px]">DD</code> hari, <code className="rounded bg-muted px-1 text-[11px]">MM</code> bulan, <code className="rounded bg-muted px-1 text-[11px]">YY</code> tahun 2 digit, <code className="rounded bg-muted px-1 text-[11px]">YYYY</code> tahun 4 digit, <code className="rounded bg-muted px-1 text-[11px]">HH</code> jam. Contoh <code className="rounded bg-muted px-1 text-[11px]">TRF-DDMMYY</code> → <code className="rounded bg-muted px-1 text-[11px]">TRF-250817</code>.
+                Diambil dari Document Numbering doctype Stock Movement. Default terpilih = series default di sana. Yang disimpan hanya series (prefix), bukan document number.
               </FieldDescription>
             </Field>
             <div className="sm:col-span-2">

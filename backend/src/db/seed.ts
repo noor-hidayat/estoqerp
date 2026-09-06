@@ -154,6 +154,7 @@ async function ensureWorkspaces() {
     { code: "warehouse", name: "Warehouse", description: "Stok, Ledger & Master Gudang", icon: "Warehouse", sortOrder: 1, publicId: "22222222-2222-4222-8222-222222222222" },
     { code: "purchasing", name: "Purchasing", description: "Supplier, PO & Goods Receipt", icon: "ShoppingCart", sortOrder: 2, publicId: "33333333-3333-4333-8333-333333333333" },
     { code: "marketing", name: "Marketing", description: "Customer & Sales Order", icon: "Megaphone", sortOrder: 3, publicId: "44444444-4444-4444-8444-444444444444" },
+    { code: "quality", name: "Quality", description: "QC Inspection & Quality Control", icon: "ClipboardCheck", sortOrder: 4, publicId: "55555555-5555-4555-8555-555555555555" },
   ];
   for (const w of fixed) {
     const [existing] = await db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.code, w.code)).limit(1);

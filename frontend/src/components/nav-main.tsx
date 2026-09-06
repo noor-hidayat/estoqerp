@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import {
   Archive,
   ArrowDownToLine,
@@ -66,6 +66,14 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import type { NavGroup, NavItem } from "@/components/app-shell/nav"
 
 const ICONS: Record<string, LucideIcon> = {
@@ -125,11 +133,21 @@ function isActive(href: string, pathname: string): boolean {
 const PREFETCH: Record<string, () => Promise<unknown>> = {
   "/app": () => import("@/app/app/page"),
   "/app/transaction": () => import("@/app/app/transaction/page"),
-  "/app/inbound": () => import("@/app/app/inbound/page"),
-  "/app/outbound": () => import("@/app/app/outbound/page"),
+  "/app/transaction/new": () => import("@/app/app/transaction/new/page"),
+  "/app/receiving": () => import("@/app/app/receiving/page"),
+  "/app/receiving/new": () => import("@/app/app/receiving/new/page"),
+  "/app/qc": () => import("@/app/app/qc/page"),
+  "/app/qc/new": () => import("@/app/app/qc/new/page"),
+  "/app/sales-orders/new": () => import("@/app/app/sales-orders/new/page"),
+  "/app/deliveries/new": () => import("@/app/app/deliveries/new/page"),
+  "/app/inventory/batches/barcode": () => import("@/app/app/inventory/batches/barcode/page"),
+  "/app/project/new": () => import("@/app/app/project/new/page"),
+  "/app/project/warehouse": () => import("@/app/app/project/warehouse/page"),
+  "/app/so/new": () => import("@/app/app/so/new/page"),
+  "/app/so/count": () => import("@/app/app/so/count/page"),
+  "/app/settings/ai": () => import("@/app/app/settings/ai/page"),
   "/app/so": () => import("@/app/app/so/page"),
   "/app/project": () => import("@/app/app/project/page"),
-  "/app/report": () => import("@/app/app/report/page"),
   "/app/inventory/balance": () => import("@/app/app/inventory/balance/page"),
   "/app/setup/items": () => import("@/app/app/setup/items/page"),
   "/app/setup/warehouses": () => import("@/app/app/setup/warehouses/page"),
@@ -143,6 +161,9 @@ function prefetch(href: string) {
     if (key.startsWith(href + "/")) void loader();
   }
 }
+
+// Pilihan submenu yang terbuka — dipersist agar tidak ketutup pas reload.
+const OPEN_HREF_KEY = "estoq:nav-open";
 
 export function NavMain({ groups }: { groups: NavGroup[] }) {
   const { pathname } = useLocation()
@@ -161,12 +182,13 @@ export function NavMain({ groups }: { groups: NavGroup[] }) {
     }
   }
 
-  // Akordeon: hanya satu submenu terbuka pada satu waktu.
-  const [openHref, setOpenHref] = useState<string | null>(() => {
+  // Parent yang sedang aktif dari rute — dihitung ulang tiap render sehingga
+  // tetap benar walau data nav datang belakangan (session/workspace async).
+  const activeParent = useMemo(() => {
     for (const group of groups) {
       for (const item of group.items) {
         if ((item.children?.length ?? 0) > 0) {
-          const childActive = item.children?.find((c) =>
+          const childActive = item.children?.some((c) =>
             isActive(c.href, pathname)
           )
           if (isActive(item.href, pathname) || childActive) return item.href
@@ -174,29 +196,45 @@ export function NavMain({ groups }: { groups: NavGroup[] }) {
       }
     }
     return null
+  }, [groups, pathname])
+
+  // Akordeon: hanya satu submenu terbuka pada satu waktu.
+  // `undefined` = ikuti rute aktif; string/null = pilihan manual user (persist reload).
+  const [manualOpen, setManualOpen] = useState<string | null | undefined>(() => {
+    try {
+      const saved = localStorage.getItem(OPEN_HREF_KEY)
+      return saved ? (JSON.parse(saved) as string | null) : undefined
+    } catch {
+      return undefined
+    }
   })
 
-  // Buka parent yang sedang aktif (navigasi langsung / refresh).
-  const groupsRef = useRef(groups)
-  groupsRef.current = groups
+  // Pindah halaman → kembali ikuti rute aktif.
+  const lastPathname = useRef(pathname)
   useEffect(() => {
-    for (const group of groupsRef.current) {
-      for (const item of group.items) {
-        if ((item.children?.length ?? 0) > 0) {
-          const childActive = item.children?.find((c) =>
-            isActive(c.href, pathname)
-          )
-          if (isActive(item.href, pathname) || childActive) {
-            setOpenHref(item.href)
-            return
-          }
-        }
-      }
+    if (lastPathname.current !== pathname) {
+      lastPathname.current = pathname
+      setManualOpen(undefined)
     }
   }, [pathname])
 
+  // Simpan pilihan manual agar submenu tidak ketutup pas reload.
+  useEffect(() => {
+    try {
+      if (manualOpen === undefined) localStorage.removeItem(OPEN_HREF_KEY)
+      else localStorage.setItem(OPEN_HREF_KEY, JSON.stringify(manualOpen))
+    } catch {
+      /* abaikan (mode privat) */
+    }
+  }, [manualOpen])
+
+  const openHref = manualOpen === undefined ? activeParent : manualOpen
+
   const toggleItem = (href: string) => {
-    setOpenHref((cur) => (cur === href ? null : href))
+    setManualOpen((cur) => {
+      const effective = cur === undefined ? activeParent : cur
+      return effective === href ? null : href
+    })
   }
 
   return (
@@ -284,30 +322,54 @@ function NavCollapsibleItem({
   const navigate = useNavigate()
   const [, startTransition] = useTransition()
 
-  // Mode kecil (ikon): klik parent langsung menuju halamannya
-  // (mis. /app/setup), bukan membuka submenu.
+  // Mode kecil (ikon): klik parent membuka flyout berisi halaman induk
+  // + semua shortcut anak (lengkap, sama kayak mode expanded).
   if (isCollapsed) {
+    const go = (href: string) => {
+      if (isActive(href, pathname)) return
+      startTransition(() => navigate(href))
+    }
     return (
       <SidebarMenuItem>
-        <SidebarMenuButton asChild isActive={isItemActive} tooltip={item.label}>
-          <Link
-            to={item.href}
-            viewTransition
-            onMouseEnter={() => prefetch(item.href)}
-            onClick={(e) => {
-              if (isActive(item.href, pathname)) return
-              e.preventDefault()
-              startTransition(() => navigate(item.href))
-            }}
-          >
-            <Icon />
-            <span>{item.label}</span>
-          </Link>
-        </SidebarMenuButton>
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <SidebarMenuButton isActive={isItemActive} tooltip={item.label}>
+              <Icon />
+              <span>{item.label}</span>
+            </SidebarMenuButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" align="start" className="min-w-52">
+            <DropdownMenuLabel
+              onClick={() => go(item.href)}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <Icon className="size-4" />
+              <span>{item.label}</span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {item.children?.map((child) => {
+              const active = activeHrefs.has(child.href)
+              return (
+                <DropdownMenuItem
+                  key={child.href}
+                  onMouseEnter={() => prefetch(child.href)}
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    go(child.href)
+                  }}
+                  className={active ? "bg-accent" : undefined}
+                >
+                  <span>{child.label}</span>
+                </DropdownMenuItem>
+              )
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </SidebarMenuItem>
     )
   }
 
+  // Mode expanded: klik parent buka/tutup submenu.
   return (
     <Collapsible
       asChild

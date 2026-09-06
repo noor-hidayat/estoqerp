@@ -23,6 +23,7 @@ export const WORKSPACES = [
   { id: "wsp-warehouse", code: "warehouse", label: "Warehouse", icon: "Warehouse", description: "Stok, Ledger & Master" },
   { id: "wsp-purchasing", code: "purchasing", label: "Purchasing", icon: "ShoppingCart", description: "Supplier, PO & GR" },
   { id: "wsp-marketing", code: "marketing", label: "Marketing", icon: "Megaphone", description: "Customer & Sales Order" },
+  { id: "wsp-quality", code: "quality", label: "Quality", icon: "ClipboardCheck", description: "QC Inspection & Quality Control" },
 ] as const;
 
 export type WorkspaceId = (typeof WORKSPACES)[number]["id"];
@@ -60,12 +61,46 @@ export const NAV: NavGroup[] = [
         href: "/app/project",
         icon: "FolderKanban",
         menu: "opname",
+        children: [
+          {
+            label: "All Projects",
+            href: "/app/project",
+            icon: "FolderKanban",
+            menu: "opname",
+          },
+          {
+            label: "Project Warehouse",
+            href: "/app/project/warehouse",
+            icon: "FolderKanban",
+            menu: "opname",
+          },
+        ],
       },
       {
         label: "Stock Opname",
         href: "/app/so",
         icon: "ClipboardList",
         menu: "opname",
+        children: [
+          {
+            label: "All Counts",
+            href: "/app/so",
+            icon: "ClipboardList",
+            menu: "opname",
+          },
+          {
+            label: "Count Entry",
+            href: "/app/so/count",
+            icon: "ClipboardList",
+            menu: "opname",
+          },
+          {
+            label: "Stock Adjustment",
+            href: "/app/so/variance",
+            icon: "Diff",
+            menu: "opname.variance",
+          },
+        ],
       },
     ],
   },
@@ -93,6 +128,12 @@ export const NAV: NavGroup[] = [
           {
             label: "Batch",
             href: "/app/inventory/batches",
+            icon: "Layers",
+            menu: "inventory.batches",
+          },
+          {
+            label: "Batch Barcodes",
+            href: "/app/inventory/batches/barcode",
             icon: "Layers",
             menu: "inventory.batches",
           },
@@ -132,6 +173,36 @@ export const NAV: NavGroup[] = [
             href: "/app/report/history",
             icon: "History",
             menu: "reports.history",
+          },
+          {
+            label: "Stock Aging",
+            href: "/app/report/stock-aging",
+            icon: "Hourglass",
+            menu: "reports",
+          },
+          {
+            label: "Batch Traceability",
+            href: "/app/report/batch-traceability",
+            icon: "Route",
+            menu: "reports",
+          },
+          {
+            label: "Inventory Valuation",
+            href: "/app/report/inventory-valuation",
+            icon: "Coins",
+            menu: "reports",
+          },
+          {
+            label: "Receiving Report",
+            href: "/app/report/receiving",
+            icon: "FileText",
+            menu: "reports",
+          },
+          {
+            label: "Picking / Delivery Performance",
+            href: "/app/report/delivery-performance",
+            icon: "Gauge",
+            menu: "reports",
           },
         ],
       },
@@ -205,6 +276,12 @@ export const NAV: NavGroup[] = [
             href: "/app/settings/import",
             icon: "FileSpreadsheet",
             menu: "settings.import",
+          },
+          {
+            label: "AI Settings",
+            href: "/app/settings/ai",
+            icon: "Bot",
+            menu: "settings",
           },
         ],
       },
@@ -283,6 +360,7 @@ export const NAV: NavGroup[] = [
 export const WORKSPACE_MENU_MAP: Record<string, string[]> = {
   "wsp-purchasing": ["dashboard", "supply.suppliers", "supply.purchaseOrders", "supply.goodsReceipts", "supply.deliveries", "ai"],
   "wsp-marketing": ["dashboard", "supply.customers", "supply.salesOrders", "supply.deliveries", "ai"],
+  "wsp-quality": ["dashboard", "supply.goodsReceipts", "ai"],
 };
 
 // ---------------------------------------------------------------------------
@@ -302,16 +380,21 @@ export const WAREHOUSE_NAV: NavGroup[] = [
     title: "Menu",
     items: [
       {
+        label: "Transaction",
+        href: "/app/transaction",
+        icon: "ArrowLeftRight",
+        menu: "inventory.transactions",
+      },
+      {
         label: "Inbound",
         href: "/app/inbound",
         icon: "ArrowDownToLine",
         menu: "supply.purchaseOrders",
         children: [
-          { label: "Receiving", href: "/app/inbound/receiving", icon: "Inbox", menu: "supply.purchaseOrders" },
-          { label: "QC Inspection", href: "/app/inbound/qc", icon: "ClipboardCheck", menu: "supply.goodsReceipts" },
+          { label: "Receiving", href: "/app/receiving", icon: "Inbox", menu: "supply.purchaseOrders" },
           { label: "GRN", href: "/app/goods-receipts", icon: "PackageCheck", menu: "supply.goodsReceipts" },
-          { label: "Putaway", href: "/app/inbound/putaway", icon: "PackageSearch", menu: "supply.goodsReceipts" },
-          { label: "Supplier Return", href: "/app/inbound/supplier-return", icon: "Undo2", menu: "supply.goodsReceipts" },
+          { label: "Putaway", href: "/app/putaway", icon: "PackageSearch", menu: "supply.goodsReceipts" },
+          { label: "Supplier Return", href: "/app/supplier-return", icon: "Undo2", menu: "supply.goodsReceipts" },
         ],
       },
       {
@@ -336,6 +419,7 @@ export const WAREHOUSE_NAV: NavGroup[] = [
           { label: "Stock Balance", href: "/app/inventory/balance", icon: "Boxes", menu: "inventory.stockBalance" },
           { label: "Stock Ledger", href: "/app/inventory/ledger", icon: "NotebookText", menu: "inventory.stockLedger" },
           { label: "Batch / Lot", href: "/app/inventory/batches", icon: "Layers", menu: "inventory.batches" },
+          { label: "Batch Barcodes", href: "/app/inventory/batches/barcode", icon: "Layers", menu: "inventory.batches" },
         ],
       },
       {
@@ -345,7 +429,9 @@ export const WAREHOUSE_NAV: NavGroup[] = [
         menu: "opname",
         children: [
           { label: "Opname Project", href: "/app/project", icon: "FolderKanban", menu: "opname" },
+          { label: "Project Warehouse", href: "/app/project/warehouse", icon: "FolderKanban", menu: "opname" },
           { label: "Stock Opname", href: "/app/so", icon: "ClipboardList", menu: "opname" },
+          { label: "Count Entry", href: "/app/so/count", icon: "ClipboardList", menu: "opname" },
           { label: "Stock Adjustment", href: "/app/so/variance", icon: "Diff", menu: "opname.variance" },
         ],
       },
@@ -368,6 +454,32 @@ export const WAREHOUSE_NAV: NavGroup[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Struktur khusus workspace Quality: Dashboard + menu QC Inspection.
+// QC Inspection tetap ada di Inbound (alur Receiving → QC → GRN); di sini
+// tampil sebagai akses langsung tim Quality.
+// ---------------------------------------------------------------------------
+export const QUALITY_NAV: NavGroup[] = [
+  {
+    title: "Dashboards",
+    items: [
+      { label: "Dashboard", href: "/app", icon: "LayoutDashboard", menu: "dashboard" },
+      { label: "AI Assistant", href: "/app/ai", icon: "Bot", menu: "ai" },
+    ],
+  },
+  {
+    title: "Menu",
+    items: [
+      {
+        label: "QC Inspection",
+        href: "/app/qc",
+        icon: "ClipboardCheck",
+        menu: "supply.goodsReceipts",
+      },
+    ],
+  },
+];
+
 function menuAllowedForWorkspace(menu: string, workspaceId: string | null): boolean {
   if (!workspaceId) return true;
   const allowed = WORKSPACE_MENU_MAP[workspaceId];
@@ -381,14 +493,19 @@ export function navForPermissions(
   canManage?: (menu: string) => boolean,
   workspaceId?: string | null
 ): NavGroup[] {
-  // Warehouse punya struktur dedicated (5 grup sejajar) — sudah warehouse-scoped,
+  // Workspace dengan struktur dedicated (Warehouse, Quality) sudah scoped,
   // jadi filter workspace dilewati dan hanya permission yang berlaku.
   // Grup shared (Settings/Setup) ikut disertakan agar master data tetap terjangkau.
-  const base =
+  const dedicated =
     workspaceId === "wsp-warehouse"
-      ? [...WAREHOUSE_NAV, ...NAV.filter((g) => (g as unknown as { shared?: boolean }).shared)]
-      : NAV;
-  const skipWorkspaceFilter = workspaceId === "wsp-warehouse";
+      ? WAREHOUSE_NAV
+      : workspaceId === "wsp-quality"
+        ? QUALITY_NAV
+        : null;
+  const base = dedicated
+    ? [...dedicated, ...NAV.filter((g) => (g as unknown as { shared?: boolean }).shared)]
+    : NAV;
+  const skipWorkspaceFilter = dedicated !== null;
   return base.map((group) => {
     // Shared group selalu tampil (filter hanya by permission, bukan workspace)
     const isShared = (group as unknown as { shared?: boolean }).shared;

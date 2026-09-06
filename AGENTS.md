@@ -42,9 +42,9 @@ Monorepo npm workspaces — 3 folder terpisah:
 
 **Receiving Detail:** `Alasan Reject` dihapus global (tidak tampil di semua status), `Batch` dihapus global. Label `Document` (bukan `No PO`) untuk `purchaseOrderId`, `Supplier Name` & `Target Warehouse` tampil sebagai `div bg-zinc-100` (readOnly, bukan `SearchableSelect` saat view) agar tidak kosong. Kotak `rounded-xl border bg-card p-5` yang mengelilingi Document→Note **dihapus** di menu RCV (detail view/edit); grid kini `gap-x-8 gap-y-5` via `FormGrid` sama persis dengan New Receiving. Judul pakai `FormPage title` (`text-[24px] font-semibold tracking-[-0.02em]`) — posisi geser di-fix agar sama dengan New; tombol Save `size="sm"` + ikon `<Save size={15}/>` disamakan New vs Detail.
 
-**Receiving List (`/app/inbound/receiving`):** Kolom `Supplier Name | Status | Return(progress 10%/50%/100% bar `h-1.5 bg-muted`+`bg-primary`) | ID=documentNo RCV | PO ID=documentNo PO | Created=timeAgo`. Header tanpa `description` (`PageHeader` tanpa `description`). `PO ID` & `ID` wajib tampil `documentNo` (fallback `formatId` hanya jika `documentNo` null), jangan `"-"`.
+**Receiving List (`/app/receiving`):** Kolom `Supplier Name | Status | Return(progress 10%/50%/100% bar `h-1.5 bg-muted`+`bg-primary`) | ID=documentNo RCV | PO ID=documentNo PO | Created=timeAgo`. Header tanpa `description` (`PageHeader` tanpa `description`). `PO ID` & `ID` wajib tampil `documentNo` (fallback `formatId` hanya jika `documentNo` null), jangan `"-"`.
 
-**QC List (`/app/inbound/qc`):** Kolom `ID=documentNo QC | PR ID=documentNo PO (via `qc.purchaseOrderId` fallback `receiving.purchaseOrderId`) | Posting date=`inspectionDate.slice(0,10)` | Status | Created=timeAgo`. Header tanpa `description`. Samakan fallback `documentNo` untuk `ID`/`PR ID`.
+**QC List (`/app/qc`):** Kolom `ID=documentNo QC | PR ID=documentNo PO (via `qc.purchaseOrderId` fallback `receiving.purchaseOrderId`) | Posting date=`inspectionDate.slice(0,10)` | Status | Created=timeAgo`. Header tanpa `description`. Samakan fallback `documentNo` untuk `ID`/`PR ID`.
 
 **QC Detail:** Tambah `Target Warehouse` (readOnly `div`) agar tidak kosong, mapping `warehouseId` & `supplierId` dari `qc`/`receiving` ke `publicId` via backend `GET /receivings` & `GET /qc-inspections` (map internal `bigint` → `publicId`).
 

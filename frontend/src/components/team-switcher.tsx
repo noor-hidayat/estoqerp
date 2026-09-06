@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, ClipboardList, Megaphone, ShoppingCart, Warehouse } from "lucide-react"
+import { Check, ChevronsUpDown, ClipboardCheck, ClipboardList, Megaphone, ShoppingCart, Warehouse } from "lucide-react"
 
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ import { BrandMark } from "@/components/app-shell/sidebar"
 import { useActiveWorkspace } from "@/hooks/use-workspace"
 
 const WS_ICONS: Record<string, React.ElementType> = {
+  ClipboardCheck,
   ClipboardList,
   Warehouse,
   ShoppingCart,

@@ -1,11 +1,11 @@
 import { lazy, Suspense, useTransition } from "react";
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { SessionProvider, useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { navForPermissions } from "@/components/app-shell/nav";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
-import { TableSkeleton, FormSkeleton, DetailSkeleton, ChatSkeleton, TableWithKpiSkeleton, HubSkeleton } from "@/components/ui/loader";
+import { TableSkeleton, FormSkeleton, DetailSkeleton, ChatSkeleton, TableWithKpiSkeleton } from "@/components/ui/loader";
 
 import LoginPage from "@/app/login/page";
 import AppLayout from "@/app/app/layout";
@@ -20,13 +20,11 @@ const CountPage = lazy(() => import("@/app/app/so/count/page"));
 const CountDetailPage = lazy(() => import("@/app/app/so/count/[id]/page"));
 const ProjectsPage = lazy(() => import("@/app/app/project/page"));
 const NewProjectPage = lazy(() => import("@/app/app/project/new/page"));
-const ReportsPage = lazy(() => import("@/app/app/report/page"));
 const ReportsProjectPage = lazy(() => import("@/app/app/report/project/page"));
 const ReportsHistoryPage = lazy(() => import("@/app/app/report/history/page"));
 const ReportsSummaryPage = lazy(() => import("@/app/app/report/summary/page"));
 const ReportsVariancePage = lazy(() => import("@/app/app/report/variance/page"));
 const StockBalancePage = lazy(() => import("@/app/app/inventory/balance/page"));
-const StockPage = lazy(() => import("@/app/app/inventory/page"));
 const TransactionsPage = lazy(() => import("@/app/app/transaction/page"));
 const NewTransactionPage = lazy(() => import("@/app/app/transaction/new/page"));
 const TransactionDetailPage = lazy(() => import("@/app/app/transaction/[id]/page"));
@@ -57,7 +55,6 @@ const EditDocumentSeriesPage = lazy(() => import("@/app/app/setup/document-types
 const ItemsPage = lazy(() => import("@/app/app/setup/items/page"));
 const NewItemPage = lazy(() => import("@/app/app/setup/items/new/page"));
 const EditItemPage = lazy(() => import("@/app/app/setup/items/[id]/page"));
-const SetupPage = lazy(() => import("@/app/app/setup/page"));
 const BarcodeFormatsPage = lazy(() => import("@/app/app/setup/barcode-formats/page"));
 const BarcodeFormatNewPage = lazy(() => import("@/app/app/setup/barcode-formats/new/page"));
 const BarcodeFormatDetailPage = lazy(() => import("@/app/app/setup/barcode-formats/[id]/page"));
@@ -72,7 +69,6 @@ const NewRolePage = lazy(() => import("@/app/app/settings/roles/new/page"));
 const EditRolePage = lazy(() => import("@/app/app/settings/roles/[id]/page"));
 const ImportDataPage = lazy(() => import("@/app/app/settings/import/page"));
 const AiSettingsPage = lazy(() => import("@/app/app/settings/ai/page"));
-const SettingsPage = lazy(() => import("@/app/app/settings/page"));
 const AiChatPage = lazy(() => import("@/app/app/ai/page"));
 const SuppliersPage = lazy(() => import("@/app/app/suppliers/page"));
 const CustomersPage = lazy(() => import("@/app/app/customers/page"));
@@ -88,17 +84,15 @@ const GoodsReceiptDetailPage = lazy(() => import("@/app/app/goods-receipts/[id]/
 const DeliveriesPage = lazy(() => import("@/app/app/deliveries/page"));
 const NewDeliveryPage = lazy(() => import("@/app/app/deliveries/new/page"));
 const DeliveryDetailPage = lazy(() => import("@/app/app/deliveries/[id]/page"));
-const InboundPage = lazy(() => import("@/app/app/inbound/page"));
-const InboundReceivingPage = lazy(() => import("@/app/app/inbound/receiving/page"));
-const NewInboundReceivingPage = lazy(() => import("@/app/app/inbound/receiving/new/page"));
-const InboundReceivingDetailPage = lazy(() => import("@/app/app/inbound/receiving/[id]/page"));
-const InboundQcPage = lazy(() => import("@/app/app/inbound/qc/page"));
-const NewQcInspectionPage = lazy(() => import("@/app/app/inbound/qc/new/page"));
-const QcInspectionDetailPage = lazy(() => import("@/app/app/inbound/qc/[id]/page"));
-const InboundPutawayPage = lazy(() => import("@/app/app/inbound/putaway/page"));
-const SupplierReturnPage = lazy(() => import("@/app/app/inbound/supplier-return/page"));
+const InboundReceivingPage = lazy(() => import("@/app/app/receiving/page"));
+const NewInboundReceivingPage = lazy(() => import("@/app/app/receiving/new/page"));
+const InboundReceivingDetailPage = lazy(() => import("@/app/app/receiving/[id]/page"));
+const InboundQcPage = lazy(() => import("@/app/app/qc/page"));
+const NewQcInspectionPage = lazy(() => import("@/app/app/qc/new/page"));
+const QcInspectionDetailPage = lazy(() => import("@/app/app/qc/[id]/page"));
+const InboundPutawayPage = lazy(() => import("@/app/app/putaway/page"));
+const SupplierReturnPage = lazy(() => import("@/app/app/supplier-return/page"));
 const OutboundPickingPage = lazy(() => import("@/app/app/outbound/picking/page"));
-const OutboundPage = lazy(() => import("@/app/app/outbound/page"));
 const OutboundPackingPage = lazy(() => import("@/app/app/outbound/packing/page"));
 const CustomerReturnPage = lazy(() => import("@/app/app/outbound/customer-return/page"));
 const StockAgingReportPage = lazy(() => import("@/app/app/report/stock-aging/page"));
@@ -126,6 +120,16 @@ function LazyPage({ children, fallback }: { children: React.ReactNode; fallback?
   return <Suspense fallback={fallback ?? <TableSkeleton />}>{children}</Suspense>;
 }
 
+/** Redirect dengan meneruskan param dinamis (mis. :id) ke path tujuan. */
+function RedirectTo({ to }: { to: string }) {
+  const params = useParams();
+  let path = to;
+  for (const [k, v] of Object.entries(params)) {
+    path = path.replace(`:${k}`, v ?? "");
+  }
+  return <Navigate to={path} replace />;
+}
+
 export default function App() {
   return (
     <SessionProvider>
@@ -145,12 +149,12 @@ export default function App() {
             <Route path="project/warehouse" element={<LazyPage fallback={<TableSkeleton columns={5} filters={1} />}><StockOpnameWarehousePage /></LazyPage>} />
             <Route path="so/count" element={<LazyPage fallback={<FormSkeleton fields={8} hasTable tableColumns={7} />}><CountPage /></LazyPage>} />
             <Route path="so/count/:id" element={<LazyPage fallback={<FormSkeleton fields={8} hasTable tableColumns={7} />}><CountDetailPage /></LazyPage>} />
-            <Route path="report" element={<LazyPage fallback={<HubSkeleton cards={4} />}><ReportsPage /></LazyPage>} />
+            <Route path="report" element={<Navigate to="/app/report/project" replace />} />
             <Route path="report/project" element={<LazyPage fallback={<TableSkeleton columns={8} filters={1} />}><ReportsProjectPage /></LazyPage>} />
             <Route path="report/history" element={<LazyPage fallback={<TableSkeleton columns={7} filters={3} />}><ReportsHistoryPage /></LazyPage>} />
             <Route path="report/summary" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} hasKpi kpiCount={4} />}><ReportsSummaryPage /></LazyPage>} />
             <Route path="report/variance" element={<LazyPage fallback={<TableSkeleton columns={7} filters={2} />}><ReportsVariancePage /></LazyPage>} />
-            <Route path="inventory" element={<LazyPage fallback={<HubSkeleton cards={4} />}><StockPage /></LazyPage>} />
+            <Route path="inventory" element={<Navigate to="/app/inventory/balance" replace />} />
             <Route path="inventory/balance" element={<LazyPage fallback={<TableSkeleton columns={8} filters={1} hasKpi kpiCount={3} />}><StockBalancePage /></LazyPage>} />
             <Route path="transaction" element={<LazyPage fallback={<TableSkeleton columns={6} filters={3} />}><TransactionsPage /></LazyPage>} />
             <Route path="transaction/new" element={<LazyPage fallback={<FormSkeleton fields={6} hasTable tableColumns={5} />}><NewTransactionPage /></LazyPage>} />
@@ -167,7 +171,7 @@ export default function App() {
             <Route path="setup/warehouses" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} />}><StockWarehousesPage /></LazyPage>} />
             <Route path="setup/warehouses/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewWarehousePage /></LazyPage>} />
             <Route path="setup/warehouses/:id" element={<LazyPage fallback={<FormSkeleton fields={4} />}><EditWarehousePage /></LazyPage>} />
-            <Route path="setup" element={<LazyPage fallback={<HubSkeleton cards={9} />}><SetupPage /></LazyPage>} />
+            <Route path="setup" element={<Navigate to="/app/setup/items" replace />} />
             <Route path="setup/item-groups" element={<LazyPage fallback={<TableSkeleton columns={4} filters={0} />}><ItemGroupsPage /></LazyPage>} />
             <Route path="setup/item-groups/new" element={<LazyPage fallback={<FormSkeleton fields={2} />}><NewItemGroupPage /></LazyPage>} />
             <Route path="setup/item-groups/:id" element={<LazyPage fallback={<FormSkeleton fields={2} />}><EditItemGroupPage /></LazyPage>} />
@@ -190,8 +194,8 @@ export default function App() {
             <Route path="setup/batch-formats/new" element={<LazyPage fallback={<FormSkeleton fields={5} />}><BatchFormatNewPage /></LazyPage>} />
             <Route path="setup/batch-formats/:id" element={<LazyPage fallback={<FormSkeleton fields={5} />}><BatchFormatDetailPage /></LazyPage>} />
             {/* Legacy redirect: /app/data-library/* -> /app/setup/* */}
-            <Route path="data-library/*" element={<Navigate to="/app/setup" replace />} />
-            <Route path="settings" element={<LazyPage fallback={<HubSkeleton cards={4} />}><SettingsPage /></LazyPage>} />
+            <Route path="data-library/*" element={<Navigate to="/app/setup/items" replace />} />
+            <Route path="settings" element={<Navigate to="/app/settings/users" replace />} />
             <Route path="settings/users" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} />}><UsersPage /></LazyPage>} />
             <Route path="settings/users/new" element={<LazyPage fallback={<FormSkeleton fields={5} />}><NewUserPage /></LazyPage>} />
             <Route path="settings/users/:id" element={<LazyPage fallback={<FormSkeleton fields={5} />}><EditUserPage /></LazyPage>} />
@@ -215,16 +219,25 @@ export default function App() {
             <Route path="deliveries" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><DeliveriesPage /></LazyPage>} />
             <Route path="deliveries/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewDeliveryPage /></LazyPage>} />
             <Route path="deliveries/:id" element={<LazyPage fallback={<DetailSkeleton />}><DeliveryDetailPage /></LazyPage>} />
-            <Route path="inbound" element={<LazyPage fallback={<HubSkeleton cards={5} />}><InboundPage /></LazyPage>} />
-            <Route path="inbound/receiving" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><InboundReceivingPage /></LazyPage>} />
-            <Route path="inbound/receiving/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewInboundReceivingPage /></LazyPage>} />
-            <Route path="inbound/receiving/:id" element={<LazyPage fallback={<DetailSkeleton />}><InboundReceivingDetailPage /></LazyPage>} />
-            <Route path="inbound/qc" element={<LazyPage><InboundQcPage /></LazyPage>} />
-            <Route path="inbound/qc/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewQcInspectionPage /></LazyPage>} />
-            <Route path="inbound/qc/:id" element={<LazyPage fallback={<DetailSkeleton />}><QcInspectionDetailPage /></LazyPage>} />
-            <Route path="inbound/putaway" element={<LazyPage><InboundPutawayPage /></LazyPage>} />
-            <Route path="inbound/supplier-return" element={<LazyPage><SupplierReturnPage /></LazyPage>} />
-            <Route path="outbound" element={<LazyPage fallback={<HubSkeleton cards={5} />}><OutboundPage /></LazyPage>} />
+            <Route path="inbound" element={<Navigate to="/app/receiving" replace />} />
+            <Route path="receiving" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><InboundReceivingPage /></LazyPage>} />
+            <Route path="receiving/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewInboundReceivingPage /></LazyPage>} />
+            <Route path="receiving/:id" element={<LazyPage fallback={<DetailSkeleton />}><InboundReceivingDetailPage /></LazyPage>} />
+            <Route path="qc" element={<LazyPage><InboundQcPage /></LazyPage>} />
+            <Route path="qc/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewQcInspectionPage /></LazyPage>} />
+            <Route path="qc/:id" element={<LazyPage fallback={<DetailSkeleton />}><QcInspectionDetailPage /></LazyPage>} />
+            <Route path="putaway" element={<LazyPage><InboundPutawayPage /></LazyPage>} />
+            <Route path="supplier-return" element={<LazyPage><SupplierReturnPage /></LazyPage>} />
+            {/* Redirect URL lama /app/inbound/* ke path flat */}
+            <Route path="inbound/receiving" element={<Navigate to="/app/receiving" replace />} />
+            <Route path="inbound/receiving/new" element={<Navigate to="/app/receiving/new" replace />} />
+            <Route path="inbound/receiving/:id" element={<RedirectTo to="/app/receiving/:id" />} />
+            <Route path="inbound/qc" element={<Navigate to="/app/qc" replace />} />
+            <Route path="inbound/qc/new" element={<Navigate to="/app/qc/new" replace />} />
+            <Route path="inbound/qc/:id" element={<RedirectTo to="/app/qc/:id" />} />
+            <Route path="inbound/putaway" element={<Navigate to="/app/putaway" replace />} />
+            <Route path="inbound/supplier-return" element={<Navigate to="/app/supplier-return" replace />} />
+            <Route path="outbound" element={<Navigate to="/app/sales-orders" replace />} />
             <Route path="outbound/picking" element={<LazyPage><OutboundPickingPage /></LazyPage>} />
             <Route path="outbound/packing" element={<LazyPage><OutboundPackingPage /></LazyPage>} />
             <Route path="outbound/customer-return" element={<LazyPage><CustomerReturnPage /></LazyPage>} />

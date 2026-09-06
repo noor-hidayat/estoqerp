@@ -35,7 +35,7 @@
 - `New > Save` → `POST /receivings` status `DRAFT` (tanpa `Save & Submit` di bawah, `Back` dihapus di menu Receiving; hanya `Save` di header).
 - `Edit > Save` → `PUT /receivings/:id` tetap `DRAFT`; setelah save tombol `Save` berubah jadi `Submit`.
 - `Submit` → `POST /receivings/:id/submit` via `toast.custom` Sonner `No / Yes` (`duration: Infinity`, `Yes` `autoFocus`, `Enter` = Yes, `Esc` = No, global `keydown` Enter/Esc juga trigger).
-- Shortcut `Ctrl+S` / `Cmd+S` → trigger `Save` (New/Edit) atau `Submit`/`Update` sesuai konteks (`preventDefault` browser save). Implement di `frontend/src/app/app/inbound/receiving/new/page.tsx:64` & `frontend/src/app/app/inbound/receiving/[id]/page.tsx:235` (hook sebelum early-return).
+- Shortcut `Ctrl+S` / `Cmd+S` → trigger `Save` (New/Edit) atau `Submit`/`Update` sesuai konteks (`preventDefault` browser save). Implement di `frontend/src/app/app/receiving/new/page.tsx:64` & `frontend/src/app/app/receiving/[id]/page.tsx:235` (hook sebelum early-return).
 - Detail QC: `Posting Date` editable default `todayISO()` (actual date), `Supplier` plain `div`, `Target Warehouse` readOnly `div`.
 
 ## 5) Tabel (Global)
@@ -47,9 +47,9 @@
 - Item di RCV: `No | Item | Qty PO | Qty Received (TableInput) | Rate | Amount` (view: `Qty Received` plain, `Qty Accepted/Reject` hanya saat `PENDING_QC`/`COMPLETED`).
 
 ## 6) List Page
-- **Receiving** (`/app/inbound/receiving`): Kolom `Supplier Name | Status | Return (bar h-1.5 bg-muted + bg-primary, pct = totalRejected/totalQty*100 via backend `returnPct`) | ID=documentNo | Created=timeAgo` (tanpa `PO ID`, tanpa `View` button, tanpa `description`). `ID` wajib `documentNo` (fallback `formatId` hanya jika null).
-- **QC** (`/app/inbound/qc`): Kolom `ID=documentNo | Posting date=inspectionDate.slice(0,10) | Status | Created=timeAgo` (tanpa `PR ID`, tanpa `View` button, tanpa `description`).
-- `onRowClick` → `navigate(/app/inbound/.../${documentNo ?? id})` (documentNo mengandung `/` → pakai `id` UUID + `encodeURIComponent` di router).
+- **Receiving** (`/app/receiving`): Kolom `Supplier Name | Status | Return (bar h-1.5 bg-muted + bg-primary, pct = totalRejected/totalQty*100 via backend `returnPct`) | ID=documentNo | Created=timeAgo` (tanpa `PO ID`, tanpa `View` button, tanpa `description`). `ID` wajib `documentNo` (fallback `formatId` hanya jika null).
+- **QC** (`/app/qc`): Kolom `ID=documentNo | Posting date=inspectionDate.slice(0,10) | Status | Created=timeAgo` (tanpa `PR ID`, tanpa `View` button, tanpa `description`).
+- `onRowClick` → `navigate(/app/receiving/... atau /app/qc/.../${documentNo ?? id})` (documentNo mengandung `/` → pakai `id` UUID + `encodeURIComponent` di router).
 
 ## 7) Aturan Tambahan (akan menyusul)
 - Warna, tipografi, spacing lain tetap pakai Tailwind + `cn`/`cx`. Jangan pakai `rounded-xl border` card untuk form — pakai `FormSection` saja.

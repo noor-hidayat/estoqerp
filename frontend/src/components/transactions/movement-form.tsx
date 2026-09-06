@@ -35,6 +35,7 @@ import type {
 } from "@/types";
 import { cn, cx } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
@@ -366,6 +367,7 @@ export function MovementForm({
   onPost,
   onCancel,
   onAmend,
+  onDelete,
   statusBadge,
   tabs,
   className,
@@ -380,6 +382,7 @@ export function MovementForm({
   onPost?: () => Promise<void>;
   onCancel?: () => Promise<void>;
   onAmend?: () => Promise<void>;
+  onDelete?: () => Promise<void>;
   statusBadge?: ReactNode;
   tabs?: ReactNode;
   className?: string;
@@ -410,6 +413,7 @@ export function MovementForm({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(() => !!initial);
   const [cancelling, setCancelling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   useErrorToast(error);
 
   const serialize = () =>
@@ -437,6 +441,19 @@ export function MovementForm({
       setError(e instanceof Error ? e.message : "Failed");
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete || deleting) return;
+    if (!confirm("Delete transaksi ini? Data akan dihapus dari database.")) return;
+    setDeleting(true);
+    try {
+      await onDelete();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -937,16 +954,14 @@ export function MovementForm({
       actions={
         <div className="flex flex-wrap items-center gap-2">
           {actions}
-          {onCancel && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2.5 text-xs"
-              onClick={handleCancel}
-              disabled={cancelling}
-            >
-              {cancelling ? "..." : onAmend ? "Amend" : "Cancel"}
-            </Button>
+          {(onCancel || onAmend || onDelete) && (
+            <DocMenu
+              onCancel={onAmend ? handleCancel : onCancel ? handleCancel : undefined}
+              onDelete={onDelete ? handleDelete : undefined}
+              cancelDisabled={cancelling}
+              deleteDisabled={deleting}
+              cancelLabel={onAmend ? "Amend" : "Cancel"}
+            />
           )}
           {!readOnly && (
             <Button variant="primary" size="sm" className="h-7 px-2.5 text-xs" onClick={save} disabled={saving}>

@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Pencil, X } from "lucide-react";
-import { useQcInspection, useSubmitQcInspection, useCancelQcInspection, useUpdateQcInspection, useReceiving, useAllWarehouses, useSuppliers, usePurchaseOrders, useQcParameters } from "@/lib/api/query";
+import { useQcInspection, useSubmitQcInspection, useCancelQcInspection, useRemoveQcInspection, useUpdateQcInspection, useReceiving, useAllWarehouses, useSuppliers, usePurchaseOrders, useQcParameters } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -30,6 +31,7 @@ export default function QcDetailPage() {
   const { data: qcParams = [] } = useQcParameters();
   const submit = useSubmitQcInspection();
   const cancel = useCancelQcInspection();
+  const remove = useRemoveQcInspection();
   const update = useUpdateQcInspection();
   const [error, setError] = useState("");
   useErrorToast(error);
@@ -81,6 +83,10 @@ export default function QcDetailPage() {
     if (!confirm("Batalkan QC ini?")) return;
     try { await cancel.mutateAsync(qc.id); } catch (e) { setError(e instanceof Error ? e.message : "Gagal cancel"); }
   };
+  const onDelete = async () => {
+    if (!confirm("Hapus QC ini? Data akan dihapus dari database.")) return;
+    try { await remove.mutateAsync(qc.id); navigate("/app/qc"); } catch (e) { setError(e instanceof Error ? e.message : "Gagal hapus"); }
+  };
   const onSaveEdit = async () => {
     try {
       const lines = (qc.lines ?? []).map((rl: any, idx: number) => {
@@ -118,10 +124,10 @@ export default function QcDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           {isDraft && !editing && <Button variant="outline" size="sm" onClick={startEdit}><Pencil size={14} strokeWidth={2}/>Edit</Button>}
           {isDraft && !editing && <Button variant="primary" size="sm" onClick={onSubmit} disabled={submit.isPending}>Submit</Button>}
-          {isDraft && !editing && <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>}
+          {isDraft && !editing && <DocMenu onCancel={onCancel} onDelete={onDelete} />}
           {editing && <Button variant="ghost" size="sm" onClick={()=>setEditing(false)}><X size={14} strokeWidth={2}/>Discard</Button>}
           {editing && <Button variant="primary" size="sm" onClick={onSaveEdit}>Save</Button>}
-          {isCompleted && <Button variant="outline" size="sm" onClick={()=>navigate(`/app/inbound/receiving/${(receiving as any)?.documentNo ?? qc.receivingId}`)}>View Receiving</Button>}
+          {isCompleted && <Button variant="outline" size="sm" onClick={()=>navigate(`/app/receiving/${(receiving as any)?.documentNo ?? qc.receivingId}`)}>View Receiving</Button>}
         </div>
       </div>
 

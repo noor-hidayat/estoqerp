@@ -114,7 +114,7 @@ export default function InboundReceivingPage() {
       <PageHeader
         title="Receiving"
         actions={
-          <Button size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/inbound/receiving/new")}>
+          <Button size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/receiving/new")}>
             <Plus size={14} strokeWidth={2} />
             New Receiving
           </Button>
@@ -128,7 +128,7 @@ export default function InboundReceivingPage() {
         loading={isLoading}
         searchPlaceholder="Cari supplier / ID..."
         getSearchText={(r) => `${rcvNo(r)} ${supplierName(r)}`}
-        onRowClick={(r) => navigate(`/app/inbound/receiving/${r.documentNo ?? r.id}`)}
+        onRowClick={(r) => navigate(`/app/receiving/${r.documentNo ?? r.id}`)}
         filters={
           <div className="flex gap-2">
             <Select

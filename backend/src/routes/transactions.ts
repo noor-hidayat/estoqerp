@@ -360,8 +360,18 @@ async function resolveBatch(
     if (parsed.shift) values.shift = parsed.shift;
     if (Object.keys(parsed.meta).length > 0) values.meta = parsed.meta;
   }
-  await tx.insert(schema.batches).values(values);
-  return id;
+  await tx.insert(schema.batches).values(values).returning();
+  const [created] = await tx
+    .select({ id: schema.batches.id })
+    .from(schema.batches)
+    .where(
+      and(
+        eq(schema.batches.itemId, itemId),
+        eq(schema.batches.batchNumber, batchNumber)
+      )
+    )
+    .limit(1);
+  return created?.id ?? null;
 }
 
 /** Validasi kode alternatif item yang ter-encode di batch number. */
@@ -434,6 +444,22 @@ async function applyMovementEffect(
 ) {
   const t0 = Date.now();
   const now = new Date();
+
+  // Resolve actorId (uuid publicId atau internal bigint) ke internal id untuk createdBy.
+  let actorInternal: number | null = null;
+  if (actorId != null && String(actorId).trim() !== "") {
+    const s = String(actorId).trim();
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+      const [u] = await tx
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.publicId, s))
+        .limit(1);
+      actorInternal = u?.id ?? null;
+    } else if (/^\d+$/.test(s)) {
+      actorInternal = Number(s);
+    }
+  }
 
   // --- 0 & 1. Validasi & Update stock_balances agregat (batch, incremental) ---
   const outNeeds = new Map<string, number>();
@@ -1479,7 +1505,7 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
           },
           type.code,
           effectDetails,
-          req.user!.id
+          (req as any).user?.internalId ?? req.user!.id
         );
       }
     });
@@ -1561,7 +1587,7 @@ transactionsRouter.post("/:id/post", async (req: Request, res: Response) => {
         movement,
         type.code,
         details,
-        req.user!.id
+        (req as any).user?.internalId ?? req.user!.id
       );
       await tx
         .update(schema.stockMovements)

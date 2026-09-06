@@ -131,17 +131,17 @@ export default function NewQcInspectionPage() {
 
   const onSaveDraft = async () => {
     const docNo = await doCreate();
-    if (docNo) navigate(`/app/inbound/qc/${docNo}`, { replace: true });
+    if (docNo) navigate(`/app/qc/${docNo}`, { replace: true });
   };
   const onSaveSubmit = async () => {
     const docNo = await doCreate();
     if (!docNo) return;
     try {
       await submitQc.mutateAsync(docNo);
-      navigate(`/app/inbound/qc/${docNo}`, { replace: true });
+      navigate(`/app/qc/${docNo}`, { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal submit QC.");
-      navigate(`/app/inbound/qc/${docNo}`, { replace: true });
+      navigate(`/app/qc/${docNo}`, { replace: true });
     }
   };
 
@@ -287,7 +287,7 @@ export default function NewQcInspectionPage() {
         )}
 
         <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/inbound/qc")}><ArrowLeft size={15} strokeWidth={2}/>Back</Button>
+          <Button variant="ghost" onClick={() => navigate("/app/qc")}><ArrowLeft size={15} strokeWidth={2}/>Back</Button>
           <Button variant="outline" onClick={onSaveDraft} disabled={create.isPending || submitQc.isPending}><Save size={15} strokeWidth={2}/>{create.isPending ? "Menyimpan..." : "Save Draft"}</Button>
           <Button variant="primary" onClick={onSaveSubmit} disabled={create.isPending || submitQc.isPending}><Save size={15} strokeWidth={2}/>{create.isPending||submitQc.isPending ? "Menyimpan..." : "Save & Submit"}</Button>
         </FormActions>

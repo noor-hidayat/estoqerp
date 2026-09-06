@@ -10,6 +10,7 @@ import {
 import { useSession } from "@/lib/session";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -41,6 +42,12 @@ export default function NewPurchaseOrderPage() {
     notes: "",
   });
   const [lines, setLines] = useState<OrderLineInput[]>([emptyOrderLine()]);
+
+  const resetForm = () => {
+    if (!confirm("Hapus semua isian form ini?")) return;
+    setForm({ supplierId: "", warehouseId: "", orderDate: todayISO(), expectedDate: "", notes: "" });
+    setLines([emptyOrderLine()]);
+  };
 
   const submit = async () => {
     if (!form.supplierId) return setError("Supplier is required.");
@@ -84,7 +91,15 @@ export default function NewPurchaseOrderPage() {
 
   return (
     <RoleGuard roles={[]} menus={["supply.purchaseOrders"]}>
-      <FormPage title="New Purchase Order">
+      <FormPage
+        title="New Purchase Order"
+        actions={
+          <DocMenu
+            onCancel={() => navigate("/app/purchase-orders")}
+            onDelete={resetForm}
+          />
+        }
+      >
         <FormSection>
           <FormGrid>
             <Input label="Purchaser" value={user?.name ?? "—"} disabled placeholder="Auto dari akun" />

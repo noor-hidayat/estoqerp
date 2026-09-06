@@ -10,6 +10,9 @@ export interface WidgetTemplate {
   type: WidgetType;
   title: string;
   description: string;
+  /** Format tampilan nilai: currency (Rp) atau percent (%). Menentukan format
+   *  tooltip chart, sumbu Y, dan angka KPI di frontend. */
+  format?: "currency" | "percent";
   config: {
     factTable: string;
     measures: { field: string; aggregation: "sum" | "count" | "countDistinct" | "avg" | "min" | "max"; alias?: string }[];
@@ -76,6 +79,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
     type: "kpi",
     title: "Total Stock Value",
     description: "Nilai stok (closingQty * valuationRate)",
+    format: "currency",
     config: { factTable: "stock_balances", measures: [{ field: "stockValue", aggregation: "sum" }], groupBy: [] },
     defaultLayout: { w: 2, h: 4 },
   },
@@ -121,6 +125,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
     type: "kpi",
     title: "Persentase Return",
     description: "Persentase Return = Total Return / Total Delivery * 100% (qty)",
+    format: "percent",
     config: { factTable: "return_pct", measures: [{ field: "returnPct", aggregation: "avg", alias: "returnPct" }], groupBy: [] },
     defaultLayout: { w: 2, h: 4 },
   },
@@ -130,6 +135,7 @@ export const WIDGET_TEMPLATES: WidgetTemplate[] = [
     type: "bar",
     title: "Receiving vs Delivery Trend",
     description: "Perbandingan nilai Receiving (GR receiptDate) vs Delivery SO (deliveryDate) per bulan — batang vertikal",
+    format: "currency",
     config: { factTable: "receiving_vs_delivery", measures: [{ field: "receivingValue", aggregation: "sum" }, { field: "deliveryValue", aggregation: "sum" }], groupBy: ["month"] },
     defaultLayout: { w: 7, h: 8 },
   },

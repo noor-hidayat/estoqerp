@@ -9,6 +9,7 @@ import {
   usePostReceiving,
   useUpdateReceiving,
   useSubmitReceiving,
+  useRemoveReceiving,
   usePurchaseOrders,
   usePurchaseOrder,
   useSuppliers,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -30,7 +32,7 @@ import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatId, formatNumber } from "@/lib/utils";
 
 const MENU = "supply.purchaseOrders";
-const LIST_HREF = "/app/inbound/receiving";
+const LIST_HREF = "/app/receiving";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -58,6 +60,7 @@ export default function ReceivingDetailPage() {
   const post = usePostReceiving();
   const submit = useSubmitReceiving();
   const cancel = useCancelReceiving();
+  const remove = useRemoveReceiving();
   // qc via separate QC Inspection document (new page)
   const [error, setError] = useState("");
   useErrorToast(error);
@@ -201,13 +204,23 @@ export default function ReceivingDetailPage() {
       setError(e instanceof Error ? e.message : "Gagal membatalkan.");
     }
   };
+  const onDelete = async () => {
+    if (!gr) return;
+    if (!confirm("Hapus receiving ini? Data akan dihapus dari database.")) return;
+    try {
+      await remove.mutateAsync(gr.id);
+      navigate(LIST_HREF);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal menghapus.");
+    }
+  };
   const onCreateGnr = () => {
     if (!gr) return;
     navigate(`/app/goods-receipts/new?purchaseOrderId=${gr.purchaseOrderId}&receivingId=${gr.id}`);
   };
   const onCreateInspection = () => {
     if (!gr) return;
-    navigate(`/app/inbound/qc/new?receivingId=${gr.id}`);
+    navigate(`/app/qc/new?receivingId=${gr.id}`);
   };
 
   useEffect(() => {
@@ -287,9 +300,11 @@ export default function ReceivingDetailPage() {
                   </Button>
                 )}
                 {!isCanceled && !isCompleted && (
-                  <Button variant="outline" size="sm" onClick={onCancel} disabled={cancel.isPending}>
-                    Cancel
-                  </Button>
+                  <DocMenu
+                    onCancel={onCancel}
+                    onDelete={onDelete}
+                    cancelDisabled={cancel.isPending}
+                  />
                 )}
                 {isDraft && (
                   <Button variant="ghost" size="sm" className="hidden" onClick={onPost} disabled>
@@ -469,7 +484,7 @@ export default function ReceivingDetailPage() {
                           <TableCell className="px-3 font-medium text-foreground">{q.documentNo ?? formatId(q.id)}</TableCell>
                           <TableCell className="px-3 text-muted-foreground">{q.inspectionDate?.slice(0, 10) ?? "—"}</TableCell>
                           <TableCell className="px-3"><DocStatusBadge status={q.status} /></TableCell>
-                          <TableCell className="px-3 text-right"><Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => navigate(`/app/inbound/qc/${q.documentNo ?? q.id}`)}>View</Button></TableCell>
+                          <TableCell className="px-3 text-right"><Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => navigate(`/app/qc/${q.documentNo ?? q.id}`)}>View</Button></TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

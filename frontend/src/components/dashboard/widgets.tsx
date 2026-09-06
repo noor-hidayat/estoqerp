@@ -22,8 +22,9 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { formatCompact, formatNumber } from "@/lib/utils";
+import { formatCompact, formatIDR, formatNumber } from "@/lib/utils";
 import { useWidgetQuery } from "@/lib/api/query";
+import { TEMPLATE_BY_ID } from "@/components/dashboard/widget-registry";
 import {
   dimLabel,
   type WidgetConfig,
@@ -54,6 +55,36 @@ function valueKeyOf(config: WidgetConfig): string {
   return measureAlias(m);
 }
 
+/** Format eksplisit dari template ("currency"/"percent") via config.templateId.
+ *  Widget lama tanpa templateId fallback ke heuristik nama field/judul. */
+function templateFormatOf(config: WidgetConfig): "currency" | "percent" | null {
+  const tid = (config as unknown as { templateId?: string })?.templateId;
+  return (tid && TEMPLATE_BY_ID.get(tid)?.format) || null;
+}
+
+function isCurrencyConfig(config: WidgetConfig): boolean {
+  const fmt = templateFormatOf(config);
+  if (fmt) return fmt === "currency";
+  const valueKey = valueKeyOf(config);
+  return /stockvalue/i.test(valueKey) || /stock\s*value/i.test(config.title ?? "");
+}
+
+function isPercentConfig(config: WidgetConfig): boolean {
+  const fmt = templateFormatOf(config);
+  if (fmt) return fmt === "percent";
+  const valueKey = valueKeyOf(config);
+  return (
+    /persentase\s*return/i.test(config.title ?? "") ||
+    /returnPct|percent/i.test(valueKey) ||
+    /return_pct/i.test((config as unknown as { factTable?: string })?.factTable ?? "")
+  );
+}
+
+/** Formatter tooltip chart bernilai uang: "Rp 10.000". */
+function currencyTooltipFormatter(value: unknown, name: unknown) {
+  return [formatIDR(Number(value ?? 0)), String(name ?? "")] as [string, string];
+}
+
 function toChartRows(rows: WidgetRow[], labelKey: string | null, valueKey: string) {
   return rows.map((r) => ({
     name: labelKey ? String(r[labelKey] ?? "?") : "Nilai",
@@ -79,8 +110,8 @@ function KpiWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
   const isLoading = presetData !== undefined ? !!presetLoading : queryLoading;
   const valueKey = valueKeyOf(widget.config);
   const raw = (data as unknown as { rows?: WidgetRow[] })?.rows?.[0]?.[valueKey];
-  const isCurrency = /stockvalue/i.test(valueKey) || /stock\s*value/i.test(widget.config.title ?? "");
-  const isPercent = /persentase\s*return/i.test(widget.config.title ?? "") || /returnPct|percent/i.test(valueKey) || /return_pct/i.test((widget.config as unknown as { factTable?: string })?.factTable ?? "");
+  const isCurrency = isCurrencyConfig(widget.config);
+  const isPercent = isPercentConfig(widget.config);
   const formattedCompact = (() => {
     if (raw === undefined || raw === null) return "—";
     const num = Number(raw);
@@ -103,7 +134,7 @@ function KpiWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
       const formatted = new Intl.NumberFormat("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(pct);
       return `${formatted}%`;
     }
-    return isCurrency ? `Rp ${formatNumber(num)}` : formatNumber(num);
+    return isCurrency ? formatIDR(num) : formatNumber(num);
   })();
   // percentChange & periodLabel dari backend (jika ada filter dateRange)
   const percentChange = (data as unknown as { percentChange?: number | null })?.percentChange ?? null;
@@ -304,7 +335,7 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
                   <XAxis dataKey="name" tickLine={false} tickMargin={12} axisLine={false} tick={{ fontSize: 11 }} interval={chartData.length > 12 ? Math.floor(chartData.length / 12) : 0} angle={chartData.length > 8 ? -18 : 0} textAnchor={chartData.length > 8 ? "end" : "middle"} height={chartData.length > 8 ? 60 : 32} />
                   <YAxis tick={{ fontSize: 11 }} width={56} tickMargin={8} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCompact(v)} />
-                  <ChartTooltip cursor={{ fill: "hsl(var(--muted)/0.4)" }} content={<ChartTooltipContent />} />
+                  <ChartTooltip cursor={{ fill: "hsl(var(--muted)/0.4)" }} content={<ChartTooltipContent formatter={currencyTooltipFormatter} />} />
                   <ChartLegend content={<ChartLegendContent />} />
                   <Bar dataKey={isReceiving ? "receiving" : "purchase"} fill="hsl(221 83% 53%)" radius={0} name={isReceiving ? "Receiving" : "Purchase"} />
                   <Bar dataKey="delivery" fill="hsl(24 94% 53%)" radius={0} name="Delivery" />
@@ -325,6 +356,9 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
   const chartData = toChartRows(rows, labelKey, valueKey);
   const chartConfig = { value: { label: widget.config.title || "Nilai" } } satisfies ChartConfig;
   const palette = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
+  const isCurrency = isCurrencyConfig(widget.config);
+  const tooltipFormatter = (value: unknown, name: unknown) =>
+    (isCurrency ? currencyTooltipFormatter(value, name) : [String(value ?? ""), String(name ?? "")]) as [string, string];
   const isHorizontalStockPerWarehouse =
     (widget.config as unknown as { factTable?: string })?.factTable === "stock_balances" &&
     ((widget.config as unknown as { groupBy?: string[] })?.groupBy?.[0] === "warehouse" ||
@@ -392,7 +426,7 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
                   tick={renderYTick as never}
 
                 />
-                <ChartTooltip cursor={{ fill: "hsl(var(--muted)/0.4)" }} content={<ChartTooltipContent />} />
+                <ChartTooltip cursor={{ fill: "hsl(var(--muted)/0.4)" }} content={<ChartTooltipContent formatter={tooltipFormatter} />} />
                   <Bar dataKey="value" radius={0} barSize={isTop10Return ? 11 : 13}>
                   {chartData.map((e, i) => (
                     <Cell key={i} fill={isSingleColor ? "hsl(221 83% 53%)" : palette[i % palette.length]} />
@@ -422,8 +456,8 @@ function BarWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
             tick={{ fontSize: 10.5 }}
             tickFormatter={(v: string) => (v.length > 14 ? `${v.slice(0, 13)}…` : v)}
           />
-          <YAxis tick={{ fontSize: 11 }} width={44} tickMargin={8} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCompact(v as unknown as number)} />
-          <ChartTooltip cursor={{ fill: "hsl(var(--muted)/0.4)" }} content={<ChartTooltipContent />} />
+          <YAxis tick={{ fontSize: 11 }} width={44} tickMargin={8} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCompact(v)} />
+          <ChartTooltip cursor={{ fill: "hsl(var(--muted)/0.4)" }} content={<ChartTooltipContent formatter={tooltipFormatter} />} />
           <Bar dataKey="value" radius={0} barSize={22}>
             {chartData.map((e, i) => (
               <Cell key={i} fill={palette[i % palette.length]} />
@@ -632,7 +666,7 @@ function LineWidget({ widget, dragHandle, data: presetData, isLoading: presetLoa
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
                   <XAxis dataKey="name" tickLine={false} tickMargin={12} axisLine={false} tick={{ fontSize: 11 }} interval={chartData.length > 12 ? Math.floor(chartData.length / 12) : 0} angle={chartData.length > 8 ? -18 : 0} textAnchor={chartData.length > 8 ? "end" : "middle"} height={chartData.length > 8 ? 60 : 32} />
                   <YAxis tick={{ fontSize: 11 }} width={56} tickMargin={8} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCompact(v)} />
-                  <ChartTooltip cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1, strokeDasharray: "4 4" }} content={<ChartTooltipContent indicator="line" />} />
+                  <ChartTooltip cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1, strokeDasharray: "4 4" }} content={<ChartTooltipContent indicator="line" formatter={currencyTooltipFormatter} />} />
                   <Line dataKey={isReceiving ? "receiving" : "purchase"} type="linear" stroke="hsl(221 83% 53%)" strokeWidth={2.5} dot={false} activeDot={false} name={isReceiving ? "Receiving" : "Purchase"} />
                   <Line dataKey="delivery" type="linear" stroke="hsl(24 94% 53%)" strokeWidth={2.5} dot={false} activeDot={false} name="Delivery" />
                 </LineChart>
@@ -650,6 +684,9 @@ function LineWidget({ widget, dragHandle, data: presetData, isLoading: presetLoa
   const valueKey = valueKeyOf(widget.config);
   const chartData = toChartRows(rows, labelKey, valueKey);
   const chartConfig = { value: { label: widget.config.title || "Nilai" } } satisfies ChartConfig;
+  const isCurrencyLine = isCurrencyConfig(widget.config);
+  const lineTooltipFormatter = (value: unknown, name: unknown) =>
+    (isCurrencyLine ? currencyTooltipFormatter(value, name) : [String(value ?? ""), String(name ?? "")]) as [string, string];
   return (
     <ChartShell widget={widget} dragHandle={dragHandle} loading={isLoading} empty={rows.length === 0}>
       <ChartContainer config={chartConfig} className="h-[260px] w-full">
@@ -657,7 +694,7 @@ function LineWidget({ widget, dragHandle, data: presetData, isLoading: presetLoa
           <CartesianGrid vertical={false} />
           <XAxis dataKey="name" tickLine={false} tickMargin={8} axisLine={false} tick={{ fontSize: 10.5 }} />
           <YAxis tick={{ fontSize: 10.5 }} width={36} />
-          <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+          <ChartTooltip cursor={false} content={<ChartTooltipContent formatter={lineTooltipFormatter} />} />
           <Line dataKey="value" type="linear" stroke="var(--chart-1)" strokeWidth={2} dot={false} />
         </LineChart>
       </ChartContainer>
@@ -679,6 +716,7 @@ function PieWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
   const chartConfig = Object.fromEntries(
     chartData.map((r) => [r.name, { label: r.name }])
   ) satisfies ChartConfig;
+  const isCurrencyPie = isCurrencyConfig(widget.config);
   const palette = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
   // Custom label luar donat dengan garis tipis: warna di kanan → garis → "Bahan Baku" + "50%" di bawahnya
   const renderOutsideLabel = (props: any) => {
@@ -721,7 +759,8 @@ function PieWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
                 formatter={(value: unknown, name: unknown) => {
                   const v = Number(value ?? 0);
                   const pct = total > 0 ? ((v / total) * 100).toFixed(1) : "0";
-                  return [`${formatNumber(v)} (${pct}%)`, String(name ?? "")];
+                  const shown = isCurrencyPie ? formatIDR(v) : formatNumber(v);
+                  return [`${shown} (${pct}%)`, String(name ?? "")];
                 }}
               />
             }

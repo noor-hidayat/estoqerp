@@ -56,7 +56,7 @@ export default function InboundQcPage() {
       <PageHeader
         title="QC Inspection"
         actions={
-          <Button size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/inbound/qc/new")}>
+          <Button size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate("/app/qc/new")}>
             <Plus size={14} strokeWidth={2} />
             New QC Inspection
           </Button>
@@ -69,7 +69,7 @@ export default function InboundQcPage() {
         loading={isLoading}
         searchPlaceholder="Cari ID..."
         getSearchText={(q) => `${qcNo(q)}`}
-        onRowClick={(q) => navigate(`/app/inbound/qc/${q.documentNo ?? q.id}`)}
+        onRowClick={(q) => navigate(`/app/qc/${q.documentNo ?? q.id}`)}
         filters={
           <div className="flex gap-2">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 w-44 text-xs">

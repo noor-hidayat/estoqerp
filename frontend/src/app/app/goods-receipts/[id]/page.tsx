@@ -8,9 +8,11 @@ import {
   useUpdateGoodsReceipt,
   usePostGoodsReceipt,
   useCancelGoodsReceipt,
+  useRemoveGoodsReceipt,
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -32,6 +34,7 @@ export default function GoodsReceiptDetailPage() {
   const update = useUpdateGoodsReceipt();
   const post = usePostGoodsReceipt();
   const cancel = useCancelGoodsReceipt();
+  const remove = useRemoveGoodsReceipt();
   const [error, setError] = useState("");
   useErrorToast(error);
   const [editing, setEditing] = useState(false);
@@ -122,6 +125,15 @@ export default function GoodsReceiptDetailPage() {
       setError(e instanceof Error ? e.message : "Failed to cancel.");
     }
   };
+  const onDelete = async () => {
+    if (!confirm("Delete this goods receipt? Data akan dihapus dari database.")) return;
+    try {
+      await remove.mutateAsync(gr.id);
+      navigate("/app/goods-receipts");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete.");
+    }
+  };
 
   return (
     <RoleGuard roles={[]} menus={["supply.goodsReceipts"]}>
@@ -144,9 +156,11 @@ export default function GoodsReceiptDetailPage() {
             </Button>
           )}
           {!editing && (
-            <Button variant="outline" size="sm" onClick={onCancel} disabled={gr.status === "CANCELED" || post.isPending}>
-              Cancel
-            </Button>
+            <DocMenu
+              onCancel={onCancel}
+              onDelete={onDelete}
+              cancelDisabled={gr.status === "CANCELED" || post.isPending}
+            />
           )}
           {!editing && (
             <Button variant="primary" size="sm" onClick={onPost} disabled={!isDraft || post.isPending}>

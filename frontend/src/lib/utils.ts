@@ -42,6 +42,19 @@ export function formatNumber(n: number) {
 }
 
 /**
+ * Format Rupiah: Rp 10.000 (desimal hanya muncul bila ada, maks 2 digit).
+ */
+export function formatIDR(n: number) {
+  if (!Number.isFinite(n)) return "—";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
+/**
  * Format ringkas: 1.2K (ribu), 1.5M (juta), 2.3B (miliar).
  * < 1000 tetap pakai formatNumber biasa (id-ID).
  * Desimal maks 1 digit, trailing .0 dihapus (1500 -> 1.5K, 15000 -> 15K).
