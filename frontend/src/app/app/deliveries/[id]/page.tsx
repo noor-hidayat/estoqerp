@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Pencil, X } from "lucide-react";
+import { Pencil, X, Printer } from "lucide-react";
 import {
   useDelivery,
   useCustomers,
@@ -158,15 +158,20 @@ export default function DeliveryDetailPage() {
             </Button>
           )}
           {!editing && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Print" onClick={() => window.print()}>
+              <Printer size={16} />
+            </Button>
+          )}
+          {!editing && (
             <DocMenu
               onCancel={onCancel}
               onDelete={onDelete}
               cancelDisabled={dlv.status === "CANCELED" || post.isPending}
             />
           )}
-          {!editing && (
-            <Button variant="primary" size="sm" onClick={onPost} disabled={!isDraft || post.isPending}>
-              Post
+          {!editing && isDraft && (
+            <Button variant="primary" size="sm" onClick={onPost} disabled={post.isPending}>
+              Submit
             </Button>
           )}
           {editing && (

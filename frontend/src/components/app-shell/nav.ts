@@ -283,6 +283,12 @@ export const NAV: NavGroup[] = [
             icon: "Bot",
             menu: "settings",
           },
+          {
+            label: "Company",
+            href: "/app/settings/company",
+            icon: "Building2",
+            menu: "settings.company",
+          },
         ],
       },
       {
@@ -308,6 +314,22 @@ export const NAV: NavGroup[] = [
             href: "/app/setup/uom",
             icon: "Ruler",
             menu: "master.uom",
+          },
+          {
+            label: "Tax Categories",
+            href: "/app/setup/tax-categories",
+            icon: "Percent",
+            menu: "master",
+          },
+          {
+            label: "Price Lists",
+            href: "/app/setup/price-lists",
+            icon: "Tag",
+            menu: "master",
+            children: [
+              { label: "All Price Lists", href: "/app/setup/price-lists", icon: "Tag", menu: "master" },
+              { label: "Item Pricelist", href: "/app/setup/price-lists/items", icon: "History", menu: "master" },
+            ],
           },
           {
             label: "Barcode Format",
@@ -480,6 +502,78 @@ export const QUALITY_NAV: NavGroup[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Workspace Purchasing — hanya menu relevan procurement.
+// ---------------------------------------------------------------------------
+export const PURCHASING_NAV: NavGroup[] = [
+  {
+    title: "Dashboards",
+    items: [
+      { label: "Dashboard", href: "/app", icon: "LayoutDashboard", menu: "dashboard" },
+      { label: "AI Assistant", href: "/app/ai", icon: "Bot", menu: "ai" },
+    ],
+  },
+  {
+    title: "Menu",
+    items: [
+      {
+        label: "Suppliers",
+        href: "/app/suppliers",
+        icon: "Truck",
+        menu: "supply.suppliers",
+      },
+      {
+        label: "Purchase Orders",
+        href: "/app/purchase-orders",
+        icon: "ShoppingCart",
+        menu: "supply.purchaseOrders",
+      },
+      {
+        label: "Goods Receipts",
+        href: "/app/goods-receipts",
+        icon: "PackageCheck",
+        menu: "supply.goodsReceipts",
+      },
+    ],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Workspace Marketing — hanya menu relevan sales.
+// ---------------------------------------------------------------------------
+export const MARKETING_NAV: NavGroup[] = [
+  {
+    title: "Dashboards",
+    items: [
+      { label: "Dashboard", href: "/app", icon: "LayoutDashboard", menu: "dashboard" },
+      { label: "AI Assistant", href: "/app/ai", icon: "Bot", menu: "ai" },
+    ],
+  },
+  {
+    title: "Menu",
+    items: [
+      {
+        label: "Customers",
+        href: "/app/customers",
+        icon: "Users",
+        menu: "supply.customers",
+      },
+      {
+        label: "Sales Orders",
+        href: "/app/sales-orders",
+        icon: "Receipt",
+        menu: "supply.salesOrders",
+      },
+      {
+        label: "Deliveries",
+        href: "/app/deliveries",
+        icon: "Truck",
+        menu: "supply.deliveries",
+      },
+    ],
+  },
+];
+
 function menuAllowedForWorkspace(menu: string, workspaceId: string | null): boolean {
   if (!workspaceId) return true;
   const allowed = WORKSPACE_MENU_MAP[workspaceId];
@@ -493,7 +587,7 @@ export function navForPermissions(
   canManage?: (menu: string) => boolean,
   workspaceId?: string | null
 ): NavGroup[] {
-  // Workspace dengan struktur dedicated (Warehouse, Quality) sudah scoped,
+  // Workspace dengan struktur dedicated sudah scoped,
   // jadi filter workspace dilewati dan hanya permission yang berlaku.
   // Grup shared (Settings/Setup) ikut disertakan agar master data tetap terjangkau.
   const dedicated =
@@ -501,7 +595,11 @@ export function navForPermissions(
       ? WAREHOUSE_NAV
       : workspaceId === "wsp-quality"
         ? QUALITY_NAV
-        : null;
+        : workspaceId === "wsp-purchasing"
+          ? PURCHASING_NAV
+          : workspaceId === "wsp-marketing"
+            ? MARKETING_NAV
+            : null;
   const base = dedicated
     ? [...dedicated, ...NAV.filter((g) => (g as unknown as { shared?: boolean }).shared)]
     : NAV;

@@ -7,21 +7,23 @@ import { SearchableSelect } from "@/components/ui/searchable-select"
 const SelectGroup = SelectPrimitive.Group
 const SelectValue = SelectPrimitive.Value
 
+// Estoq style: w-full, rounded-lg, bg-zinc-100, h-8 — sama kayak SearchableSelect trigger
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & { size?: "sm" | "default" }
+>(({ className, children, size = "default", ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
+    data-size={size}
     className={cn(
-      "flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      "flex w-full items-center justify-between gap-2 rounded-lg border border-input bg-zinc-100 dark:bg-zinc-800 px-3 py-2 text-sm whitespace-nowrap shadow-sm transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-[placeholder]:text-muted-foreground data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] [&>span]:line-clamp-1 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:bg-input/30 dark:hover:bg-input/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
       className
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50" />
+      <ChevronDown className="h-4 w-4 opacity-50 text-muted-foreground" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ))
@@ -62,15 +64,16 @@ const SelectScrollDownButton = React.forwardRef<
 SelectScrollDownButton.displayName =
   SelectPrimitive.ScrollDownButton.displayName
 
+// Radix Select - position="item-aligned" = no 5 pas di trigger, 1-4 di atas, 6-10 di bawah
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = "popper", ...props }, ref) => (
+>(({ className, children, position = "item-aligned", ...props }, ref) => (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        "relative z-50 max-h-[--radix-select-content-available-height] min-w-[8rem] overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         position === "popper" &&
           "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
         className
@@ -140,7 +143,7 @@ const SelectSeparator = React.forwardRef<
 ))
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName
 
-/** Backward-compatible select with label/hint/error/icon using native select */
+/** Backward-compatible select with label/hint/error/icon using SearchableSelect (paling stabil, searchable) */
 export interface LegacySelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   hint?: string;
@@ -180,6 +183,18 @@ function childText(node: React.ReactNode): string {
   }
   return "";
 }
+
+function isOptionChildren(children: React.ReactNode): boolean {
+  let has = false
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) return
+    const t = (child as any).type
+    if (t === "option" || t === "Option" || (typeof t === "string" && t === "option")) has = true
+  })
+  return has
+}
+
+const BaseSelect = SelectPrimitive.Root
 
 export const LegacySelect = React.forwardRef<HTMLSelectElement, LegacySelectProps>(
   function LegacySelect({ label, hint, error, icon, className, children, id, name, value, onChange, disabled, onBlur }, ref) {
@@ -225,12 +240,17 @@ export const LegacySelect = React.forwardRef<HTMLSelectElement, LegacySelectProp
   }
 );
 
-/** Unified Select that supports both legacy props and Radix UI patterns */
-export const Select = React.forwardRef<HTMLSelectElement, LegacySelectProps>(
+// Unified: support both <Select><option> (legacy via SearchableSelect) and Radix composition <Select><SelectTrigger>...
+export const Select = React.forwardRef<HTMLSelectElement, LegacySelectProps & React.ComponentProps<typeof SelectPrimitive.Root>>(
   function Select(props, ref) {
-    return <LegacySelect {...props} ref={ref} />;
+    const { children, ...rest } = props as any
+    if (isOptionChildren(children)) {
+      return <LegacySelect {...(props as LegacySelectProps)} ref={ref as any} />
+    }
+    // Radix composition path
+    return <BaseSelect {...(rest as any)}>{children}</BaseSelect>
   }
-);
+)
 
 export {
   SelectGroup,
@@ -242,4 +262,5 @@ export {
   SelectSeparator,
   SelectScrollUpButton,
   SelectScrollDownButton,
+  BaseSelect,
 }

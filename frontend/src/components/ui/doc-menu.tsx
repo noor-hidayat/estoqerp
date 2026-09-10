@@ -1,4 +1,4 @@
-import { MoreHorizontal, Trash2, X } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -8,20 +8,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface DocMenuProps {
+  onEdit?: () => void;
   onCancel?: () => void;
   onDelete?: () => void;
+  editDisabled?: boolean;
   cancelDisabled?: boolean;
   deleteDisabled?: boolean;
+  editLabel?: string;
   cancelLabel?: string;
   deleteLabel?: string;
 }
 
-/** Menu titik-tiga standar: Cancel (status → CANCELED) + Delete (hapus dari DB). */
+/** Menu titik-tiga standar: Edit + Cancel (→ CANCELED) + Delete (hapus dari DB). */
 export function DocMenu({
+  onEdit,
   onCancel,
   onDelete,
+  editDisabled,
   cancelDisabled,
   deleteDisabled,
+  editLabel = "Edit",
   cancelLabel = "Cancel",
   deleteLabel = "Delete",
 }: DocMenuProps) {
@@ -33,6 +39,11 @@ export function DocMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-36">
+        {onEdit && (
+          <DropdownMenuItem onClick={onEdit} disabled={editDisabled} className="gap-2">
+            <Pencil size={14} /> {editLabel}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={onCancel} disabled={cancelDisabled || !onCancel} className="gap-2">
           <X size={14} /> {cancelLabel}
         </DropdownMenuItem>

@@ -18,10 +18,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { active, activeId } = useActiveWorkspace()
   const canView = (menu: string) => can(isSystem, permissions, menu, "view")
   const canManage = (menu: string) => can(isSystem, permissions, menu, "manage")
-  // Struktur warehouse/quality baru dipicu key "wsp-warehouse"/"wsp-quality"; workspace lain tidak difilter (perilaku lama).
+  // Struktur dedicated dipicu key wsp-* ; workspace lain tidak difilter (fallback).
   const wsCode = (active as unknown as { code?: string } | null)?.code;
   const wsKey =
-    wsCode === "warehouse" ? "wsp-warehouse" : wsCode === "quality" ? "wsp-quality" : activeId ?? null
+    wsCode === "warehouse"
+      ? "wsp-warehouse"
+      : wsCode === "quality"
+        ? "wsp-quality"
+        : wsCode === "purchasing"
+          ? "wsp-purchasing"
+          : wsCode === "marketing"
+            ? "wsp-marketing"
+            : activeId ?? null
   const groups = navForPermissions(canView, canManage, wsKey)
 
   return (

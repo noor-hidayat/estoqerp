@@ -292,6 +292,79 @@ export function useUom(id?: string) {
   return useResourceOne<Uom>("uom", id);
 }
 
+export function useTaxCategories() {
+  return useQuery({
+    queryKey: ["taxCategories"],
+    queryFn: () => api.get<import("@/types").TaxCategory[]>("/taxCategories"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useTaxCategory(id?: string) {
+  return useResourceOne<import("@/types").TaxCategory>("taxCategories", id);
+}
+
+export function usePriceLists() {
+  return useQuery({
+    queryKey: ["priceLists"],
+    queryFn: () => api.get<import("@/types").PriceList[]>("/priceLists"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+}
+export function usePriceList(id?: string) {
+  return useResourceOne<import("@/types").PriceList>("priceLists", id);
+}
+export function usePriceListLines(priceListId?: string) {
+  return useQuery({
+    queryKey: ["priceListLines", priceListId],
+    queryFn: () => api.get<import("@/types").PriceListLine[]>(`/priceListLines${qs(priceListId ? { priceListId } : {})}`),
+    enabled: !!priceListId,
+  });
+}
+export function usePriceListLinesByItem(itemId?: string) {
+  return useQuery({
+    queryKey: ["priceListLines", "item", itemId],
+    queryFn: () => api.get<import("@/types").PriceListLine[]>(`/priceListLines${qs(itemId ? { itemId } : {})}`),
+    enabled: !!itemId,
+  });
+}
+
+export function useCompanySettings() {
+  return useQuery({
+    queryKey: ["companySettings"],
+    queryFn: () => api.get<import("@/types").CompanySettings>("/company-settings"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useUpdateCompanySettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: unknown) => api.put("/company-settings", patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["companySettings"] }),
+  });
+}
+
+export function useExchangeRate(from?: string, to?: string) {
+  return useQuery({
+    queryKey: ["exchangeRate", from, to],
+    queryFn: () => api.get<{ from: string; to: string; rate: number; source: string; timestamp: string }>(`/exchange-rate${qs({ from: from!, to: to! })}`),
+    enabled: !!from && !!to && from !== to,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+    retry: 1,
+  });
+}
+
 // ---- Supply Chain: Suppliers & Customers ----
 
 export function useSuppliers(params?: Record<string, unknown>) {

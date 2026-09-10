@@ -2,6 +2,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
   role: string;
   active: boolean;
   avatarHue: number;
@@ -96,7 +97,6 @@ export interface Item {
   alternativeCode?: string;
   uomQty?: number;
   description?: string;
-  standardCost?: string | number | null;
   valuationRate: string | number;
   isActive?: boolean;
   isFinishGood?: boolean;
@@ -530,6 +530,17 @@ export interface PurchaseOrderLine {
   deliveryDate?: string | null;
 }
 
+export interface TaxCategory {
+  id: string;
+  code: string;
+  name: string;
+  percentage: string | number;
+  description?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface PurchaseOrder {
   id: string;
   publicId?: string;
@@ -541,7 +552,20 @@ export interface PurchaseOrder {
   orderDate: string;
   expectedDate?: string | null;
   notes?: string | null;
+  department?: string | null;
+  costCenter?: string | null;
+  paymentTerms?: string | null;
+  priceListId?: string | null;
+  priceListName?: string | null;
+  currency?: string | null;
+  exchangeRate?: string | number | null;
   status: DocStatus;
+  taxRate?: string | null;
+  taxCategoryId?: string | null;
+  taxCategoryName?: string | null;
+  taxCategoryPercentage?: string | null;
+  allowEditOrderDate?: boolean;
+  qcRequired?: boolean;
   createdBy?: string | null;
   createdByName?: string | null;
   createdAt?: string;
@@ -742,6 +766,59 @@ export interface DocumentSeries {
   updatedAt?: string;
   nextNumber?: number;
   preview?: string;
+}
+
+export interface CompanySettings {
+  id: string;
+  companyName: string;
+  companyCode: string;
+  address?: string | null;
+  taxId?: string | null;
+  country: string;
+  baseCurrency: string;
+  timezone: string;
+  fiscalYear: string;
+  logo?: string | null;
+  updatedAt?: string;
+}
+
+export interface PriceList {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  type: "PURCHASE" | "SALES";
+  supplierId?: string | null;
+  supplierName?: string | null;
+  customerId?: string | null;
+  customerName?: string | null;
+  currency: string;
+  isActive: boolean;
+  validFrom?: string | null;
+  validTo?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PriceListLine {
+  id: string;
+  priceListId: string;
+  itemId: string;
+  itemCode?: string;
+  itemName?: string;
+  uomId?: string | null;
+  uomName?: string | null;
+  type: "PURCHASE" | "SALES";
+  supplierId?: string | null;
+  supplierName?: string | null;
+  customerId?: string | null;
+  customerName?: string | null;
+  unitPrice: string | number;
+  currency: string;
+  minQty: string | number;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 

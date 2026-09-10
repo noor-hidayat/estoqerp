@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Save } from "lucide-react";
 import {
   useCustomers,
   useAllWarehouses,
@@ -14,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FormSkeleton } from "@/components/ui/skeleton";
-import { FormPage, FormSection, FormGrid, FormActions } from "@/components/ui/form-page";
+import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
 import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
@@ -90,10 +89,12 @@ export default function NewSalesOrderPage() {
       <FormPage
         title="New Sales Order"
         actions={
-          <DocMenu
-            onCancel={() => navigate("/app/sales-orders")}
-            onDelete={resetForm}
-          />
+          <div className="flex items-center gap-2">
+            <DocMenu onCancel={() => navigate("/app/sales-orders")} onDelete={resetForm} />
+            <Button size="sm" onClick={submit} disabled={create.isPending}>
+              {create.isPending ? "Saving..." : "Save"}
+            </Button>
+          </div>
         }
       >
         <FormSection>
@@ -136,17 +137,6 @@ export default function NewSalesOrderPage() {
         <FormSection title="Lines">
           <OrderLineTable value={lines} onChange={setLines} />
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/sales-orders")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={submit} disabled={create.isPending}>
-            <Save size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

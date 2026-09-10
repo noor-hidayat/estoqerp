@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Save } from "lucide-react";
 import {
   useAllWarehouses,
   useCreateReceiving,
@@ -156,7 +155,6 @@ export default function NewReceivingPage() {
         title="New Receiving"
         actions={
           <Button size="sm" onClick={onSave} disabled={create.isPending}>
-            <Save size={15} strokeWidth={2} />
             {create.isPending ? "Menyimpan…" : "Save"}
           </Button>
         }
@@ -241,15 +239,21 @@ export default function NewReceivingPage() {
                               {item ? `${item.code}: ${item.name}` : r.itemId || "—"}
                             </span>
                           </TableCell>
-                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo}</TableCell>
+                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo !== "—" ? formatNumber(qtyPo) : "0"}</TableCell>
                           <TableCell className="p-0 border-r border-border">
                             <TableInput value={qtyReceived} onChange={(v) => setLines((prev) => prev.map((line, i) => (i === idx ? { ...line, qty: v } : line)))} columnTitle="Qty Received" isNumeric />
                           </TableCell>
-                          <TableCell className="px-3 text-right tabular-nums text-foreground">
-                            {rate ? `Rp ${formatNumber(Number(rate))}` : "—"}
+                          <TableCell className="p-0">
+                            <div className="flex items-center justify-between gap-2 px-3">
+                              <span className="text-sm font-medium tracking-wide text-muted-foreground">Rp</span>
+                              <span className="tabular-nums text-right">{rate ? formatNumber(Number(rate)) : "0"}</span>
+                            </div>
                           </TableCell>
-                          <TableCell className="px-3 text-right font-medium tabular-nums text-foreground">
-                            {amount ? `Rp ${formatNumber(amount)}` : "—"}
+                          <TableCell className="p-0">
+                            <div className="flex items-center justify-between gap-2 px-3">
+                              <span className="text-sm font-medium tracking-wide text-muted-foreground">Rp</span>
+                              <span className="tabular-nums text-right font-medium">{formatNumber(amount)}</span>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

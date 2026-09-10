@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { accessibleWarehouseIds } from "@/lib/permissions";
-import { formatDate, formatNumber } from "@/lib/utils";
+import { formatDate, formatNumber, formatQty } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
 import {
   useStockBalanceLedger,
@@ -100,10 +100,10 @@ export default function StockBalancePage() {
     { key: "itemGroup" as const, header: "Item Group" },
     { key: "warehouse" as const, header: "Warehouse" },
     { key: "balanceDate" as const, header: "Date", format: (v: unknown) => (v ? formatDate(String(v)) : "—") },
-    { key: "openingQty" as const, header: "Opening Stock", format: (v: unknown) => formatNumber(Number(v)) },
-    { key: "inQty" as const, header: "In Qty", format: (v: unknown) => formatNumber(Number(v)) },
-    { key: "outQty" as const, header: "Out Qty", format: (v: unknown) => formatNumber(Number(v)) },
-    { key: "closingQty" as const, header: "Closing Stock", format: (v: unknown) => formatNumber(Number(v)) },
+    { key: "openingQty" as const, header: "Opening Stock", format: (v: unknown) => formatQty(v as any) },
+    { key: "inQty" as const, header: "In Qty", format: (v: unknown) => formatQty(v as any) },
+    { key: "outQty" as const, header: "Out Qty", format: (v: unknown) => formatQty(v as any) },
+    { key: "closingQty" as const, header: "Closing Stock", format: (v: unknown) => formatQty(v as any) },
   ];
 
   const handleExport = async (type: "xlsx" | "pdf") => {
@@ -121,7 +121,7 @@ export default function StockBalancePage() {
       const base = "stock-ledger";
       const meta = {
         title: "Stock — Stock Monitoring",
-        subtitle: `${totalItems} items · total qty ${formatNumber(totalQty)}`,
+        subtitle: `${totalItems} items · total qty ${formatQty(totalQty)}`,
       };
       if (type === "xlsx")
         exportXlsx(res.rows, exportColumns, base, "Stock");
@@ -196,28 +196,28 @@ export default function StockBalancePage() {
       header: "Opening Stock",
       align: "right",
       sortValue: (r) => r.openingQty,
-      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatNumber(r.openingQty)}</span>,
+      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatQty(r.openingQty)}</span>,
     },
     {
       id: "inQty",
       header: "In Qty",
       align: "right",
       sortValue: (r) => r.inQty,
-      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatNumber(r.inQty)}</span>,
+      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatQty(r.inQty)}</span>,
     },
     {
       id: "outQty",
       header: "Out Qty",
       align: "right",
       sortValue: (r) => r.outQty,
-      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatNumber(r.outQty)}</span>,
+      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatQty(r.outQty)}</span>,
     },
     {
       id: "closingQty",
       header: "Closing Stock",
       align: "right",
       sortValue: (r) => r.closingQty,
-      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatNumber(r.closingQty)}</span>,
+      cell: (r) => <span className="text-xs font-medium tabular-nums">{formatQty(r.closingQty)}</span>,
     },
   ];
 
@@ -238,7 +238,7 @@ export default function StockBalancePage() {
         <div className="rounded-md border border-border bg-card p-5">
           <p className="text-[12px] font-medium text-muted-foreground">Total closing stock</p>
           <p className="mt-1 text-2xl font-semibold text-foreground">
-            {formatNumber(totalQty)}
+            {formatQty(totalQty)}
           </p>
         </div>
         <div className="rounded-md border border-border bg-card p-5">

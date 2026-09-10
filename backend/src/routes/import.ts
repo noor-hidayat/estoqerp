@@ -304,8 +304,6 @@ async function importItems(
     const hue = asInt(r.hue, 200);
     const uomCode = asString(r.uomCode) ?? asString(r.uom_code) ?? asString(r.unit) ?? null;
     const uomId = uomCode ? uomByCode.get(uomCode.toLowerCase()) ?? null : null;
-    const standardCostRaw = asString(r.standardCost) ?? asString(r.standard_cost) ?? asString(r.standardPrice) ?? null;
-    const standardCost = standardCostRaw != null && standardCostRaw !== "" ? String(Number(standardCostRaw)) : null;
 
     if (!code) { errors.push({ row: i + 1, message: "Kolom 'code' wajib diisi." }); continue; }
     if (!name) { errors.push({ row: i + 1, message: "Kolom 'name' wajib diisi." }); continue; }
@@ -331,10 +329,10 @@ async function importItems(
       if (mode === "update") {
         await db
           .update(schema.items)
-          .set({ code, name, itemGroupId, hue, uomId, standardCost })
+          .set({ code, name, itemGroupId, hue, uomId })
           .where(eq(schema.items.id, existing.id));
         updated += 1;
-        affected.push({ id: existing.id, row: { code, name, itemGroupId, hue, uomId, standardCost } });
+        affected.push({ id: existing.id, row: { code, name, itemGroupId, hue, uomId } });
       } else {
         skipped += 1;
       }
@@ -342,9 +340,9 @@ async function importItems(
     }
 
     const newId = await nextRowId(db, schema.items, "itm");
-    await db.insert(schema.items).values({ id: newId, code, name, itemGroupId, hue, uomId, standardCost });
+    await db.insert(schema.items).values({ id: newId, code, name, itemGroupId, hue, uomId });
     inserted += 1;
-    affected.push({ id: newId, row: { code, name, itemGroupId, hue, uomId, standardCost } });
+    affected.push({ id: newId, row: { code, name, itemGroupId, hue, uomId } });
   }
 
   return { result: { inserted, updated, skipped, errors }, affected };

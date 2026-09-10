@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {Package, Plus, Trash2, Pencil} from "lucide-react";
+import {Package, Plus, Trash2} from "lucide-react";
 import {
   useItems,
   useItemGroups,
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function ItemsPage() {
   const navigate = useNavigate();
@@ -40,6 +41,29 @@ export default function ItemsPage() {
 
   const items = result?.rows ?? [];
   const total = result?.total ?? 0;
+
+  // Robust maps: handle both publicId (UUID) and legacy internal numeric string.
+  // Backend now returns publicId, but fallback to _internalId ensures old cache still renders.
+  const itemGroupMap = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const c of (itemGroups ?? []) as any[]) {
+      m.set(String(c.id), c);
+      const internal = (c as any)._internalId;
+      if (internal != null) m.set(String(internal), c);
+      if ((c as any).code) m.set(String((c as any).code).toLowerCase(), c);
+    }
+    return m;
+  }, [itemGroups]);
+  const uomMap = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const u of (uoms ?? []) as any[]) {
+      m.set(String(u.id), u);
+      const internal = (u as any)._internalId;
+      if (internal != null) m.set(String(internal), u);
+      if ((u as any).code) m.set(String((u as any).code).toLowerCase(), u);
+    }
+    return m;
+  }, [uoms]);
 
   const handleBulkRemove = async () => {
     const n = selected.size;
@@ -82,20 +106,28 @@ export default function ItemsPage() {
     {
       id: "itemGroup",
       header: "Item Group",
-      cell: (item) => (
-        <Badge tone="neutral">
-          {(itemGroups ?? []).find((c) => c.id === item.itemGroupId)?.name ?? "—"}
-        </Badge>
-      ),
+      cell: (item) => {
+        const key = item.itemGroupId != null ? String(item.itemGroupId) : "";
+        const found = key ? (itemGroupMap.get(key) ?? itemGroupMap.get(key.toLowerCase())) : null;
+        return (
+          <Badge tone="neutral">
+            {found?.name ?? "—"}
+          </Badge>
+        );
+      },
     },
     {
       id: "unit",
       header: "UOM",
-      cell: (item) => (
-        <span className="whitespace-nowrap text-muted-foreground">
-          {item.uomId ? (uoms.find((u) => u.id === item.uomId)?.name ?? "—") : "—"}
-        </span>
-      ),
+      cell: (item) => {
+        const key = (item as any).uomId != null ? String((item as any).uomId) : "";
+        const found = key ? (uomMap.get(key) ?? uomMap.get(key.toLowerCase())) : null;
+        return (
+          <span className="whitespace-nowrap text-muted-foreground">
+            {found?.name ?? (found?.code ?? "—")}
+          </span>
+        );
+      },
     },
     {
       id: "alternativeCode",
@@ -117,48 +149,25 @@ export default function ItemsPage() {
       ),
     },
     {
-      id: "standardCost",
-      header: "Standard Cost",
-      align: "right",
+      id: "isFinishGood",
+      header: "Finish Good",
+      align: "center",
       cell: (item) => (
-        <span className="whitespace-nowrap text-xs text-muted-foreground">
-          {item.standardCost != null && Number(item.standardCost) !== 0 ? `Rp ${formatNumber(Number(item.standardCost))}` : "—"}
+        <span className="flex items-center justify-center">
+          <Checkbox
+            checked={!!(item as any).isFinishGood}
+            aria-label="Finish Good"
+            className="h-3.5 w-3.5 rounded-[4px] [&_svg]:h-3 [&_svg]:w-3 pointer-events-none opacity-100"
+            tabIndex={-1}
+          />
         </span>
       ),
-    },
-    {
-      id: "valuationRate",
-      header: "Valuation Rate",
-      align: "right",
-      cell: (item) => (
-        <span className="whitespace-nowrap text-xs font-medium">
-          {item.valuationRate != null && Number(item.valuationRate) !== 0 ? `Rp ${formatNumber(Number(item.valuationRate))}` : "—"}
-        </span>
-      ),
+      className: "w-[95px] text-center",
     },
     {
       id: "created",
       header: "Created",
       cell: (item) => <span className="whitespace-nowrap text-xs text-muted-foreground">{timeAgo(item.createdAt)}</span>,
-    },
-    {
-      id: "actions",
-      header: "",
-      cell: (item) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/app/setup/items/${item.id}`);
-          }}
-        >
-          <Pencil size={12} strokeWidth={2} />
-          Edit
-        </Button>
-      ),
-      className: "w-[90px] text-right",
     },
   ];
 

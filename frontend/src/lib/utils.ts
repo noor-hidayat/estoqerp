@@ -37,8 +37,23 @@ export function formatTime(iso?: string) {
   });
 }
 
-export function formatNumber(n: number) {
-  return new Intl.NumberFormat("id-ID").format(n);
+export function formatNumber(
+  n: number | string | null | undefined,
+  opts?: { minimumFractionDigits?: number; maximumFractionDigits?: number }
+) {
+  if (n == null || n === "") return "—";
+  const num = typeof n === "string" ? Number(n) : n;
+  if (!Number.isFinite(num)) return "—";
+  const minimumFractionDigits = opts?.minimumFractionDigits ?? 0;
+  const maximumFractionDigits = opts?.maximumFractionDigits ?? 3;
+  return new Intl.NumberFormat("id-ID", {
+    minimumFractionDigits,
+    maximumFractionDigits,
+  }).format(num);
+}
+
+export function formatQty(n: number | string | null | undefined) {
+  return formatNumber(n, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
 /**

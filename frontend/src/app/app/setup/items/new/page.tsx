@@ -24,7 +24,6 @@ const EMPTY = {
   alternativeCode: "",
   uomQty: undefined as number | undefined,
   description: "",
-  standardCost: undefined as number | undefined,
   isFinishGood: false,
 };
 
@@ -73,7 +72,6 @@ export default function NewItemPage() {
         uomId: form.uomId,
         alternativeCode: form.alternativeCode.trim() || null,
         description: form.description.trim() || null,
-        standardCost: form.standardCost != null ? String(form.standardCost) : null,
         isFinishGood: form.isFinishGood,
         hue: Math.floor(Math.random() * 360),
       });
@@ -151,20 +149,6 @@ export default function NewItemPage() {
                 setForm({
                   ...form,
                   uomQty: e.target.value === "" ? undefined : Math.max(0, Number(e.target.value) || 0),
-                })
-              }
-            />
-            <Input
-              label="Standard cost"
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="e.g.: 10000"
-              value={form.standardCost ?? ""}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  standardCost: e.target.value === "" ? undefined : Math.max(0, Number(e.target.value) || 0),
                 })
               }
             />

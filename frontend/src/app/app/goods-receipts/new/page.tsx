@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Save } from "lucide-react";
 import {
   usePurchaseOrders,
   usePurchaseOrder,
@@ -15,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FormSkeleton } from "@/components/ui/skeleton";
-import { FormPage, FormSection, FormGrid, FormActions } from "@/components/ui/form-page";
+import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
 import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatId } from "@/lib/utils";
@@ -109,7 +108,14 @@ export default function NewGoodsReceiptPage() {
 
   return (
     <RoleGuard roles={[]} menus={["supply.goodsReceipts"]}>
-      <FormPage title="New Goods Receipt">
+      <FormPage
+        title="New Goods Receipt"
+        actions={
+          <Button size="sm" onClick={submit} disabled={create.isPending || !!gnrBlocked}>
+            {create.isPending ? "Saving..." : "Save"}
+          </Button>
+        }
+      >
         {gnrBlocked && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             <strong>QC belum completed:</strong> {gnrBlockReason} GNR tidak akan menggerakkan stock.
@@ -150,17 +156,6 @@ export default function NewGoodsReceiptPage() {
         <FormSection title="Lines (copied from PO — editable)">
           <OrderLineTable value={lines} onChange={setLines} />
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/goods-receipts")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={submit} disabled={create.isPending || !!gnrBlocked}>
-            <Save size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

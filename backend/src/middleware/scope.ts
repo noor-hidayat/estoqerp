@@ -24,7 +24,7 @@ async function resolveRoleInternal(roleId: string): Promise<number | null> {
   }
   const [byCode] = await db.select({ id: schema.roles.id }).from(schema.roles).where(eq(schema.roles.code, roleId)).limit(1);
   if (byCode) return byCode.id;
-  if (roleId === "role_sys_admin") {
+  if (roleId === "role_sys_admin" || roleId === "SYS_ADMIN") {
     const [sys] = await db.select({ id: schema.roles.id }).from(schema.roles).where(eq(schema.roles.isSystem, true)).limit(1);
     return sys?.id ?? null;
   }
@@ -33,7 +33,7 @@ async function resolveRoleInternal(roleId: string): Promise<number | null> {
 
 async function isAdmin(roleId: string): Promise<boolean> {
   if (!roleId) return false;
-  if (roleId === "role_sys_admin") return true;
+  if (roleId === "role_sys_admin" || roleId === "SYS_ADMIN") return true;
   const internal = await resolveRoleInternal(roleId);
   if (internal === null) {
     const [r] = await db.select({ isSystem: schema.roles.isSystem }).from(schema.roles).where(eq(schema.roles.publicId, roleId)).limit(1);

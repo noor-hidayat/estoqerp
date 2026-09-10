@@ -154,8 +154,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hasRole = useCallback(
-    (roles: string[]) => (user ? roles.includes(user.role) : false),
-    [user]
+    (roles: string[]) => {
+      if (!user) return false;
+      // Direct match (legacy) OR normalized match (SYS_ADMIN ↔ role_sys_admin) OR
+      // SYS_ADMIN via isSystem flag (company settings etc. only check hasRole).
+      if (roles.includes(user.role)) return true;
+      const normUser = (() => {
+        if (user.role === "SYS_ADMIN" || user.role === "role_sys_admin") return "role_sys_admin";
+        if (user.role === "ADMIN" || user.role === "role_admin") return "role_admin";
+        if (user.role === "STAFF" || user.role === "role_staff") return "role_staff";
+        return user.role;
+      })();
+      if (roles.includes(normUser)) return true;
+      // Map requested roles through same normalization
+      const normRequested = roles.map((r) => {
+        if (r === "SYS_ADMIN" || r === "role_sys_admin") return "role_sys_admin";
+        if (r === "ADMIN" || r === "role_admin") return "role_admin";
+        if (r === "STAFF" || r === "role_staff") return "role_staff";
+        return r;
+      });
+      if (normRequested.includes(normUser)) return true;
+      // SYS_ADMIN (isSystem) is allowed to pass any admin-level role guard
+      if (isSystem && roles.some((r) => r === "role_sys_admin" || r === "SYS_ADMIN")) return true;
+      return false;
+    },
+    [user, isSystem]
   );
 
   const value = useMemo(

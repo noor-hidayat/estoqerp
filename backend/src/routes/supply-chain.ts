@@ -109,6 +109,7 @@ async function replacePoLines(tx: any, poId: number, lines: any[]) {
       uomId,
       qty: String(l.qty),
       unitPrice: l.unitPrice != null ? String(l.unitPrice) : null,
+      discount: l.discount != null && String(l.discount).trim() !== "" ? String(l.discount) : "0",
       batchNumber: l.batchNumber ?? null,
       note: l.note ?? null,
       deliveryDate: deliveryDate ? String(deliveryDate).slice(0, 10) : null,
@@ -126,6 +127,21 @@ supplyChainRouter.post("/purchase-orders", async (req, res, next) => {
     const warehouseId = await resolveInternalId(s.warehouses, b.warehouseId);
     const branchId = b.branchId ? await resolveInternalId(s.branches, b.branchId) : null;
     if (!supplierId || !warehouseId) return res.status(400).json({ error: "supplierId/warehouseId tidak valid." });
+    let taxCategoryId: number | null = null;
+    let resolvedTaxRate: string | null = null;
+    if (b.taxCategoryId) {
+      taxCategoryId = await resolveInternalId((s as any).taxCategories, String(b.taxCategoryId));
+      if (!taxCategoryId) return res.status(400).json({ error: "taxCategoryId tidak valid." });
+      const [cat] = await db.select({ percentage: (s as any).taxCategories.percentage }).from((s as any).taxCategories).where(eq((s as any).taxCategories.id, taxCategoryId)).limit(1);
+      if (cat) resolvedTaxRate = String(cat.percentage);
+    } else {
+      resolvedTaxRate = "0";
+    }
+    let priceListId: number | null = null;
+    if (b.priceListId) {
+      priceListId = await resolveInternalId((s as any).priceLists, String(b.priceListId));
+      if (!priceListId) return res.status(400).json({ error: "priceListId tidak valid." });
+    }
     const seriesIdRaw = b.seriesId ?? b.seriesCode ?? null;
     let seriesId: number | null = null;
     if (seriesIdRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesIdRaw));
@@ -141,6 +157,16 @@ supplyChainRouter.post("/purchase-orders", async (req, res, next) => {
         expectedDate: b.expectedDate ?? null,
         status: "DRAFT",
         notes: b.notes ?? null,
+        department: b.department ?? null,
+        costCenter: b.costCenter ?? null,
+        paymentTerms: b.paymentTerms ?? null,
+        currency: b.currency ? String(b.currency).toUpperCase() : "IDR",
+        exchangeRate: b.exchangeRate != null ? String(b.exchangeRate) : "1",
+        allowEditOrderDate: b.allowEditOrderDate ?? false,
+        qcRequired: b.qcRequired ?? true,
+        taxRate: resolvedTaxRate ?? (b.taxRate != null ? String(b.taxRate) : "0"),
+        taxCategoryId,
+        priceListId,
         createdBy: (req as any).user?.internalId ?? null,
         branchId,
       }).returning();
@@ -177,6 +203,16 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
       expectedDate: s.purchaseOrders.expectedDate,
       status: s.purchaseOrders.status,
       notes: s.purchaseOrders.notes,
+      department: (s as any).purchaseOrders.department,
+      costCenter: (s as any).purchaseOrders.costCenter,
+      paymentTerms: (s as any).purchaseOrders.paymentTerms,
+      currency: (s as any).purchaseOrders.currency,
+      exchangeRate: (s as any).purchaseOrders.exchangeRate,
+      allowEditOrderDate: s.purchaseOrders.allowEditOrderDate,
+      qcRequired: s.purchaseOrders.qcRequired,
+      taxRate: s.purchaseOrders.taxRate,
+      taxCategoryId: (s as any).purchaseOrders.taxCategoryId,
+      priceListId: (s as any).purchaseOrders.priceListId,
       createdBy: s.purchaseOrders.createdBy,
       branchId: s.purchaseOrders.branchId,
       createdAt: s.purchaseOrders.createdAt,
@@ -195,6 +231,16 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
       expectedDate: r.expectedDate,
       status: r.status,
       notes: r.notes,
+      department: (r as any).department ?? null,
+      costCenter: (r as any).costCenter ?? null,
+      paymentTerms: (r as any).paymentTerms ?? null,
+      currency: (r as any).currency ?? "IDR",
+      exchangeRate: (r as any).exchangeRate ?? "1",
+      allowEditOrderDate: (r as any).allowEditOrderDate ?? false,
+      qcRequired: (r as any).qcRequired ?? true,
+      taxRate: (r as any).taxRate ?? "0",
+      taxCategoryId: (r as any).taxCategoryId ?? null,
+      priceListId: (r as any).priceListId ?? null,
       createdBy: r.createdBy,
       branchId: r.branchId,
       createdAt: r.createdAt,
@@ -205,6 +251,8 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
     // Here we map supplierId/warehouseId to publicId for frontend convenience
     const supplierIds = [...new Set(out.map((o) => o.supplierId).filter(Boolean))] as number[];
     const warehouseIds = [...new Set(out.map((o) => o.warehouseId).filter(Boolean))] as number[];
+    const branchIds = [...new Set(out.map((o:any)=> o.branchId).filter(Boolean))] as number[];
+    const taxCatIds = [...new Set(out.map((o:any)=> o.taxCategoryId).filter(Boolean))] as number[];
     if (supplierIds.length) {
       const sups = await db.select({ id: s.suppliers.id, publicId: s.suppliers.publicId }).from(s.suppliers).where(inArray(s.suppliers.id, supplierIds));
       const map = new Map(sups.map((x) => [x.id, x.publicId]));
@@ -214,6 +262,34 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
       const whs = await db.select({ id: s.warehouses.id, publicId: s.warehouses.publicId }).from(s.warehouses).where(inArray(s.warehouses.id, warehouseIds));
       const map = new Map(whs.map((x) => [x.id, x.publicId]));
       out.forEach((o: any) => { o.warehouseId = map.get(o.warehouseId) ?? o.warehouseId; });
+    }
+    if (branchIds.length) {
+      const brs = await db.select({ id: s.branches.id, publicId: s.branches.publicId }).from(s.branches).where(inArray(s.branches.id, branchIds));
+      const map = new Map(brs.map((x) => [x.id, x.publicId]));
+      out.forEach((o: any) => { o.branchId = map.get(o.branchId) ?? o.branchId; });
+    }
+    if (taxCatIds.length) {
+      const cats = await db.select({ id: (s as any).taxCategories.id, publicId: (s as any).taxCategories.publicId, name: (s as any).taxCategories.name, percentage: (s as any).taxCategories.percentage }).from((s as any).taxCategories).where(inArray((s as any).taxCategories.id, taxCatIds));
+      const map = new Map(cats.map((x:any)=> [x.id, x]));
+      out.forEach((o:any)=> {
+        const cat = map.get(o.taxCategoryId);
+        if (cat) { o.taxCategoryId = cat.publicId; o.taxCategoryName = cat.name; o.taxCategoryPercentage = String(cat.percentage); }
+        else o.taxCategoryId = o.taxCategoryId ? String(o.taxCategoryId) : null;
+      });
+    } else {
+      out.forEach((o:any)=> { if (o.taxCategoryId) o.taxCategoryId = String(o.taxCategoryId); });
+    }
+    const priceListIds = [...new Set(out.map((o:any)=> o.priceListId).filter(Boolean))] as number[];
+    if (priceListIds.length) {
+      const pls = await db.select({ id: (s as any).priceLists.id, publicId: (s as any).priceLists.publicId, name: (s as any).priceLists.name }).from((s as any).priceLists).where(inArray((s as any).priceLists.id, priceListIds));
+      const map = new Map(pls.map((x:any)=> [x.id, x]));
+      out.forEach((o:any)=> {
+        const pl = map.get(o.priceListId);
+        if (pl) { o.priceListId = pl.publicId; o.priceListName = pl.name; }
+        else o.priceListId = o.priceListId ? String(o.priceListId) : null;
+      });
+    } else {
+      out.forEach((o:any)=> { if (o.priceListId) o.priceListId = String(o.priceListId); });
     }
     res.json(out);
   } catch (e) { next(e); }
@@ -279,6 +355,20 @@ supplyChainRouter.get("/purchase-orders/:id", async (req, res, next) => {
     const mappedLines = lines.map((l: any) => ({ ...l, id: l.publicId, _internalId: l.id, purchaseOrderId: row.publicId, itemId: itemMap.get(l.itemId) ?? l.itemId, uomId: l.uomId ? (uomMap.get(l.uomId) ?? l.uomId) : null }));
     const [supplier] = row.supplierId ? await db.select({ publicId: s.suppliers.publicId }).from(s.suppliers).where(eq(s.suppliers.id, row.supplierId)).limit(1) : [];
     const [warehouse] = row.warehouseId ? await db.select({ publicId: s.warehouses.publicId }).from(s.warehouses).where(eq(s.warehouses.id, row.warehouseId)).limit(1) : [];
+    const [branch] = (row as any).branchId ? await db.select({ publicId: s.branches.publicId }).from(s.branches).where(eq(s.branches.id, (row as any).branchId)).limit(1) : [];
+    let taxCategoryPublicId: string | null = null;
+    let taxCategoryName: string | null = null;
+    let taxCategoryPercentage: string | null = null;
+    if ((row as any).taxCategoryId) {
+      const [cat] = await db.select({ publicId: (s as any).taxCategories.publicId, name: (s as any).taxCategories.name, percentage: (s as any).taxCategories.percentage }).from((s as any).taxCategories).where(eq((s as any).taxCategories.id, (row as any).taxCategoryId)).limit(1);
+      if (cat) { taxCategoryPublicId = cat.publicId; taxCategoryName = cat.name; taxCategoryPercentage = String(cat.percentage); }
+    }
+    let priceListPublicId: string | null = null;
+    let priceListName: string | null = null;
+    if ((row as any).priceListId) {
+      const [pl] = await db.select({ publicId: (s as any).priceLists.publicId, name: (s as any).priceLists.name }).from((s as any).priceLists).where(eq((s as any).priceLists.id, (row as any).priceListId)).limit(1);
+      if (pl) { priceListPublicId = pl.publicId; priceListName = pl.name; }
+    }
     res.json({
       id: row.publicId,
       publicId: row.publicId,
@@ -291,8 +381,21 @@ supplyChainRouter.get("/purchase-orders/:id", async (req, res, next) => {
       expectedDate: row.expectedDate,
       status: row.status,
       notes: row.notes,
+      department: (row as any).department ?? null,
+      costCenter: (row as any).costCenter ?? null,
+      paymentTerms: (row as any).paymentTerms ?? null,
+      currency: (row as any).currency ?? "IDR",
+      exchangeRate: (row as any).exchangeRate ?? "1",
+      allowEditOrderDate: (row as any).allowEditOrderDate ?? false,
+      qcRequired: (row as any).qcRequired ?? true,
+      taxRate: (row as any).taxRate ?? "0",
+      taxCategoryId: taxCategoryPublicId,
+      taxCategoryName,
+      taxCategoryPercentage,
+      priceListId: priceListPublicId,
+      priceListName,
       createdBy: row.createdBy,
-      branchId: row.branchId,
+      branchId: branch?.publicId ?? (row as any).branchId ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       lines: mappedLines,
@@ -317,6 +420,47 @@ supplyChainRouter.put("/purchase-orders/:id", async (req, res, next) => {
     if (b.orderDate !== undefined) patch.orderDate = b.orderDate;
     if (b.expectedDate !== undefined) patch.expectedDate = b.expectedDate ?? null;
     if (b.notes !== undefined) patch.notes = b.notes ?? null;
+    if (b.department !== undefined) patch.department = b.department ? String(b.department).trim() : null;
+    if (b.costCenter !== undefined) patch.costCenter = b.costCenter ? String(b.costCenter).trim() : null;
+    if (b.branchId !== undefined) patch.branchId = b.branchId ? await resolveInternalId(s.branches, String(b.branchId)) : null;
+    if (b.paymentTerms !== undefined) patch.paymentTerms = b.paymentTerms ? String(b.paymentTerms).trim() : null;
+    if (b.currency !== undefined) {
+      const cur = String(b.currency).trim().toUpperCase();
+      if (!["IDR","USD","EUR","SGD","JPY","CNY","MYR","THB","AUD"].includes(cur)) {
+        return res.status(400).json({ error: "Currency tidak valid." });
+      }
+      patch.currency = cur;
+      if (cur === "IDR") patch.exchangeRate = "1";
+    }
+    if (b.exchangeRate !== undefined) {
+      const er = Number(b.exchangeRate);
+      if (!isFinite(er) || er <= 0) return res.status(400).json({ error: "Exchange Rate harus >0." });
+      patch.exchangeRate = String(er);
+    }
+    if (b.allowEditOrderDate !== undefined) patch.allowEditOrderDate = !!b.allowEditOrderDate;
+    if (b.qcRequired !== undefined) patch.qcRequired = !!b.qcRequired;
+    if (b.taxRate !== undefined) patch.taxRate = String(b.taxRate);
+    if (b.taxCategoryId !== undefined) {
+      if (b.taxCategoryId == null || String(b.taxCategoryId).trim() === "") {
+        patch.taxCategoryId = null;
+        patch.taxRate = "0";
+      } else {
+        const tid = await resolveInternalId((s as any).taxCategories, String(b.taxCategoryId));
+        if (!tid) return res.status(400).json({ error: "taxCategoryId tidak valid." });
+        patch.taxCategoryId = tid;
+        const [cat] = await db.select({ percentage: (s as any).taxCategories.percentage }).from((s as any).taxCategories).where(eq((s as any).taxCategories.id, tid)).limit(1);
+        if (cat) patch.taxRate = String(cat.percentage);
+      }
+    }
+    if (b.priceListId !== undefined) {
+      if (b.priceListId == null || String(b.priceListId).trim() === "") {
+        patch.priceListId = null;
+      } else {
+        const plid = await resolveInternalId((s as any).priceLists, String(b.priceListId));
+        if (!plid) return res.status(400).json({ error: "priceListId tidak valid." });
+        patch.priceListId = plid;
+      }
+    }
     patch.updatedAt = new Date();
     await db.update(s.purchaseOrders).set(patch).where(eq(s.purchaseOrders.id, cur.id));
     if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replacePoLines(tx, cur.id, b.lines); });

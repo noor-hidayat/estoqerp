@@ -24,6 +24,7 @@ export default function NewUserPage() {
   const [form, setForm] = useState({
     name: "",
     email: "",
+    phone: "",
     password: "",
     roleId: "",
     active: true,
@@ -56,6 +57,7 @@ export default function NewUserPage() {
       await api.post<{ user: User }>("/auth/register", {
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim() || null,
         password: form.password,
         roleId: form.roleId,
       });
@@ -101,6 +103,13 @@ export default function NewUserPage() {
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
               />
             </div>
+            <Input
+              label="Telpon"
+              type="tel"
+              placeholder="08xxxxxxxxxx"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
             <div className="sm:col-span-2">
               <Input
                 label="Password"

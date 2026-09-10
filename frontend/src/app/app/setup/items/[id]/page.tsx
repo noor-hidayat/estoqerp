@@ -44,7 +44,6 @@ export default function EditItemPage() {
         alternativeCode: item.alternativeCode ?? "",
         uomQty: item.uomQty,
         description: item.description ?? "",
-        standardCost: item.standardCost != null ? Number(item.standardCost) : undefined,
         isFinishGood: (item as any).isFinishGood ?? false,
       };
       setForm(init);
@@ -94,7 +93,6 @@ export default function EditItemPage() {
           alternativeCode: form.alternativeCode?.trim() || null,
           uomQty: form.uomQty,
           description: form.description?.trim() || null,
-          standardCost: form.standardCost != null ? String(form.standardCost) : null,
           isFinishGood: form.isFinishGood,
         },
       });
@@ -223,21 +221,6 @@ export default function EditItemPage() {
               disabled={!editing}
             />
             <Input
-              label="Standard cost"
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="e.g.: 10000"
-              value={form.standardCost ?? ""}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  standardCost: e.target.value === "" ? undefined : Math.max(0, Number(e.target.value) || 0),
-                })
-              }
-              disabled={!editing}
-            />
-            <Input
               label="Valuation rate (auto)"
               type="number"
               value={item?.valuationRate != null ? String(item.valuationRate) : "0"}
@@ -260,8 +243,8 @@ export default function EditItemPage() {
               </Label>
             </div>
           </FormGrid>
-        </FormSection>
-      </FormPage>
+          </FormSection>
+        </FormPage>
     </RoleGuard>
   );
 }

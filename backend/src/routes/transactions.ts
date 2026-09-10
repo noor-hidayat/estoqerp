@@ -944,9 +944,12 @@ export async function insertMovementWithDetails(
   return insertedMovement.publicId;
 }
 
+function isSysAdminRole(role: string | undefined): boolean {
+  return role === "role_sys_admin" || role === "SYS_ADMIN";
+}
 async function movementScope(req: Request) {
   if (!req.user) return undefined;
-  if (req.user.role === "role_sys_admin") return undefined;
+  if (isSysAdminRole(req.user.role)) return undefined;
   const warehouseIds = req.accessibleWarehouseIds ?? [];
   if (warehouseIds.length === 0) return sql`FALSE`;
   const s = schema;
@@ -1821,7 +1824,7 @@ stockLedgerRouter.get("/", async (req: Request, res: Response) => {
   const s = schema;
   const conditions: ReturnType<typeof sql>[] = [];
   const warehouseIds = req.accessibleWarehouseIds ?? [];
-  if (req.user && req.user.role !== "role_sys_admin") {
+  if (req.user && !isSysAdminRole(req.user.role)) {
     if (warehouseIds.length === 0) conditions.push(sql`FALSE`);
     else conditions.push(inArray(s.stockLedger.warehouseId, warehouseIds));
   }

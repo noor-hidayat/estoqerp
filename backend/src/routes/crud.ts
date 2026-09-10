@@ -41,10 +41,12 @@ const FK_MAP: Record<string, AnyPgTable> = {
   ownerId: schema.users,
   createdBy: schema.users,
   scannedBy: schema.users,
+  taxCategoryId: (schema as any).taxCategories,
+  priceListId: (schema as any).priceLists,
 };
 
 async function resolveValueToInternalId(field: string, value: unknown): Promise<unknown> {
-  if (value == null || value === "") return value;
+  if (value == null || value === "") return null;
   if (typeof value !== "string") return value;
   const str = String(value).trim();
   if (!isUuid(str)) {
@@ -138,6 +140,9 @@ const DELETE_BLOCK_MESSAGES: Record<string, string> = {
   movementTypes: "Tipe transaksi masih dipakai oleh transaksi stok — pindahkan atau hapus transaksi terkait terlebih dahulu.",
   uom: "Satuan ini masih dipakai oleh item atau transaksi — pindahkan atau hapus data terkait terlebih dahulu.",
   batches: "Batch ini masih tercatat dalam transaksi atau scan opname — hapus data terkait terlebih dahulu.",
+  taxCategories: "Kategori pajak ini masih dipakai oleh Purchase Order — hapus relasi PO terlebih dahulu.",
+  priceLists: "Price list ini masih dipakai oleh baris harga — hapus baris terlebih dahulu.",
+  priceListLines: "Baris price list tidak dapat dihapus.",
 };
 
 const CRUD_TABLES: Record<string, AnyPgTable> = {
@@ -157,6 +162,9 @@ const CRUD_TABLES: Record<string, AnyPgTable> = {
   batchFormats: schema.batchFormats,
   userSettings: schema.userSettings,
   uom: schema.uom,
+  taxCategories: (schema as any).taxCategories,
+  priceLists: (schema as any).priceLists,
+  priceListLines: (schema as any).priceListLines,
   movementTypes: schema.movementTypes,
   stockMovements: schema.stockMovements,
   stockMovementDetails: schema.stockMovementDetails,
@@ -299,6 +307,9 @@ const TABLE_MENU: Record<string, string | string[]> = {
   batchFormats: "master",
   userSettings: "opname.variance.column",
   uom: "master",
+  taxCategories: "master",
+  priceLists: "master",
+  priceListLines: "master",
   movementTypes: "master.movementTypes",
   stockMovements: "inventory.transactions",
   stockMovementDetails: "inventory.transactions",
@@ -356,6 +367,9 @@ const SORT_COLS: Record<string, AnyPgColumn> = {
   barcodeFormats: schema.barcodeFormats.updatedAt,
   batchFormats: schema.batchFormats.updatedAt,
   uom: schema.uom.code,
+  taxCategories: (schema as any).taxCategories.code,
+  priceLists: (schema as any).priceLists.code,
+  priceListLines: (schema as any).priceListLines.id,
   movementTypes: schema.movementTypes.code,
   stockMovements: schema.stockMovements.movementDate,
   stockLedger: schema.stockLedger.transactionDate,
@@ -376,6 +390,9 @@ function getOrderBy(req: Request, tableName: string) {
 const SEARCHABLE_COLS: Record<string, AnyPgColumn[]> = {
   itemGroups: [schema.itemGroups.code, schema.itemGroups.name],
   uom: [schema.uom.code, schema.uom.name],
+  taxCategories: [(schema as any).taxCategories.code, (schema as any).taxCategories.name],
+  priceLists: [(schema as any).priceLists.code, (schema as any).priceLists.name],
+  priceListLines: [(schema as any).priceListLines.id as any],
   movementTypes: [schema.movementTypes.code, schema.movementTypes.name],
   batches: [schema.batches.batchNumber, schema.batches.status],
   batchFormats: [schema.batchFormats.name],
@@ -623,6 +640,40 @@ async function buildWhere(req: Request, table: AnyPgTable, tableName: string) {
       if (internal !== null) conditions.push(eq(s.stockBarcodes.batchId, internal));
     }
   }
+  if (tableName === "priceLists") {
+    const type = queryStr(req, "type");
+    if (type) conditions.push(eq((s as any).priceLists.type, type));
+    const supplierId = queryStr(req, "supplierId");
+    if (supplierId) {
+      let internal: number|null = null;
+      if (isUuid(supplierId)) { const [sup] = await db.select({id: s.suppliers.id}).from(s.suppliers).where(eq(s.suppliers.publicId, supplierId)).limit(1); internal = sup?.id ?? null; }
+      else if (/^\d+$/.test(supplierId)) internal = Number(supplierId);
+      if (internal !== null) conditions.push(eq((s as any).priceLists.supplierId, internal));
+    }
+    const customerId = queryStr(req, "customerId");
+    if (customerId) {
+      let internal: number|null = null;
+      if (isUuid(customerId)) { const [cust] = await db.select({id: s.customers.id}).from(s.customers).where(eq(s.customers.publicId, customerId)).limit(1); internal = cust?.id ?? null; }
+      else if (/^\d+$/.test(customerId)) internal = Number(customerId);
+      if (internal !== null) conditions.push(eq((s as any).priceLists.customerId, internal));
+    }
+  }
+  if (tableName === "priceListLines") {
+    const priceListId = queryStr(req, "priceListId");
+    if (priceListId) {
+      let internal: number|null = null;
+      if (isUuid(priceListId)) { const [pl] = await db.select({id: (s as any).priceLists.id}).from((s as any).priceLists).where(eq((s as any).priceLists.publicId, priceListId)).limit(1); internal = pl?.id ?? null; }
+      else if (/^\d+$/.test(priceListId)) internal = Number(priceListId);
+      if (internal !== null) conditions.push(eq((s as any).priceListLines.priceListId, internal));
+    }
+    const itemId = queryStr(req, "itemId");
+    if (itemId) {
+      let internal: number|null = null;
+      if (isUuid(itemId)) { const [it] = await db.select({id: s.items.id}).from(s.items).where(eq(s.items.publicId, itemId)).limit(1); internal = it?.id ?? null; }
+      else if (/^\d+$/.test(itemId)) internal = Number(itemId);
+      if (internal !== null) conditions.push(eq((s as any).priceListLines.itemId, internal));
+    }
+  }
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 // GET /:table — list with filters & pagination
@@ -647,13 +698,134 @@ crudRouter.get("/:table", async (req, res) => {
       const total = Number(c.count);
       if (orderBy) q = q.orderBy(orderBy);
       q = q.offset(offset).limit(pageSize);
-      const rows = (await q).map((r) => sanitizeRow(table, r as Record<string, unknown>));
+      let rows = (await q).map((r) => sanitizeRow(table, r as Record<string, unknown>));
+      if (tableName === "items" && rows.length > 0) {
+        const igIds = [...new Set(rows.map((r: any) => r.itemGroupId).filter(Boolean))] as number[];
+        const uomIds2 = [...new Set(rows.map((r: any) => r.uomId).filter(Boolean))] as number[];
+        if (igIds.length) {
+          const igs = await db.select({ id: schema.itemGroups.id, publicId: schema.itemGroups.publicId }).from(schema.itemGroups).where(inArray(schema.itemGroups.id, igIds as any));
+          const map = new Map(igs.map((x: any) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.itemGroupId) r.itemGroupId = map.get(r.itemGroupId) ?? r.itemGroupId; });
+        }
+        if (uomIds2.length) {
+          const us = await db.select({ id: schema.uom.id, publicId: schema.uom.publicId }).from(schema.uom).where(inArray(schema.uom.id, uomIds2 as any));
+          const map = new Map(us.map((x: any) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.uomId) r.uomId = map.get(r.uomId) ?? r.uomId; });
+        }
+      }
+      // Enrich FKs to publicId for priceLists/priceListLines
+      if (tableName === "priceListLines" && rows.length > 0) {
+        const plIds = [...new Set(rows.map((r: any) => r.priceListId).filter(Boolean))] as number[];
+        const itemIds = [...new Set(rows.map((r: any) => r.itemId).filter(Boolean))] as number[];
+        const uomIds = [...new Set(rows.map((r: any) => r.uomId).filter(Boolean))] as number[];
+        const supplierIds = [...new Set(rows.map((r: any) => r.supplierId).filter(Boolean))] as number[];
+        const customerIds = [...new Set(rows.map((r: any) => r.customerId).filter(Boolean))] as number[];
+        if (plIds.length) {
+          const pls = await db.select({ id: (schema as any).priceLists.id, publicId: (schema as any).priceLists.publicId }).from((schema as any).priceLists).where(inArray((schema as any).priceLists.id, plIds as any));
+          const map = new Map(pls.map((x: any) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.priceListId) r.priceListId = map.get(r.priceListId) ?? r.priceListId; });
+        }
+        if (itemIds.length) {
+          const its = await db.select({ id: schema.items.id, publicId: schema.items.publicId }).from(schema.items).where(inArray(schema.items.id, itemIds as any));
+          const map = new Map(its.map((x) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.itemId) r.itemId = map.get(r.itemId) ?? r.itemId; });
+        }
+        if (uomIds.length) {
+          const us = await db.select({ id: schema.uom.id, publicId: schema.uom.publicId }).from(schema.uom).where(inArray(schema.uom.id, uomIds as any));
+          const map = new Map(us.map((x) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.uomId) r.uomId = map.get(r.uomId) ?? r.uomId; });
+        }
+        if (supplierIds.length) {
+          const sups = await db.select({ id: schema.suppliers.id, publicId: schema.suppliers.publicId }).from(schema.suppliers).where(inArray(schema.suppliers.id, supplierIds as any));
+          const map = new Map(sups.map((x: any) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.supplierId) r.supplierId = map.get(r.supplierId) ?? r.supplierId; });
+        }
+        if (customerIds.length) {
+          const custs = await db.select({ id: schema.customers.id, publicId: schema.customers.publicId }).from(schema.customers).where(inArray(schema.customers.id, customerIds as any));
+          const map = new Map(custs.map((x: any) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.customerId) r.customerId = map.get(r.customerId) ?? r.customerId; });
+        }
+      }
+      if (tableName === "priceLists" && rows.length > 0) {
+        const supplierIds = [...new Set(rows.map((r: any) => r.supplierId).filter(Boolean))] as number[];
+        const customerIds = [...new Set(rows.map((r: any) => r.customerId).filter(Boolean))] as number[];
+        if (supplierIds.length) {
+          const sups = await db.select({ id: schema.suppliers.id, publicId: schema.suppliers.publicId }).from(schema.suppliers).where(inArray(schema.suppliers.id, supplierIds as any));
+          const map = new Map(sups.map((x) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.supplierId) r.supplierId = map.get(r.supplierId) ?? r.supplierId; });
+        }
+        if (customerIds.length) {
+          const custs = await db.select({ id: schema.customers.id, publicId: schema.customers.publicId }).from(schema.customers).where(inArray(schema.customers.id, customerIds as any));
+          const map = new Map(custs.map((x) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.customerId) r.customerId = map.get(r.customerId) ?? r.customerId; });
+        }
+      }
       res.json({ rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
     } else {
       let q = db.select().from(table).$dynamic();
       if (whereCond) q = q.where(whereCond);
       if (orderBy) q = q.orderBy(orderBy);
-      const rows = (await q).map((r) => sanitizeRow(table, r as Record<string, unknown>));
+      let rows = (await q).map((r) => sanitizeRow(table, r as Record<string, unknown>));
+      if (tableName === "items" && rows.length > 0) {
+        const igIds = [...new Set(rows.map((r: any) => r.itemGroupId).filter(Boolean))] as number[];
+        const uomIds2 = [...new Set(rows.map((r: any) => r.uomId).filter(Boolean))] as number[];
+        if (igIds.length) {
+          const igs = await db.select({ id: schema.itemGroups.id, publicId: schema.itemGroups.publicId }).from(schema.itemGroups).where(inArray(schema.itemGroups.id, igIds as any));
+          const map = new Map(igs.map((x: any) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.itemGroupId) r.itemGroupId = map.get(r.itemGroupId) ?? r.itemGroupId; });
+        }
+        if (uomIds2.length) {
+          const us = await db.select({ id: schema.uom.id, publicId: schema.uom.publicId }).from(schema.uom).where(inArray(schema.uom.id, uomIds2 as any));
+          const map = new Map(us.map((x: any) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.uomId) r.uomId = map.get(r.uomId) ?? r.uomId; });
+        }
+      }
+      if (tableName === "priceLists" && rows.length > 0) {
+        const supplierIds = [...new Set(rows.map((r: any) => r.supplierId).filter(Boolean))] as number[];
+        const customerIds = [...new Set(rows.map((r: any) => r.customerId).filter(Boolean))] as number[];
+        if (supplierIds.length) {
+          const sups = await db.select({ id: schema.suppliers.id, publicId: schema.suppliers.publicId }).from(schema.suppliers).where(inArray(schema.suppliers.id, supplierIds as any));
+          const map = new Map(sups.map((x) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.supplierId) r.supplierId = map.get(r.supplierId) ?? r.supplierId; });
+        }
+        if (customerIds.length) {
+          const custs = await db.select({ id: schema.customers.id, publicId: schema.customers.publicId }).from(schema.customers).where(inArray(schema.customers.id, customerIds as any));
+          const map = new Map(custs.map((x) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.customerId) r.customerId = map.get(r.customerId) ?? r.customerId; });
+        }
+      }
+      if (tableName === "priceListLines" && rows.length > 0) {
+        const plIds = [...new Set(rows.map((r: any) => r.priceListId).filter(Boolean))] as number[];
+        const itemIds = [...new Set(rows.map((r: any) => r.itemId).filter(Boolean))] as number[];
+        const uomIds = [...new Set(rows.map((r: any) => r.uomId).filter(Boolean))] as number[];
+        if (plIds.length) {
+          const pls = await db.select({ id: (schema as any).priceLists.id, publicId: (schema as any).priceLists.publicId }).from((schema as any).priceLists).where(inArray((schema as any).priceLists.id, plIds as any));
+          const map = new Map(pls.map((x: any) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.priceListId) r.priceListId = map.get(r.priceListId) ?? r.priceListId; });
+        }
+        if (itemIds.length) {
+          const its = await db.select({ id: schema.items.id, publicId: schema.items.publicId }).from(schema.items).where(inArray(schema.items.id, itemIds as any));
+          const map = new Map(its.map((x) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.itemId) r.itemId = map.get(r.itemId) ?? r.itemId; });
+        }
+        if (uomIds.length) {
+          const us = await db.select({ id: schema.uom.id, publicId: schema.uom.publicId }).from(schema.uom).where(inArray(schema.uom.id, uomIds as any));
+          const map = new Map(us.map((x) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.uomId) r.uomId = map.get(r.uomId) ?? r.uomId; });
+        }
+        const supplierIds2 = [...new Set(rows.map((r: any) => r.supplierId).filter(Boolean))] as number[];
+        const customerIds2 = [...new Set(rows.map((r: any) => r.customerId).filter(Boolean))] as number[];
+        if (supplierIds2.length) {
+          const sups = await db.select({ id: schema.suppliers.id, publicId: schema.suppliers.publicId }).from(schema.suppliers).where(inArray(schema.suppliers.id, supplierIds2 as any));
+          const map = new Map(sups.map((x: any) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.supplierId) r.supplierId = map.get(r.supplierId) ?? r.supplierId; });
+        }
+        if (customerIds2.length) {
+          const custs = await db.select({ id: schema.customers.id, publicId: schema.customers.publicId }).from(schema.customers).where(inArray(schema.customers.id, customerIds2 as any));
+          const map = new Map(custs.map((x: any) => [x.id, x.publicId]));
+          rows.forEach((r: any) => { if (r.customerId) r.customerId = map.get(r.customerId) ?? r.customerId; });
+        }
+      }
       res.json(rows);
     }
   } catch (e) {
@@ -849,7 +1021,42 @@ crudRouter.get("/:table/:id", async (req, res) => {
     else whereCond = eq(idCol, paramId as any);
     const [row] = await db.select().from(table).where(whereCond).limit(1);
     if (!row) { res.status(404).json({ error: "Data tidak ditemukan." }); return; }
-    res.json(sanitizeRow(table, row as Record<string, unknown>));
+    const sanitized: any = sanitizeRow(table, row as Record<string, unknown>);
+    if (tableName === "priceLists" && sanitized) {
+      if (sanitized.supplierId) {
+        const [sup] = await db.select({ publicId: schema.suppliers.publicId }).from(schema.suppliers).where(eq(schema.suppliers.id, sanitized.supplierId)).limit(1);
+        if (sup) sanitized.supplierId = sup.publicId;
+      }
+      if (sanitized.customerId) {
+        const [cust] = await db.select({ publicId: schema.customers.publicId }).from(schema.customers).where(eq(schema.customers.id, sanitized.customerId)).limit(1);
+        if (cust) sanitized.customerId = cust.publicId;
+      }
+    }
+    if (tableName === "priceListLines" && sanitized) {
+      if (sanitized.priceListId) {
+        const [pl] = await db.select({ publicId: (schema as any).priceLists.publicId }).from((schema as any).priceLists).where(eq((schema as any).priceLists.id, sanitized.priceListId)).limit(1);
+        if (pl) sanitized.priceListId = pl.publicId;
+      }
+      if (sanitized.itemId) {
+        const [it] = await db.select({ publicId: schema.items.publicId }).from(schema.items).where(eq(schema.items.id, sanitized.itemId)).limit(1);
+        if (it) sanitized.itemId = it.publicId;
+      }
+      if (sanitized.uomId) {
+        const [u] = await db.select({ publicId: schema.uom.publicId }).from(schema.uom).where(eq(schema.uom.id, sanitized.uomId)).limit(1);
+        if (u) sanitized.uomId = u.publicId;
+      }
+    }
+    if (tableName === "items" && sanitized) {
+      if (sanitized.itemGroupId) {
+        const [ig] = await db.select({ publicId: schema.itemGroups.publicId }).from(schema.itemGroups).where(eq(schema.itemGroups.id, sanitized.itemGroupId)).limit(1);
+        if (ig) sanitized.itemGroupId = ig.publicId;
+      }
+      if (sanitized.uomId) {
+        const [u] = await db.select({ publicId: schema.uom.publicId }).from(schema.uom).where(eq(schema.uom.id, sanitized.uomId)).limit(1);
+        if (u) sanitized.uomId = u.publicId;
+      }
+    }
+    res.json(sanitized);
   } catch (e) { res.status(500).json({ error: messageOf(e) }); }
 });
 async function resolveBatchFromScan(itemId: number, batchNumber: string): Promise<number | null> {
@@ -889,6 +1096,113 @@ crudRouter.post("/:table", async (req, res) => {
     if (tableName === "movementTypes") {
       if (!values.code || !String(values.code).trim()) values.code = await autoMovementTypeCode(String(values.series ?? ""), String(values.kind ?? "OTHER"));
       else values.code = String(values.code).trim();
+    }
+    if (tableName === "taxCategories") {
+      if (typeof values.code === "string") values.code = String(values.code).trim().toUpperCase();
+      if (typeof values.name === "string") values.name = String(values.name).trim();
+      if (values.percentage != null) values.percentage = String(values.percentage).trim();
+      if (!values.code || !values.name || values.percentage == null || String(values.percentage).trim() === "") {
+        return res.status(400).json({ error: "code, name, percentage wajib diisi." });
+      }
+      const pct = Number(values.percentage);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        return res.status(400).json({ error: "percentage harus angka 0-100." });
+      }
+      values.percentage = String(pct);
+      values.updatedAt = new Date();
+      const [dup] = await db.select({ id: (schema as any).taxCategories.id }).from((schema as any).taxCategories).where(sql`lower(${(schema as any).taxCategories.code}) = lower(${values.code})`).limit(1);
+      if (dup) return res.status(409).json({ error: "Kode kategori pajak sudah digunakan." });
+    }
+    if (tableName === "priceLists") {
+      if (typeof values.code === "string" && values.code.trim()) values.code = String(values.code).trim().toUpperCase();
+      else {
+        // auto-generate code if not provided (for UI without code input)
+        const base = "PL";
+        let gen = `${base}-${Date.now().toString().slice(-6)}`;
+        const [exists] = await db.select({ id: (schema as any).priceLists.id }).from((schema as any).priceLists).where(sql`lower(${(schema as any).priceLists.code}) = lower(${gen})`).limit(1);
+        if (exists) gen = `${base}-${Math.floor(100000 + Math.random() * 900000)}`;
+        values.code = gen;
+      }
+      if (typeof values.name === "string") values.name = String(values.name).trim();
+      if (!values.name) return res.status(400).json({ error: "name wajib diisi." });
+      if (!values.type) values.type = "PURCHASE";
+      if (typeof values.type === "string") values.type = String(values.type).trim().toUpperCase();
+      if (!["PURCHASE", "SALES"].includes(String(values.type))) {
+        return res.status(400).json({ error: "type harus PURCHASE atau SALES." });
+      }
+      if (String(values.type) === "PURCHASE") {
+        // supplier optional now (removed from UI)
+        values.customerId = null;
+      } else {
+        if (!values.customerId) return res.status(400).json({ error: "Customer wajib untuk type SALES." });
+        values.supplierId = null;
+      }
+      values.updatedAt = new Date();
+      if (!values.createdBy && req.user) values.createdBy = (req.user as any).internalId ?? null;
+      const [dup] = await db.select({ id: (schema as any).priceLists.id }).from((schema as any).priceLists).where(sql`lower(${(schema as any).priceLists.code}) = lower(${values.code})`).limit(1);
+      if (dup) return res.status(409).json({ error: "Kode price list sudah digunakan." });
+    }
+    if (tableName === "priceListLines") {
+      if (values.unitPrice != null) values.unitPrice = String(values.unitPrice);
+      const price = Number(values.unitPrice);
+      if (!isFinite(price) || price < 0) return res.status(400).json({ error: "unitPrice harus angka >=0." });
+      if (!values.type) {
+        // default to parent priceList type if available
+        if (values.priceListId) {
+          const [pl] = await db.select({ type: (schema as any).priceLists.type }).from((schema as any).priceLists).where(eq((schema as any).priceLists.id, values.priceListId as any)).limit(1);
+          values.type = (pl as any)?.type ?? "PURCHASE";
+        } else {
+          values.type = "PURCHASE";
+        }
+      }
+      if (typeof values.type === "string") values.type = String(values.type).trim().toUpperCase();
+      if (!["PURCHASE", "SALES"].includes(String(values.type))) {
+        return res.status(400).json({ error: "type harus PURCHASE atau SALES." });
+      }
+      if (String(values.type) === "PURCHASE") {
+        if (!values.supplierId) {
+          // try to default from parent priceList if type matches
+          if (values.priceListId) {
+            const [pl] = await db.select({ supplierId: (schema as any).priceLists.supplierId }).from((schema as any).priceLists).where(eq((schema as any).priceLists.id, values.priceListId as any)).limit(1);
+            if ((pl as any)?.supplierId) values.supplierId = (pl as any).supplierId;
+            else return res.status(400).json({ error: "Supplier wajib untuk type PURCHASE." });
+          } else {
+            return res.status(400).json({ error: "Supplier wajib untuk type PURCHASE." });
+          }
+        }
+        values.customerId = null;
+      } else {
+        if (!values.customerId) {
+          if (values.priceListId) {
+            const [pl] = await db.select({ customerId: (schema as any).priceLists.customerId }).from((schema as any).priceLists).where(eq((schema as any).priceLists.id, values.priceListId as any)).limit(1);
+            if ((pl as any)?.customerId) values.customerId = (pl as any).customerId;
+            else return res.status(400).json({ error: "Customer wajib untuk type SALES." });
+          } else {
+            return res.status(400).json({ error: "Customer wajib untuk type SALES." });
+          }
+        }
+        values.supplierId = null;
+      }
+      // auto fill uom from item if not provided
+      if (!values.uomId && values.itemId) {
+        const [it] = await db.select({ uomId: schema.items.uomId }).from(schema.items).where(eq(schema.items.id, values.itemId as any)).limit(1);
+        if (it?.uomId) values.uomId = it.uomId;
+      }
+      // auto fill currency from priceList if not provided
+      if (!values.currency && values.priceListId) {
+        const [pl] = await db.select({ currency: (schema as any).priceLists.currency }).from((schema as any).priceLists).where(eq((schema as any).priceLists.id, values.priceListId as any)).limit(1);
+        if ((pl as any)?.currency) values.currency = (pl as any).currency;
+        else values.currency = "IDR";
+      }
+      if (!values.currency) values.currency = "IDR";
+      values.updatedAt = new Date();
+      if (values.priceListId && values.itemId) {
+        const conds: any[] = [eq((schema as any).priceListLines.priceListId, values.priceListId as any), eq((schema as any).priceListLines.itemId, values.itemId as any)];
+        if (values.supplierId) conds.push(eq((schema as any).priceListLines.supplierId, values.supplierId as any));
+        if (values.customerId) conds.push(eq((schema as any).priceListLines.customerId, values.customerId as any));
+        const [dup] = await db.select({ id: (schema as any).priceListLines.id }).from((schema as any).priceListLines).where(and(...conds)).limit(1);
+        if (dup) return res.status(409).json({ error: "Item dengan supplier/customer tersebut sudah ada di price list ini." });
+      }
     }
     if (tableName === "opnameScanDetails") {
       const parsed = (values.parsed ?? {}) as Record<string, unknown>;
@@ -953,6 +1267,103 @@ crudRouter.patch("/:table/:id", async (req, res) => {
       const [dup] = await db.select({ id: schema.items.id }).from(schema.items).where(sql`lower(${schema.items.code}) = lower(${values.code}) AND ${whereDup}`).limit(1);
       if (dup) return res.status(409).json({ error: "Kode item sudah digunakan." });
     }
+    if (tableName === "taxCategories") {
+      if (typeof values.code === "string") values.code = String(values.code).trim().toUpperCase();
+      if (typeof values.name === "string") values.name = String(values.name).trim();
+      if (values.percentage != null) {
+        const pct = Number(values.percentage);
+        if (!Number.isFinite(pct) || pct < 0 || pct > 100) return res.status(400).json({ error: "percentage harus angka 0-100." });
+        values.percentage = String(pct);
+      }
+      if (values.code) {
+        const whereDup = isUuid(paramId) ? sql`${(schema as any).taxCategories.publicId} != ${paramId}` : sql`${(schema as any).taxCategories.id} != ${Number(paramId)}`;
+        const [dup] = await db.select({ id: (schema as any).taxCategories.id }).from((schema as any).taxCategories).where(sql`lower(${(schema as any).taxCategories.code}) = lower(${String(values.code)}) AND ${whereDup}`).limit(1);
+        if (dup) return res.status(409).json({ error: "Kode kategori pajak sudah digunakan." });
+      }
+      values.updatedAt = new Date();
+    }
+    if (tableName === "priceLists") {
+      if (typeof values.code === "string") values.code = String(values.code).trim().toUpperCase();
+      if (typeof values.name === "string") values.name = String(values.name).trim();
+      if (values.type != null) {
+        values.type = String(values.type).trim().toUpperCase();
+        if (!["PURCHASE", "SALES"].includes(String(values.type))) {
+          return res.status(400).json({ error: "type harus PURCHASE atau SALES." });
+        }
+        if (String(values.type) === "PURCHASE") {
+          values.customerId = null;
+        } else {
+          if (values.customerId === undefined) {
+            const whereExisting = isUuid(paramId) ? eq((schema as any).priceLists.publicId, paramId) : eq((schema as any).priceLists.id, Number(paramId) as any);
+            const [existing] = await db.select({ customerId: (schema as any).priceLists.customerId }).from((schema as any).priceLists).where(whereExisting).limit(1);
+            if (!existing?.customerId && !values.customerId) return res.status(400).json({ error: "Customer wajib untuk type SALES." });
+          } else if (!values.customerId) {
+            return res.status(400).json({ error: "Customer wajib untuk type SALES." });
+          }
+          values.supplierId = null;
+        }
+      } else {
+        if (values.supplierId && values.customerId) {
+          return res.status(400).json({ error: "Price list tidak boleh punya supplier dan customer bersamaan." });
+        }
+        if (values.supplierId) values.customerId = null;
+        if (values.customerId) values.supplierId = null;
+      }
+      if (values.code) {
+        const whereDup = isUuid(paramId) ? sql`${(schema as any).priceLists.publicId} != ${paramId}` : sql`${(schema as any).priceLists.id} != ${Number(paramId)}`;
+        const [dup] = await db.select({ id: (schema as any).priceLists.id }).from((schema as any).priceLists).where(sql`lower(${(schema as any).priceLists.code}) = lower(${String(values.code)}) AND ${whereDup}`).limit(1);
+        if (dup) return res.status(409).json({ error: "Kode price list sudah digunakan." });
+      }
+      values.updatedAt = new Date();
+    }
+    if (tableName === "priceListLines") {
+      if (values.unitPrice != null) {
+        const price = Number(values.unitPrice);
+        if (!isFinite(price) || price < 0) return res.status(400).json({ error: "unitPrice harus angka >=0." });
+        values.unitPrice = String(price);
+      }
+      if (values.type != null) {
+        values.type = String(values.type).trim().toUpperCase();
+        if (!["PURCHASE", "SALES"].includes(String(values.type))) {
+          return res.status(400).json({ error: "type harus PURCHASE atau SALES." });
+        }
+        if (String(values.type) === "PURCHASE") {
+          values.customerId = null;
+        } else {
+          if (values.customerId === undefined) {
+            const whereExisting = isUuid(paramId) ? eq((schema as any).priceListLines.publicId, paramId) : eq((schema as any).priceListLines.id, Number(paramId) as any);
+            const [existing] = await db.select({ customerId: (schema as any).priceListLines.customerId }).from((schema as any).priceListLines).where(whereExisting).limit(1);
+            if (!existing?.customerId && !values.customerId) return res.status(400).json({ error: "Customer wajib untuk type SALES." });
+          } else if (!values.customerId) {
+            return res.status(400).json({ error: "Customer wajib untuk type SALES." });
+          }
+          values.supplierId = null;
+        }
+      } else {
+        if (values.supplierId && values.customerId) {
+          return res.status(400).json({ error: "Baris price list tidak boleh punya supplier dan customer bersamaan." });
+        }
+        if (values.supplierId) values.customerId = null;
+        if (values.customerId) values.supplierId = null;
+      }
+      if (!values.uomId && values.itemId) {
+        const [it] = await db.select({ uomId: schema.items.uomId }).from(schema.items).where(eq(schema.items.id, values.itemId as any)).limit(1);
+        if (it?.uomId) values.uomId = it.uomId;
+      }
+      if (!values.currency && values.priceListId) {
+        const [pl] = await db.select({ currency: (schema as any).priceLists.currency }).from((schema as any).priceLists).where(eq((schema as any).priceLists.id, values.priceListId as any)).limit(1);
+        if ((pl as any)?.currency) values.currency = (pl as any).currency;
+      }
+      if (values.priceListId && values.itemId) {
+        const whereDup = isUuid(paramId) ? sql`${(schema as any).priceListLines.publicId} != ${paramId}` : sql`${(schema as any).priceListLines.id} != ${Number(paramId)}`;
+        const conds: any[] = [eq((schema as any).priceListLines.priceListId, values.priceListId as any), eq((schema as any).priceListLines.itemId, values.itemId as any)];
+        if (values.supplierId) conds.push(eq((schema as any).priceListLines.supplierId, values.supplierId as any));
+        if (values.customerId) conds.push(eq((schema as any).priceListLines.customerId, values.customerId as any));
+        const [dup] = await db.select({ id: (schema as any).priceListLines.id }).from((schema as any).priceListLines).where(sql`${sql.join(conds, sql` AND `)} AND ${whereDup}`).limit(1);
+        if (dup) return res.status(409).json({ error: "Item dengan supplier/customer tersebut sudah ada di price list ini." });
+      }
+      values.updatedAt = new Date();
+    }
     const [row] = await db.update(table).set(values).where(whereCond).returning();
     if (!row) { res.status(404).json({ error: "Data tidak ditemukan." }); return; }
     res.json(sanitizeRow(table, row as Record<string, unknown>));
@@ -987,6 +1398,28 @@ crudRouter.delete("/:table/:id", async (req, res) => {
         const refs = await db.select({ id: schema.barcodeFormats.id, name: schema.barcodeFormats.name, segments: schema.barcodeFormats.segments }).from(schema.barcodeFormats);
         const usedBy = refs.find((f) => ((f.segments ?? []) as { batchFormatId?: string }[]).some((s) => String(s.batchFormatId) === String(rowId) || String(s.batchFormatId) === String(paramId)));
         if (usedBy) { res.status(409).json({ error: `Format batch ini masih dipakai oleh format barcode "${usedBy.name}" — ubah atau hapus segmen BATCH-nya terlebih dahulu.` }); return; }
+      }
+    }
+    if (tableName === "taxCategories") {
+      let whereCond: any = undefined;
+      if (publicIdCol && isUuid(paramId)) whereCond = eq(publicIdCol, paramId);
+      else whereCond = eq(idCol, Number(paramId) as any);
+      const [cat] = await db.select({ id: (schema as any).taxCategories.id }).from((schema as any).taxCategories).where(whereCond).limit(1);
+      const rowId = cat?.id;
+      if (rowId) {
+        const [used] = await db.select({ id: (schema as any).purchaseOrders.id }).from((schema as any).purchaseOrders).where(eq((schema as any).purchaseOrders.taxCategoryId, rowId)).limit(1);
+        if (used) { res.status(409).json({ error: "Kategori pajak ini masih dipakai oleh Purchase Order — hapus relasi PO terlebih dahulu." }); return; }
+      }
+    }
+    if (tableName === "priceLists") {
+      let whereCond: any = undefined;
+      if (publicIdCol && isUuid(paramId)) whereCond = eq(publicIdCol, paramId);
+      else whereCond = eq(idCol, Number(paramId) as any);
+      const [pl] = await db.select({ id: (schema as any).priceLists.id }).from((schema as any).priceLists).where(whereCond).limit(1);
+      const rowId = pl?.id;
+      if (rowId) {
+        const [used] = await db.select({ id: (schema as any).priceListLines.id }).from((schema as any).priceListLines).where(eq((schema as any).priceListLines.priceListId, rowId)).limit(1);
+        if (used) { res.status(409).json({ error: "Price list ini masih dipakai oleh baris harga — hapus baris terlebih dahulu." }); return; }
       }
     }
     let whereCond: any = undefined;

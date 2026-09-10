@@ -61,6 +61,13 @@ const BarcodeFormatDetailPage = lazy(() => import("@/app/app/setup/barcode-forma
 const BatchFormatsPage = lazy(() => import("@/app/app/setup/batch-formats/page"));
 const BatchFormatNewPage = lazy(() => import("@/app/app/setup/batch-formats/new/page"));
 const BatchFormatDetailPage = lazy(() => import("@/app/app/setup/batch-formats/[id]/page"));
+const TaxCategoriesPage = lazy(() => import("@/app/app/setup/tax-categories/page"));
+const NewTaxCategoryPage = lazy(() => import("@/app/app/setup/tax-categories/new/page"));
+const EditTaxCategoryPage = lazy(() => import("@/app/app/setup/tax-categories/[id]/page"));
+const PriceListsPage = lazy(() => import("@/app/app/setup/price-lists/page"));
+const NewPriceListPage = lazy(() => import("@/app/app/setup/price-lists/new/page"));
+const EditPriceListPage = lazy(() => import("@/app/app/setup/price-lists/[id]/page"));
+const ItemPricelistPage = lazy(() => import("@/app/app/setup/price-lists/items/page"));
 const UsersPage = lazy(() => import("@/app/app/settings/users/page"));
 const NewUserPage = lazy(() => import("@/app/app/settings/users/new/page"));
 const EditUserPage = lazy(() => import("@/app/app/settings/users/[id]/page"));
@@ -69,6 +76,7 @@ const NewRolePage = lazy(() => import("@/app/app/settings/roles/new/page"));
 const EditRolePage = lazy(() => import("@/app/app/settings/roles/[id]/page"));
 const ImportDataPage = lazy(() => import("@/app/app/settings/import/page"));
 const AiSettingsPage = lazy(() => import("@/app/app/settings/ai/page"));
+const CompanySettingsPage = lazy(() => import("@/app/app/settings/company/page"));
 const AiChatPage = lazy(() => import("@/app/app/ai/page"));
 const SuppliersPage = lazy(() => import("@/app/app/suppliers/page"));
 const CustomersPage = lazy(() => import("@/app/app/customers/page"));
@@ -193,6 +201,13 @@ export default function App() {
             <Route path="setup/batch-formats" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} />}><BatchFormatsPage /></LazyPage>} />
             <Route path="setup/batch-formats/new" element={<LazyPage fallback={<FormSkeleton fields={5} />}><BatchFormatNewPage /></LazyPage>} />
             <Route path="setup/batch-formats/:id" element={<LazyPage fallback={<FormSkeleton fields={5} />}><BatchFormatDetailPage /></LazyPage>} />
+            <Route path="setup/tax-categories" element={<LazyPage fallback={<TableSkeleton columns={6} filters={0} />}><TaxCategoriesPage /></LazyPage>} />
+            <Route path="setup/tax-categories/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewTaxCategoryPage /></LazyPage>} />
+            <Route path="setup/tax-categories/:id" element={<LazyPage fallback={<FormSkeleton fields={4} />}><EditTaxCategoryPage /></LazyPage>} />
+            <Route path="setup/price-lists/items" element={<LazyPage fallback={<TableSkeleton columns={6} filters={1} />}><ItemPricelistPage /></LazyPage>} />
+            <Route path="setup/price-lists" element={<LazyPage fallback={<TableSkeleton columns={6} filters={0} />}><PriceListsPage /></LazyPage>} />
+            <Route path="setup/price-lists/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewPriceListPage /></LazyPage>} />
+            <Route path="setup/price-lists/:id" element={<LazyPage fallback={<FormSkeleton fields={4} />}><EditPriceListPage /></LazyPage>} />
             {/* Legacy redirect: /app/data-library/* -> /app/setup/* */}
             <Route path="data-library/*" element={<Navigate to="/app/setup/items" replace />} />
             <Route path="settings" element={<Navigate to="/app/settings/users" replace />} />
@@ -204,6 +219,7 @@ export default function App() {
             <Route path="settings/roles/:id" element={<LazyPage fallback={<FormSkeleton fields={6} />}><EditRolePage /></LazyPage>} />
             <Route path="settings/import" element={<LazyPage fallback={<TableSkeleton columns={4} filters={0} />}><ImportDataPage /></LazyPage>} />
             <Route path="settings/ai" element={<LazyPage fallback={<FormSkeleton fields={6} />}><AiSettingsPage /></LazyPage>} />
+            <Route path="settings/company" element={<LazyPage fallback={<FormSkeleton fields={6} />}><CompanySettingsPage /></LazyPage>} />
             <Route path="ai" element={<LazyPage fallback={<ChatSkeleton />}><AiChatPage /></LazyPage>} />
             <Route path="suppliers" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><SuppliersPage /></LazyPage>} />
             <Route path="customers" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><CustomersPage /></LazyPage>} />

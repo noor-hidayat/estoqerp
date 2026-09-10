@@ -13,7 +13,7 @@ dashboardRouter.get("/dashboard", async (req: Request, res, next) => {
     const s = schema;
     const branchIds = req.accessibleBranchIds ?? [];
     const warehouseIds = req.accessibleWarehouseIds ?? [];
-    const isAdmin = !req.user || req.user.role === "role_sys_admin";
+    const isAdmin = !req.user || req.user.role === "role_sys_admin" || req.user.role === "SYS_ADMIN";
 
     function whScopeConds() {
       if (isAdmin) return undefined;

@@ -1,0 +1,2 @@
+ALTER TABLE "purchase_orders" ADD COLUMN "allow_edit_order_date" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "purchase_orders" ADD COLUMN "qc_required" boolean DEFAULT true NOT NULL;

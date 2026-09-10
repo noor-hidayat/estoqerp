@@ -22,6 +22,7 @@ export type PublicUser = {
   internalId: number;
   name: string;
   email: string;
+  phone?: string | null;
   role: string; // publicId or code for compat
   roleId?: number | null;
   active: boolean;
@@ -45,6 +46,7 @@ export async function toPublicUser(row: typeof users.$inferSelect): Promise<Publ
     internalId: id,
     name: (row as any).name,
     email: (row as any).email,
+    phone: (row as any).phone ?? null,
     role: roleStr,
     roleId: roleId ?? null,
     active: (row as any).active,
@@ -61,6 +63,7 @@ function toPublicUserSync(row: typeof users.$inferSelect): PublicUser {
     internalId: id,
     name: (row as any).name,
     email: (row as any).email,
+    phone: (row as any).phone ?? null,
     role: roleId ? String(roleId) : "",
     roleId: roleId ?? null,
     active: (row as any).active,
@@ -201,7 +204,7 @@ authRouter.post(
   requireAuth,
   requireRoles("role_sys_admin"),
   async (req, res) => {
-  const { name, email, password, roleId } = req.body ?? {};
+  const { name, email, password, roleId, phone } = req.body ?? {};
   if (!name || !email || !password) {
     res.status(400).json({ error: "Nama, email, dan password wajib diisi." });
     return;
@@ -256,6 +259,7 @@ authRouter.post(
     .values({
       name: String(name),
       email: normalizedEmail,
+      phone: phone ? String(phone).trim() : null,
       passwordHash,
       roleId: roleInternalId,
       active: true,

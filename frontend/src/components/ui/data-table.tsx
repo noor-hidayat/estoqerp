@@ -30,12 +30,12 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
+  Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import * as SelectPrimitive from "@radix-ui/react-select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -754,13 +754,14 @@ export function DataTable<T>({
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">Rows per page</span>
-                <SelectPrimitive.Root
+                <Select
                   value={String(pageSize)}
-                  onValueChange={(v) => changePageSize(Number(v))}
+                  onValueChange={(v) => changePageSize(Number(v as string))}
                 >
                   <SelectTrigger
                     aria-label="Rows per page"
                     className="h-7 w-[64px] px-2 text-xs shadow-none"
+                    size="sm"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -771,7 +772,7 @@ export function DataTable<T>({
                       </SelectItem>
                     ))}
                   </SelectContent>
-                </SelectPrimitive.Root>
+                </Select>
               </div>
 
               <span className="text-xs tabular-nums text-muted-foreground">

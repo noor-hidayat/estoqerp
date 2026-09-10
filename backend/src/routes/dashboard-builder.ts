@@ -466,7 +466,7 @@ async function runQuery(config: any, req: Request): Promise<{ rows: any[] }> {
   for (const [, table, on] of joinClauses) q = q.leftJoin(table, on);
 
   // Scoping otomatis dari branch access user (tidak mengandalkan frontend).
-  const isAdmin = !req.user || req.user.role === "role_sys_admin";
+  const isAdmin = !req.user || req.user.role === "role_sys_admin" || req.user.role === "SYS_ADMIN";
   const whIds: string[] = (req as any).accessibleWarehouseIds ?? [];
   const conditions: any[] = [];
   if (!isAdmin && whIds.length) conditions.push(inArray(fact.warehouseCol, whIds));
@@ -562,7 +562,7 @@ async function buildWidgetQuery(
     Array.isArray(config?.groupBy) &&
     (config as any).groupBy[0] === "itemId"
   ) {
-    const isAdmin = !req.user || (req as any).user?.role === "role_sys_admin";
+    const isAdmin = !req.user || (req as any).user?.role === "role_sys_admin" || (req as any).user?.role === "SYS_ADMIN";
     const whIds: string[] = (req as any).accessibleWarehouseIds ?? [];
     // Build Top10 query manually for proper sorting & item name
     const whereConds: string[] = [];
@@ -625,7 +625,7 @@ async function buildWidgetQuery(
   // factTable = "return_pct", measure alias = returnPct
   if (config?.factTable === "return_pct") {
     const filters: Record<string, unknown> = (config?.filters ?? {}) as any;
-    const isAdmin = !req.user || (req as any).user?.role === "role_sys_admin";
+    const isAdmin = !req.user || (req as any).user?.role === "role_sys_admin" || (req as any).user?.role === "SYS_ADMIN";
     const whIds: string[] = (req as any).accessibleWarehouseIds ?? [];
     const measures: any[] = config?.measures ?? [];
     const valueKey = measures?.[0]?.alias || (measures?.[0] ? `${measures[0].field}_${measures[0].aggregation}` : "returnPct");

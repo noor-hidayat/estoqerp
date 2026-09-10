@@ -288,6 +288,118 @@
       "when": 1788800000004,
       "tag": "0042_qc-params",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1788762874241,
+      "tag": "0043_sudden_talisman",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1788764000736,
+      "tag": "0044_worried_pepper_potts",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1788835833629,
+      "tag": "0045_spicy_radioactive_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1788836557619,
+      "tag": "0046_tan_sir_ram",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788837479631,
+      "tag": "0047_furry_jackal",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1788838888442,
+      "tag": "0048_fast_silhouette",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1788839058792,
+      "tag": "0049_hesitant_blonde_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1788840871278,
+      "tag": "0050_plain_azazel",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1788843093441,
+      "tag": "0051_modern_psylocke",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1788887437866,
+      "tag": "0052_sweet_prism",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1788888197226,
+      "tag": "0053_gray_gamma_corps",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1788924509502,
+      "tag": "0054_cultured_whiplash",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1788932320911,
+      "tag": "0055_regular_vargas",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1788933586298,
+      "tag": "0056_petite_iceman",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1788937604992,
+      "tag": "0057_tiresome_captain_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1789024466551,
+      "tag": "0058_amazing_tomas",
+      "breakpoints": true
     }
   ]
 }

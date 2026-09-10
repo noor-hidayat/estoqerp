@@ -37,9 +37,23 @@ export function requireAuth(
   }
 }
 
+function roleMatches(required: string, actual: string): boolean {
+  if (required === actual) return true;
+  // Legacy ↔ new code alias for sys admin / admin / staff
+  const alias: Record<string, string[]> = {
+    role_sys_admin: ["SYS_ADMIN", "role_sys_admin"],
+    SYS_ADMIN: ["role_sys_admin", "SYS_ADMIN"],
+    role_admin: ["ADMIN", "role_admin"],
+    ADMIN: ["role_admin", "ADMIN"],
+    role_staff: ["STAFF", "role_staff"],
+    STAFF: ["role_staff", "STAFF"],
+  };
+  return alias[required]?.includes(actual) ?? false;
+}
+
 export function requireRoles(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user || !roles.some((r) => roleMatches(r, req.user!.role))) {
       res.status(403).json({ error: "Tidak memiliki akses." });
       return;
     }

@@ -29,6 +29,7 @@ export default function EditUserPage() {
   const [form, setForm] = useState({
     name: "",
     email: "",
+    phone: "",
     roleId: "",
     active: true,
   });
@@ -41,6 +42,7 @@ export default function EditUserPage() {
       setForm({
         name: user.name,
         email: user.email,
+        phone: (user as any).phone ?? "",
         roleId: user.role,
         active: user.active,
       });
@@ -73,6 +75,7 @@ export default function EditUserPage() {
         patch: {
           name: form.name.trim(),
           email: form.email.trim().toLowerCase(),
+          phone: form.phone.trim() || null,
           role: form.roleId,
           active: form.active,
         },
@@ -130,6 +133,13 @@ export default function EditUserPage() {
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
               />
             </div>
+            <Input
+              label="Telpon"
+              type="tel"
+              placeholder="08xxxxxxxxxx"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
             <Select
               label="Role"
               value={form.roleId}

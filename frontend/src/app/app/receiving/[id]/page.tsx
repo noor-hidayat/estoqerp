@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Pencil, Save, X } from "lucide-react";
+import { Pencil, Save, X, Printer } from "lucide-react";
 import { toast } from "sonner";
 import {
   useAllWarehouses,
@@ -369,12 +369,22 @@ export default function ReceivingDetailPage() {
                         <TableRow key={idx} className="border-border/70 hover:bg-transparent">
                           <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
                           <TableCell className="px-3 font-medium text-foreground">{item ? `${item.code}: ${item.name}` : r.itemId || "—"}</TableCell>
-                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo}</TableCell>
+                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo !== "—" ? formatNumber(qtyPo) : "0"}</TableCell>
                           <TableCell className="px-3">
                             <TableInput value={r.qty} onChange={(v) => setLines(prev => prev.map((line, i) => (i === idx ? { ...line, qty: v } : line)))} columnTitle="Qty Received" isNumeric />
                           </TableCell>
-                          <TableCell className="px-3 text-right tabular-nums text-foreground">{rate ? `Rp ${formatNumber(Number(rate))}` : "—"}</TableCell>
-                          <TableCell className="px-3 text-right font-medium tabular-nums text-foreground">{amount ? `Rp ${formatNumber(amount)}` : "—"}</TableCell>
+                          <TableCell className="p-0">
+                            <div className="flex items-center justify-between gap-2 px-3">
+                              <span className="text-sm font-medium tracking-wide text-muted-foreground">Rp</span>
+                              <span className="tabular-nums text-right">{rate ? formatNumber(rate) : "0"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="p-0">
+                            <div className="flex items-center justify-between gap-2 px-3">
+                              <span className="text-sm font-medium tracking-wide text-muted-foreground">Rp</span>
+                              <span className="tabular-nums text-right font-medium">{formatNumber(amount)}</span>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -446,12 +456,22 @@ export default function ReceivingDetailPage() {
                         <TableRow key={idx} className="border-border/70 hover:bg-transparent">
                           <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
                           <TableCell className="px-3 font-medium text-foreground">{item ? `${item.code}: ${item.name}` : r.itemId || "—"}</TableCell>
-                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo}</TableCell>
-                          <TableCell className="px-3 text-right tabular-nums text-foreground">{r.qty || "—"}</TableCell>
-                          {(isCompleted || isPendingQc) && <TableCell className="px-3 text-right font-medium tabular-nums text-emerald-700">{qtyAccepted != null ? qtyAccepted : "—"}</TableCell>}
-                          {(isCompleted || isPendingQc) && <TableCell className="px-3 text-right tabular-nums text-destructive">{qtyRejected != null ? qtyRejected : "—"}</TableCell>}
-                          <TableCell className="px-3 text-right tabular-nums text-foreground">{rate ? `Rp ${formatNumber(Number(rate))}` : "—"}</TableCell>
-                          <TableCell className="px-3 text-right font-medium tabular-nums text-foreground">{amount ? `Rp ${formatNumber(amount)}` : "—"}</TableCell>
+                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo !== "—" ? formatNumber(qtyPo) : "0"}</TableCell>
+                          <TableCell className="px-3 text-right tabular-nums text-foreground">{r.qty ? formatNumber(r.qty) : "0"}</TableCell>
+                          {(isCompleted || isPendingQc) && <TableCell className="px-3 text-right font-medium tabular-nums text-emerald-700">{qtyAccepted != null ? formatNumber(qtyAccepted) : "0"}</TableCell>}
+                          {(isCompleted || isPendingQc) && <TableCell className="px-3 text-right tabular-nums text-destructive">{qtyRejected != null ? formatNumber(qtyRejected) : "0"}</TableCell>}
+                          <TableCell className="p-0">
+                            <div className="flex items-center justify-between gap-2 px-3">
+                              <span className="text-sm font-medium tracking-wide text-muted-foreground">Rp</span>
+                              <span className="tabular-nums text-right">{rate ? formatNumber(rate) : "0"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="p-0">
+                            <div className="flex items-center justify-between gap-2 px-3">
+                              <span className="text-sm font-medium tracking-wide text-muted-foreground">Rp</span>
+                              <span className="tabular-nums text-right font-medium">{formatNumber(amount)}</span>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       );
                     })}

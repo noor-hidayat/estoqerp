@@ -59,7 +59,7 @@ aiRouter.get("/models", (_req, res, next) => {
 });
 
 // Kelola konfigurasi AI — khusus role manager (sys admin & admin).
-const MANAGER_ROLES = ["role_sys_admin", "role_admin"];
+const MANAGER_ROLES = ["role_sys_admin", "SYS_ADMIN", "role_admin", "ADMIN"];
 
 aiRouter.get("/settings", requireRoles(...MANAGER_ROLES), async (req, res, next) => {
   try {
@@ -182,7 +182,7 @@ aiRouter.post("/chat", async (req: Request, res: Response, next) => {
     const scope = {
       branchIds: req.accessibleBranchIds ?? [],
       warehouseIds: req.accessibleWarehouseIds ?? [],
-      isAdmin: !req.user || req.user.role === "role_sys_admin",
+      isAdmin: !req.user || req.user.role === "role_sys_admin" || req.user.role === "SYS_ADMIN",
     };
 
     // Pertanyaan non-data tidak menyentuh DB sama sekali — langsung ke LLM.

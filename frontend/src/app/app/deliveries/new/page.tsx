@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Save } from "lucide-react";
 import { useCustomers, useAllWarehouses, useUoms, useCreateDelivery, useSalesOrders } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { FormSkeleton } from "@/components/ui/skeleton";
-import { FormPage, FormSection, FormGrid, FormActions } from "@/components/ui/form-page";
+import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
 import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
@@ -91,7 +90,17 @@ export default function NewDeliveryPage() {
 
   return (
     <RoleGuard roles={[]} menus={["supply.deliveries"]}>
-      <FormPage title="New Delivery">
+      <FormPage
+        title="New Delivery"
+        actions={
+          <div className="flex items-center gap-2">
+            <DocMenu onCancel={() => navigate("/app/deliveries")} onDelete={resetForm} />
+            <Button size="sm" onClick={submit} disabled={create.isPending}>
+              {create.isPending ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        }
+      >
         <FormSection>
           <FormGrid>
             <SearchableSelect
@@ -126,17 +135,6 @@ export default function NewDeliveryPage() {
         <FormSection title="Lines">
           <OrderLineTable value={lines} onChange={setLines} />
         </FormSection>
-
-        <FormActions>
-          <Button variant="ghost" onClick={() => navigate("/app/deliveries")}>
-            <ArrowLeft size={15} strokeWidth={2} />
-            Back
-          </Button>
-          <Button variant="primary" onClick={submit} disabled={create.isPending}>
-            <Save size={15} strokeWidth={2} />
-            Save
-          </Button>
-        </FormActions>
       </FormPage>
     </RoleGuard>
   );

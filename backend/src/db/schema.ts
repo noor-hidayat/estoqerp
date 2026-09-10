@@ -105,6 +105,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  phone: text("phone"),
   roleId: bigint("role_id", { mode: "number" }).references(() => roles.id, {
     onDelete: "set null",
   }),
@@ -264,6 +265,22 @@ export const aiSettings = pgTable(
   (t) => [uniqueIndex("uq_ai_settings_workspace").on(t.workspaceId)]
 );
 
+// Global Company Settings — single row (id=1), SYS_ADMIN only
+export const companySettings = pgTable("company_settings", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+  publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+  companyName: text("company_name").notNull().default("Estoq"),
+  companyCode: text("company_code").notNull().default("ESTOQ"),
+  address: text("address"),
+  taxId: text("tax_id"),
+  country: text("country").notNull().default("Indonesia"),
+  baseCurrency: text("base_currency").notNull().default("IDR"),
+  timezone: text("timezone").notNull().default("Asia/Jakarta"),
+  fiscalYear: text("fiscal_year").notNull().default("JANUARY_DECEMBER"),
+  logo: text("logo"), // base64 data URL or URL
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const branches = pgTable("branches", {
   id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
   publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
@@ -321,6 +338,93 @@ export const uom = pgTable("uom", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const taxCategories = pgTable(
+  "tax_categories",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id")
+      .notNull()
+      .unique()
+      .$defaultFn(() => uuidv7()),
+    code: text("code").notNull().unique(),
+    name: text("name").notNull(),
+    percentage: numeric("percentage", { precision: 5, scale: 2 }).notNull(),
+    description: text("description"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_tax_categories_code").on(t.code),
+    index("idx_tax_categories_active").on(t.isActive),
+    index("idx_tax_categories_name").on(t.name),
+  ]
+);
+
+export const priceListTypes = ["PURCHASE", "SALES"] as const;
+export type PriceListType = (typeof priceListTypes)[number];
+
+export const priceLists = pgTable(
+  "price_lists",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    code: text("code").notNull().unique(),
+    name: text("name").notNull(),
+    description: text("description"),
+    type: text("type", { enum: priceListTypes }).notNull().default("PURCHASE"),
+    supplierId: bigint("supplier_id", { mode: "number" }).references(() => suppliers.id, { onDelete: "set null" }),
+    customerId: bigint("customer_id", { mode: "number" }).references(() => customers.id, { onDelete: "set null" }),
+    currency: text("currency").notNull().default("IDR"),
+    isActive: boolean("is_active").notNull().default(true),
+    validFrom: date("valid_from"),
+    validTo: date("valid_to"),
+    createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_price_lists_code").on(t.code),
+    index("idx_price_lists_active").on(t.isActive),
+    index("idx_price_lists_currency").on(t.currency),
+    index("idx_price_lists_type").on(t.type),
+    index("idx_price_lists_supplier").on(t.supplierId),
+    index("idx_price_lists_customer").on(t.customerId),
+  ]
+);
+
+export const priceListLines = pgTable(
+  "price_list_lines",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    priceListId: bigint("price_list_id", { mode: "number" })
+      .notNull()
+      .references(() => priceLists.id, { onDelete: "cascade" }),
+    itemId: bigint("item_id", { mode: "number" })
+      .notNull()
+      .references(() => items.id, { onDelete: "cascade" }),
+    uomId: bigint("uom_id", { mode: "number" }).references(() => uom.id),
+    type: text("type", { enum: priceListTypes }).notNull().default("PURCHASE"),
+    supplierId: bigint("supplier_id", { mode: "number" }).references(() => suppliers.id, { onDelete: "set null" }),
+    customerId: bigint("customer_id", { mode: "number" }).references(() => customers.id, { onDelete: "set null" }),
+    unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull(),
+    currency: text("currency").notNull().default("IDR"),
+    minQty: numeric("min_qty", { precision: 15, scale: 3 }).notNull().default("1"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_price_list_item").on(t.priceListId, t.itemId),
+    index("idx_price_list_lines_price_list").on(t.priceListId),
+    index("idx_price_list_lines_item").on(t.itemId),
+    index("idx_price_list_lines_type").on(t.type),
+    index("idx_price_list_lines_supplier").on(t.supplierId),
+    index("idx_price_list_lines_customer").on(t.customerId),
+  ]
+);
+
 export const stockBalances = pgTable(
   "stock_balances",
   {
@@ -360,7 +464,6 @@ export const items = pgTable("items", {
   alternativeCode: text("alternative_code"),
   uomQty: numeric("uom_qty", { precision: 15, scale: 3 }),
   description: text("description"),
-  standardCost: numeric("standard_cost", { precision: 15, scale: 2 }),
   valuationRate: numeric("valuation_rate", { precision: 15, scale: 2 }).notNull().default("0"),
   isActive: boolean("is_active").notNull().default(true),
   isFinishGood: boolean("is_finish_good").notNull().default(false),
@@ -801,6 +904,16 @@ export const purchaseOrders = pgTable(
     expectedDate: date("expected_date"),
     status: text("status", { enum: docStatuses }).notNull().default("DRAFT"),
     notes: text("notes"),
+    department: text("department"),
+    costCenter: text("cost_center"),
+    paymentTerms: text("payment_terms"),
+    currency: text("currency").notNull().default("IDR"),
+    exchangeRate: numeric("exchange_rate", { precision: 15, scale: 6 }).notNull().default("1"),
+    allowEditOrderDate: boolean("allow_edit_order_date").notNull().default(false),
+    qcRequired: boolean("qc_required").notNull().default(true),
+    taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+    taxCategoryId: bigint("tax_category_id", { mode: "number" }).references(() => taxCategories.id, { onDelete: "set null" }),
+    priceListId: bigint("price_list_id", { mode: "number" }).references(() => priceLists.id, { onDelete: "set null" }),
     createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
     branchId: bigint("branch_id", { mode: "number" }).references(() => branches.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -812,6 +925,8 @@ export const purchaseOrders = pgTable(
     index("idx_purchase_orders_status").on(t.status),
     index("idx_purchase_orders_document_no").on(t.documentNo),
     index("idx_purchase_orders_public_id").on(t.publicId),
+    index("idx_purchase_orders_tax_category").on(t.taxCategoryId),
+    index("idx_purchase_orders_price_list").on(t.priceListId),
   ]
 );
 
@@ -831,6 +946,7 @@ export const purchaseOrderLines = pgTable(
       .references(() => uom.id),
     qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
+    discount: numeric("discount", { precision: 15, scale: 2 }).notNull().default("0"),
     batchNumber: text("batch_number"),
     note: text("note"),
     deliveryDate: date("delivery_date"),

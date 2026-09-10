@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { accessibleWarehouseIds } from "@/lib/permissions";
-import { formatDate, formatDateTime, formatNumber } from "@/lib/utils";
+import { formatDate, formatDateTime, formatNumber, formatQty } from "@/lib/utils";
 import { exportPdf, exportXlsx } from "@/lib/export";
 import { useStockLedger, useAllWarehouses, useItemsList } from "@/lib/api/query";
 import type { StockLedgerRow } from "@/types";
@@ -58,9 +58,9 @@ export default function StockLedgerPage() {
     { key: "itemName" as const, header: "Item Name" },
     { key: "warehouseName" as const, header: "Warehouse" },
     { key: "unit" as const, header: "UOM" },
-    { key: "qtyIn" as const, header: "In", format: (v: unknown) => formatNumber(Number(v)) },
-    { key: "qtyOut" as const, header: "Out", format: (v: unknown) => formatNumber(Number(v)) },
-    { key: "qtyBalance" as const, header: "Balance", format: (v: unknown) => formatNumber(Number(v)) },
+    { key: "qtyIn" as const, header: "In", format: (v: unknown) => formatQty(v as any) },
+    { key: "qtyOut" as const, header: "Out", format: (v: unknown) => formatQty(v as any) },
+    { key: "qtyBalance" as const, header: "Balance", format: (v: unknown) => formatQty(v as any) },
     { key: "valuationRate" as const, header: "Valuation Rate", format: (v: unknown) => `Rp ${formatNumber(Number(v))}` },
     { key: "stockValue" as const, header: "Stock Value", format: (v: unknown) => `Rp ${formatNumber(Number(v))}` },
     { key: "transactionId" as const, header: "Movement No" },
@@ -155,7 +155,7 @@ export default function StockLedgerPage() {
       sortValue: (r) => r.qtyIn,
       cell: (r) => (
         <span className="text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
-          {r.qtyIn > 0 ? `+${formatNumber(r.qtyIn)}` : "—"}
+          {r.qtyIn > 0 ? `+${formatQty(r.qtyIn)}` : "—"}
         </span>
       ),
     },
@@ -166,7 +166,7 @@ export default function StockLedgerPage() {
       sortValue: (r) => r.qtyOut,
       cell: (r) => (
         <span className="text-xs font-medium tabular-nums text-destructive">
-          {r.qtyOut > 0 ? `−${formatNumber(r.qtyOut)}` : "—"}
+          {r.qtyOut > 0 ? `−${formatQty(r.qtyOut)}` : "—"}
         </span>
       ),
     },
@@ -177,7 +177,7 @@ export default function StockLedgerPage() {
       sortValue: (r) => r.qtyBalance,
       cell: (r) => (
         <span className="text-xs font-semibold tabular-nums">
-          {formatNumber(r.qtyBalance)}
+          {formatQty(r.qtyBalance)}
         </span>
       ),
     },

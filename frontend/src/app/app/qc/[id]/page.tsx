@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Pencil, X } from "lucide-react";
-import { useQcInspection, useSubmitQcInspection, useCancelQcInspection, useRemoveQcInspection, useUpdateQcInspection, useReceiving, useAllWarehouses, useSuppliers, usePurchaseOrders, useQcParameters } from "@/lib/api/query";
+import { useQcInspection, useSubmitQcInspection, useCancelQcInspection, useRemoveQcInspection, useUpdateQcInspection, useReceiving, useSuppliers, usePurchaseOrders, useQcParameters } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { DocMenu } from "@/components/ui/doc-menu";
@@ -12,7 +12,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useErrorToast } from "@/hooks/use-error-toast";
-import { formatId } from "@/lib/utils";
+import { formatId, formatNumber } from "@/lib/utils";
 import { useItemsList } from "@/lib/api/query";
 
 function todayISO() {
@@ -24,7 +24,6 @@ export default function QcDetailPage() {
   const navigate = useNavigate();
   const { data: qc, isLoading } = useQcInspection(id) as any;
   const { data: receiving } = useReceiving(qc?.receivingId) as any;
-  const { data: warehouses = [] } = useAllWarehouses();
   const { data: items = [] } = useItemsList();
   const { data: suppliers = [] } = useSuppliers();
   const { data: pos = [] } = usePurchaseOrders() as any;
@@ -102,8 +101,6 @@ export default function QcDetailPage() {
   const receivingDocNo = (receiving as any)?.documentNo ?? (receiving ? formatId((receiving as any).id) : formatId(qc?.receivingId));
   const supplierIdForReceiving = (receiving as any)?.supplierId ?? (qc as any)?.supplierId ?? (pos.find((p: any) => p.id === (receiving as any)?.purchaseOrderId) as any)?.supplierId;
   const supplierName = suppliers.find((s) => s.id === supplierIdForReceiving)?.name ?? "—";
-  const warehouseIdForDisplay = (qc as any)?.warehouseId ?? (receiving as any)?.warehouseId ?? "";
-  const warehouseName = warehouses.find((w) => w.id === warehouseIdForDisplay)?.name ?? "—";
   const displayPostingDate = editing ? editPostingDate : (qc.inspectionDate?.slice(0, 10) ?? todayISO());
 
   const hasAnyReject = editing ? editQtyReject.some((v) => Number(v) > 0) : (qc.lines ?? []).some((l: any) => Number(l.qtyRejected) > 0);
@@ -140,10 +137,7 @@ export default function QcDetailPage() {
               <label className="text-sm font-medium leading-none">Supplier Name</label>
               <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{supplierName}</div>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium leading-none">Target Warehouse</label>
-              <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{warehouseName}</div>
-            </div>
+            <div aria-hidden="true" />
             <div className="flex flex-col gap-1.5">
               <label className="mb-1.5 block text-sm font-medium">Notes</label>
               <Textarea value={editing ? formNotes : qc.notes ?? ""} onChange={(e)=>setFormNotes(e.target.value)} disabled={!editing} placeholder="—" />
@@ -177,10 +171,10 @@ export default function QcDetailPage() {
                           {editing ? (
                             <Input type="number" min={0} value={qtyReject} onChange={(e)=> { const v=e.target.value; setEditQtyReject(prev=>{ const c=[...prev]; c[idx]=v; return c; }); }} className="h-8 text-right" />
                           ) : (
-                            <span className="tabular-nums text-destructive">{rl.qtyRejected ?? "0"}</span>
+                            <span className="tabular-nums text-destructive">{formatNumber(rl.qtyRejected ?? "0")}</span>
                           )}
                         </TableCell>
-                        <TableCell className="px-3 text-right font-medium text-emerald-700">{qtyAccept}</TableCell>
+                        <TableCell className="px-3 text-right font-medium text-emerald-700">{formatNumber(qtyAccept)}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -227,6 +221,7 @@ export default function QcDetailPage() {
                             {editing ? (
                               <SearchableSelect
                                 placeholder="Pilih parameter..."
+                                columnTitle="Parameter"
                                 options={(qcParams as any[]).filter((x) => x.isActive).map((x) => ({ value: x.id, label: `${x.code} - ${x.name}` }))}
                                 value={row.parameterId}
                                 onChange={(v) => setEditParamRows(prev=> prev.map((r,i)=> i===rIdx ? {...r, parameterId:v} : r))}
@@ -239,7 +234,7 @@ export default function QcDetailPage() {
                             {editing ? (
                               <Input type="number" min={1} value={row.qty} onChange={(e)=> setEditParamRows(prev=> prev.map((r,i)=> i===rIdx ? {...r, qty:e.target.value} : r))} className="h-8 text-right" />
                             ) : (
-                              <span className="tabular-nums">{row.qty}</span>
+                              <span className="tabular-nums">{formatNumber(row.qty)}</span>
                             )}
                           </TableCell>
                           {editing && <TableCell className="px-3 text-center"><Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={()=> setEditParamRows(prev=> prev.filter((_,i)=>i!==rIdx))}>×</Button></TableCell>}

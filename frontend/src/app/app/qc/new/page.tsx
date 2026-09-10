@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Save } from "lucide-react";
-import { useReceivings, useReceiving, useCreateQcInspection, useSubmitQcInspection, useAllWarehouses, useQcParameters, useSuppliers, usePurchaseOrders, usePurchaseOrder } from "@/lib/api/query";
+import { ArrowLeft } from "lucide-react";
+import { useReceivings, useReceiving, useCreateQcInspection, useSubmitQcInspection, useQcParameters, useSuppliers, usePurchaseOrders } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { FormPage, FormSection, FormGrid, FormActions } from "@/components/ui/fo
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableInput } from "@/components/ui/table-input";
 import { useErrorToast } from "@/hooks/use-error-toast";
-import { formatId } from "@/lib/utils";
+import { formatId, formatNumber } from "@/lib/utils";
 import { useItemsList } from "@/lib/api/query";
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -23,7 +23,6 @@ export default function NewQcInspectionPage() {
   const [searchParams] = useSearchParams();
   const initialReceivingId = searchParams.get("receivingId") ?? "";
   const { data: receivings = [], isLoading: recvLoading } = useReceivings();
-  const { data: warehouses = [] } = useAllWarehouses();
   const { data: items = [] } = useItemsList();
   const { data: qcParams = [] } = useQcParameters();
   const { data: suppliers = [] } = useSuppliers();
@@ -157,7 +156,7 @@ export default function NewQcInspectionPage() {
             <SearchableSelect
               label="Document (No Receiving)"
               placeholder="Pilih receiving PENDING_QC..."
-              options={pendingReceivings.map((r: any) => ({ value: r.id, label: `${r.documentNo ?? formatId(r.id)} · ${r.status} · ${warehouses.find(w=>w.id===r.warehouseId)?.name ?? r.warehouseId}` }))}
+              options={pendingReceivings.map((r: any) => ({ value: r.id, label: `${r.documentNo ?? formatId(r.id)} · ${r.status}` }))}
               value={receivingId}
               onChange={(v) => setReceivingId(v)}
             />
@@ -213,7 +212,7 @@ export default function NewQcInspectionPage() {
                             <TableCell className="p-0 border-r border-border">
                               <TableInput value={qcQtyReject[idx] ?? "0"} onChange={(v) => setQcQtyReject(prev=>{ const c=[...prev]; c[idx]=v; return c; })} columnTitle="Qty Reject" isNumeric />
                             </TableCell>
-                            <TableCell className="px-3 text-right font-medium text-emerald-700">{accepted}</TableCell>
+                            <TableCell className="px-3 text-right font-medium text-emerald-700">{formatNumber(accepted)}</TableCell>
                           </TableRow>
                         );
                       })}
@@ -251,6 +250,7 @@ export default function NewQcInspectionPage() {
                                 <TableCell className="p-0 border-r border-border">
                                   <SearchableSelect
                                   table
+                                  columnTitle="Parameter"
                                   placeholder="Pilih parameter..."
                                     options={qcParams.filter((x) => x.isActive).map((x) => ({ value: x.id, label: `${x.code} - ${x.name}` }))}
                                     value={row.parameterId}
@@ -288,8 +288,8 @@ export default function NewQcInspectionPage() {
 
         <FormActions>
           <Button variant="ghost" onClick={() => navigate("/app/qc")}><ArrowLeft size={15} strokeWidth={2}/>Back</Button>
-          <Button variant="outline" onClick={onSaveDraft} disabled={create.isPending || submitQc.isPending}><Save size={15} strokeWidth={2}/>{create.isPending ? "Menyimpan..." : "Save Draft"}</Button>
-          <Button variant="primary" onClick={onSaveSubmit} disabled={create.isPending || submitQc.isPending}><Save size={15} strokeWidth={2}/>{create.isPending||submitQc.isPending ? "Menyimpan..." : "Save & Submit"}</Button>
+          <Button variant="outline" onClick={onSaveDraft} disabled={create.isPending || submitQc.isPending}>{create.isPending ? "Menyimpan..." : "Save Draft"}</Button>
+          <Button variant="primary" onClick={onSaveSubmit} disabled={create.isPending || submitQc.isPending}>{create.isPending||submitQc.isPending ? "Menyimpan..." : "Save & Submit"}</Button>
         </FormActions>
       </FormPage>
     </RoleGuard>
