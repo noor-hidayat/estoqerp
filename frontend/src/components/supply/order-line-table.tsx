@@ -1,4 +1,4 @@
-import { Plus, Check } from "lucide-react";
+import { Plus, Check, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useItemsList, useUoms, useLastPurchasePrices, usePriceListLines } from "@/lib/api/query";
@@ -467,15 +467,31 @@ export function OrderLineTable({
         </Table>
       </div>
       <div className="border-t border-border p-3">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1 px-2.5 text-xs"
-          onClick={addRow}
-        >
-          <Plus size={13} strokeWidth={2} />
-          Add Row
-        </Button>
+        {selected.size > 0 ? (
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-7 gap-1 px-2.5 text-xs"
+            onClick={() => {
+              const next = effectiveValue.filter((_, i) => !selected.has(i));
+              onChange(next.length ? next : [{ ...emptyOrderLine(), deliveryDate: headerDeliveryDate ?? "" }]);
+              setSelected(new Set());
+            }}
+          >
+            <Trash2 size={13} strokeWidth={2} />
+            Delete
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 px-2.5 text-xs"
+            onClick={addRow}
+          >
+            <Plus size={13} strokeWidth={2} />
+            Add Row
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -1,0 +1,1 @@
+ALTER TABLE "purchase_orders" ADD COLUMN "global_discount_percent" numeric(5, 2) DEFAULT '0' NOT NULL;

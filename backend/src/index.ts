@@ -20,6 +20,8 @@ import { supplyChainRouter } from "./routes/supply-chain";
 import { documentTypesRouter, documentSeriesRouter } from "./routes/document-types";
 import { companySettingsRouter } from "./routes/company-settings";
 import { exchangeRouter } from "./routes/exchange";
+import { workflowsRouter } from "./routes/workflows";
+import { userSignaturesRouter } from "./routes/user-signatures";
 
 const app = express();
 
@@ -51,6 +53,8 @@ app.use("/api/ai", aiRouter);
 app.use("/api", companySettingsRouter);
 app.use("/api", exchangeRouter);
 app.use("/api", supplyChainRouter);
+app.use("/api", workflowsRouter);
+app.use("/api", userSignaturesRouter);
 app.use("/api", crudRouter);
 
 app.use((_req, res) => {

@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Coins, ChevronDown, Briefcase } from "lucide-react";
+import { Coins, ChevronDown, Briefcase, X, Check, Trash2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
 import {
   useSuppliers,
   useBranches,
@@ -11,6 +13,7 @@ import {
   useCompanySettings,
   useExchangeRate,
   useCreatePurchaseOrder,
+  useWorkflows,
 } from "@/lib/api/query";
 import { useSession } from "@/lib/session";
 import { RoleGuard } from "@/components/ui/role-guard";
@@ -24,6 +27,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
 import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableInput } from "@/components/ui/table-input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatNumber } from "@/lib/utils";
@@ -37,6 +43,145 @@ function sym(cur?: string | null): string {
   return CURRENCY_SYMBOLS[cur.toUpperCase()] ?? cur.toUpperCase();
 }
 
+function ChargeTypeSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const options = [
+    { value: "freight", label: "Freight" },
+    { value: "handling", label: "Handling" },
+    { value: "other", label: "Other" },
+  ];
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [highlight, setHighlight] = useState(0);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
+  const selected = options.find((o) => o.value === value);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? options.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q)) : options;
+  }, [query]);
+  useEffect(() => setHighlight(0), [filtered]);
+  useEffect(() => {
+    if (!open) return;
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${highlight}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [highlight, open]);
+  const openList = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setCoords({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    setOpen(true);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onScroll = () => setOpen(false);
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open]);
+  const pick = (o: { value: string; label: string }) => {
+    onChange(o.value);
+    setQuery("");
+    setOpen(false);
+  };
+  return (
+    <div ref={wrapRef} className="relative min-w-[100px]">
+      <input
+        ref={inputRef}
+        type="text"
+        value={open ? query : (selected?.label ?? value ?? "")}
+        placeholder="Type..."
+        onFocus={() => {
+          openList();
+          setQuery("");
+        }}
+        onChange={(e) => {
+          const v = e.target.value;
+          setQuery(v);
+          onChange(v.toLowerCase());
+          if (!open) openList();
+        }}
+        onKeyDown={(e) => {
+          if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+            e.preventDefault();
+            openList();
+            return;
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHighlight((h) => Math.min(h + 1, filtered.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlight((h) => Math.max(h - 1, 0));
+          } else if (e.key === "Enter") {
+            const match = filtered[highlight];
+            if (match && open) {
+              e.preventDefault();
+              pick(match);
+            }
+          } else if (e.key === "Escape") setOpen(false);
+        }}
+        onBlur={() => {
+          if (query && !selected) {
+            onChange(query.toLowerCase());
+          }
+        }}
+        className="h-8 w-full truncate border-none bg-transparent px-1 text-left text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0"
+      />
+      {open &&
+        coords &&
+        createPortal(
+          <div
+            className="fixed z-50 overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+            style={{ top: coords.top, left: coords.left, width: coords.width }}
+          >
+            <div ref={listRef} className="max-h-48 overflow-y-auto p-1">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-2.5 text-xs text-muted-foreground">No results — press Enter to use &quot;{query}&quot;</p>
+              ) : (
+                filtered.map((o, i) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    data-idx={i}
+                    onMouseEnter={() => setHighlight(i)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      pick(o);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-xs transition-colors hover:bg-muted",
+                      i === highlight && "bg-muted",
+                      o.value === value && "text-primary"
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                    {o.value === value && <Check size={13} strokeWidth={2.5} className="shrink-0 text-primary" />}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
 export default function NewPurchaseOrderPage() {
   const navigate = useNavigate();
   const { user } = useSession();
@@ -47,9 +192,15 @@ export default function NewPurchaseOrderPage() {
   const { data: taxCategories = [] } = useTaxCategories();
   const { data: priceLists = [] } = usePriceLists();
   const { data: company } = useCompanySettings();
+  const { data: workflows = [] } = useWorkflows();
+  const hasDefaultPO = useMemo(
+    () => (workflows as any[]).some((w) => String(w.documentType).toUpperCase() === "PO" && !!w.isDefault && w.isActive !== false),
+    [workflows]
+  );
   const create = useCreatePurchaseOrder();
   const [error, setError] = useState("");
   useErrorToast(error);
+  const [needApprovalManuallySet, setNeedApprovalManuallySet] = useState(false);
 
   const [form, setForm] = useState({
     supplierId: "",
@@ -66,6 +217,9 @@ export default function NewPurchaseOrderPage() {
     exchangeRate: "1",
     allowEditOrderDate: false,
     qcRequired: true,
+    needApproval: false,
+    globalDiscountPercent: "0",
+    additionalCharges: [] as { type: string; amount: string }[],
     taxRate: "0",
     taxCategoryId: "",
   });
@@ -78,12 +232,38 @@ export default function NewPurchaseOrderPage() {
   const [rateManuallyEdited, setRateManuallyEdited] = useState(false);
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [accountingOpen, setAccountingOpen] = useState(false);
+  const [chargesOpen, setChargesOpen] = useState(false);
+  const [selectedCharges, setSelectedCharges] = useState<Set<number>>(new Set());
+  const allChargesChecked = form.additionalCharges.length > 0 && selectedCharges.size === form.additionalCharges.length;
+  const someChargesChecked = selectedCharges.size > 0 && selectedCharges.size < form.additionalCharges.length;
+  const toggleAllCharges = (checked: boolean) => {
+    if (checked) setSelectedCharges(new Set(form.additionalCharges.map((_, i) => i)));
+    else setSelectedCharges(new Set());
+  };
+  const toggleCharge = (idx: number, checked: boolean) => {
+    const next = new Set(selectedCharges);
+    if (checked) next.add(idx);
+    else next.delete(idx);
+    setSelectedCharges(next);
+  };
+  const deleteSelectedCharges = () => {
+    setForm((f) => ({ ...f, additionalCharges: f.additionalCharges.filter((_, i) => !selectedCharges.has(i)) }));
+    setSelectedCharges(new Set());
+  };
 
   useEffect(() => {
     if (!currencyManuallySet && !form.currency && defaultCurrency) {
       setForm((f) => (f.currency ? f : { ...f, currency: defaultCurrency }));
     }
   }, [defaultCurrency, form.currency, currencyManuallySet]);
+
+  // Need Approval default true jika ada workflow PO yang isDefault
+  useEffect(() => {
+    if (needApprovalManuallySet) return;
+    // workflows already fetched (empty array means no default)
+    const should = hasDefaultPO;
+    setForm((f) => (f.needApproval === should ? f : { ...f, needApproval: should }));
+  }, [hasDefaultPO, needApprovalManuallySet]);
 
   // auto-select first supplier/warehouse if hidden (fallback biar submit gak error)
   useEffect(() => {
@@ -116,6 +296,7 @@ export default function NewPurchaseOrderPage() {
 
   const resetForm = () => {
     if (!confirm("Hapus semua isian form ini?")) return;
+    setNeedApprovalManuallySet(false);
     setForm({
       supplierId: "",
       warehouseId: "",
@@ -131,6 +312,9 @@ export default function NewPurchaseOrderPage() {
       exchangeRate: "1",
       allowEditOrderDate: false,
       qcRequired: true,
+      needApproval: hasDefaultPO,
+      globalDiscountPercent: "0",
+      additionalCharges: [],
       taxRate: "0",
       taxCategoryId: "",
     });
@@ -162,6 +346,9 @@ export default function NewPurchaseOrderPage() {
         exchangeRate: form.exchangeRate || "1",
         allowEditOrderDate: form.allowEditOrderDate,
         qcRequired: form.qcRequired,
+        needApproval: form.needApproval,
+        globalDiscountPercent: form.globalDiscountPercent || "0",
+        additionalCharges: form.additionalCharges,
         taxRate: form.taxRate || "0",
         taxCategoryId: form.taxCategoryId || null,
         lines: valid.map((l) => ({
@@ -183,12 +370,15 @@ export default function NewPurchaseOrderPage() {
 
   const subtotal = lines.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unitPrice || 0), 0);
   const discountTotal = lines.reduce((s, l) => s + Number(l.discount || 0), 0);
-  const taxable = Math.max(0, subtotal - discountTotal);
+  const globalDiscountPercentNum = Number(form.globalDiscountPercent || 0);
+  const globalDiscountAmount = subtotal * (globalDiscountPercentNum / 100);
+  const additionalChargesTotal = (form.additionalCharges ?? []).reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+  const taxable = Math.max(0, subtotal - discountTotal - globalDiscountAmount);
   const taxRateNum = Number(form.taxRate || 0);
   const selectedCat = taxCategories.find((c) => c.id === form.taxCategoryId) ?? null;
   const hasTax = !!form.taxCategoryId && taxRateNum > 0;
   const tax = hasTax ? taxable * (taxRateNum / 100) : 0;
-  const grandTotal = taxable + tax;
+  const grandTotal = taxable + tax + additionalChargesTotal;
   const totalQty = lines.reduce((s, l) => s + Number(l.qty || 0), 0);
   const totalAmount = lines.reduce((s, l) => {
     const qty = Number(l.qty || 0);
@@ -261,6 +451,16 @@ export default function NewPurchaseOrderPage() {
                   onCheckedChange={(v) => setForm({ ...form, qcRequired: v === true })}
                 />
                 QC Required
+              </label>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <Checkbox
+                  checked={form.needApproval}
+                  onCheckedChange={(v) => {
+                    setNeedApprovalManuallySet(true);
+                    setForm({ ...form, needApproval: v === true });
+                  }}
+                />
+                Need Approval
               </label>
             </div>
 
@@ -431,8 +631,109 @@ export default function NewPurchaseOrderPage() {
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <Input label="Total Quantity" value={formatNumber(totalQty)} disabled className="h-8 bg-zinc-100 text-sm" />
             <div className="hidden sm:block" aria-hidden="true" />
-            <Input label="Total Amount (IDR)" value={`Rp ${formatNumber(totalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
+            <Input label="Total (IDR)" value={`Rp ${formatNumber(totalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
           </div>
+          <Collapsible open={chargesOpen} onOpenChange={setChargesOpen} className="mt-6">
+            <CollapsibleTrigger asChild>
+              <button type="button" className="flex items-center gap-2 text-sm font-medium hover:text-primary">
+                <span>Additional Charges</span>
+                <ChevronDown size={14} className={`transition-transform ${chargesOpen ? "rotate-180" : ""}`} />
+                {additionalChargesTotal > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    • {sym(form.currency || baseCurrency)} {formatNumber(additionalChargesTotal)}
+                  </span>
+                )}
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3">
+              <div className="overflow-hidden rounded-lg border border-border">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[500px] table-fixed text-left text-[13px]">
+                    <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
+                      <TableRow className="border-border hover:bg-transparent divide-x divide-border">
+                        <TableHead className="w-8 px-2 text-center">
+                          <Checkbox
+                            checked={allChargesChecked ? true : someChargesChecked ? "indeterminate" : false}
+                            onCheckedChange={(v) => toggleAllCharges(!!v)}
+                            aria-label="select all charges"
+                          />
+                        </TableHead>
+                        <TableHead className="w-10 px-3 text-left">No.</TableHead>
+                        <TableHead className="w-1/2 px-3 text-left">Type</TableHead>
+                        <TableHead className="w-1/2 px-3 text-left">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="[&_tr]:border-border/70 divide-x divide-border">
+                      {form.additionalCharges.map((c: any, idx: number) => (
+                        <TableRow key={idx} className="border-border/70 hover:bg-transparent divide-x divide-border">
+                          <TableCell className="px-2 text-center">
+                            <Checkbox
+                              checked={selectedCharges.has(idx)}
+                              onCheckedChange={(v) => toggleCharge(idx, !!v)}
+                              aria-label={`select charge ${idx + 1}`}
+                            />
+                          </TableCell>
+                          <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
+                          <TableCell className="p-0 border-r border-border">
+                            <ChargeTypeSelect
+                              value={c.type}
+                              onChange={(v) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  additionalCharges: f.additionalCharges.map((x, i) => (i === idx ? { ...x, type: v } : x)),
+                                }))
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="p-0">
+                            <TableInput
+                              value={c.amount}
+                              onChange={(v) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  additionalCharges: f.additionalCharges.map((x, i) => (i === idx ? { ...x, amount: v } : x)),
+                                }))
+                              }
+                              columnTitle="Amount"
+                              isNumeric
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {form.additionalCharges.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={4} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                            No additional charges
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="border-t border-border p-2">
+                  {selectedCharges.size > 0 ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 gap-1 px-2.5 text-xs"
+                      onClick={deleteSelectedCharges}
+                    >
+                      <Trash2 size={13} /> Delete
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 px-2.5 text-xs"
+                      onClick={() => setForm((f) => ({ ...f, additionalCharges: [...f.additionalCharges, { type: "freight", amount: "" }] }))}
+                    >
+                      + Add Charge
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
           <div className="mt-6 grid gap-4 sm:grid-cols-3 sm:divide-x sm:divide-border border-t border-border pt-6">
             {/* Tax Category & Tax Rate stacked di kolom 1 (no 1), ukuran 1/3 kayak Total Quantity */}
             <div className="space-y-4 sm:pr-4">
@@ -468,40 +769,57 @@ export default function NewPurchaseOrderPage() {
                 />
               </div>
             </div>
-            <div className="hidden sm:block sm:px-4" aria-hidden="true" />
-            {/* Kanan bawah: hitungan clean kayak PDF - hanya tampil jika ada tax */}
-            {hasTax ? (
-              <div className="flex flex-col items-end sm:pl-8">
-                <div className="w-full max-w-[320px] space-y-2 py-2">
+            <div className="space-y-4 sm:px-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium leading-none">Discount (%)</label>
+                <Input
+                  value={form.globalDiscountPercent}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9.]/g, "");
+                    if (v === "" || (/^\d*\.?\d*$/.test(v) && Number(v) <= 100)) {
+                      setForm({ ...form, globalDiscountPercent: v });
+                    }
+                  }}
+                  placeholder="0"
+                  className="h-8 text-sm"
+                  inputMode="decimal"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col items-end sm:pl-8">
+              <div className="w-full max-w-[320px] space-y-2 py-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="font-medium tabular-nums">
+                    {sym(form.currency || baseCurrency)} {formatNumber(subtotal)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Discount</span>
+                  <span className="font-medium tabular-nums">
+                    - {sym(form.currency || baseCurrency)} {formatNumber(discountTotal + globalDiscountAmount)}
+                  </span>
+                </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Total Amount</span>
-                    <span className="font-medium tabular-nums">
-                      {sym(form.currency || baseCurrency)} {formatNumber(subtotal)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Discount</span>
-                    <span className="font-medium tabular-nums">
-                      {sym(form.currency || baseCurrency)} {formatNumber(discountTotal)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{selectedCat?.name ?? `Tax (${form.taxRate}%)`}</span>
+                    <span className="text-muted-foreground">{Number(form.taxRate || 0) === 0 ? "Tax 0%" : `Tax (${Math.round(Number(form.taxRate))}%)`}</span>
                     <span className="font-medium tabular-nums">
                       {sym(form.currency || baseCurrency)} {formatNumber(tax)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between border-t border-border pt-3 text-sm">
-                    <span className="font-semibold">Grand Total</span>
-                    <span className="font-bold tabular-nums">
-                      {sym(form.currency || baseCurrency)} {formatNumber(grandTotal)}
-                    </span>
-                  </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Additional Charges</span>
+                  <span className="font-medium tabular-nums">
+                    {sym(form.currency || baseCurrency)} {formatNumber(additionalChargesTotal)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-t border-border pt-3 text-sm">
+                  <span className="font-semibold">Grand Total</span>
+                  <span className="font-bold tabular-nums">
+                    {sym(form.currency || baseCurrency)} {formatNumber(grandTotal)}
+                  </span>
                 </div>
               </div>
-            ) : (
-              <div />
-            )}
+            </div>
           </div>
         </FormSection>
 

@@ -43,6 +43,9 @@ companySettingsRouter.get("/company-settings", async (req, res, next) => {
       companyCode: (row as any).companyCode,
       address: (row as any).address ?? null,
       taxId: (row as any).taxId ?? null,
+      phone: (row as any).phone ?? null,
+      email: (row as any).email ?? null,
+      website: (row as any).website ?? null,
       country: (row as any).country,
       baseCurrency: (row as any).baseCurrency,
       timezone: (row as any).timezone,
@@ -91,6 +94,16 @@ companySettingsRouter.put("/company-settings", async (req, res, next) => {
     }
     if (b.address !== undefined) patch.address = b.address ? String(b.address).trim() : null;
     if (b.taxId !== undefined) patch.taxId = b.taxId ? String(b.taxId).trim() : null;
+    if (b.phone !== undefined) patch.phone = b.phone ? String(b.phone).trim() : null;
+    if (b.email !== undefined) {
+      const v = b.email ? String(b.email).trim() : "";
+      if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+        res.status(400).json({ error: "Format email tidak valid." });
+        return;
+      }
+      patch.email = v || null;
+    }
+    if (b.website !== undefined) patch.website = b.website ? String(b.website).trim() : null;
     if (b.country !== undefined) {
       const v = String(b.country).trim();
       if (!VALID_COUNTRIES.includes(v)) {
@@ -161,6 +174,9 @@ companySettingsRouter.put("/company-settings", async (req, res, next) => {
       companyCode: (row as any).companyCode,
       address: (row as any).address ?? null,
       taxId: (row as any).taxId ?? null,
+      phone: (row as any).phone ?? null,
+      email: (row as any).email ?? null,
+      website: (row as any).website ?? null,
       country: (row as any).country,
       baseCurrency: (row as any).baseCurrency,
       timezone: (row as any).timezone,

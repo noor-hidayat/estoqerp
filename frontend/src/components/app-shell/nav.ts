@@ -254,6 +254,12 @@ export const NAV: NavGroup[] = [
     shared: true,
     items: [
       {
+        label: "My Account",
+        href: "/app/settings/account",
+        icon: "User",
+        menu: "account",
+      },
+      {
         label: "Settings",
         href: "/app/settings",
         icon: "Settings",
@@ -288,6 +294,12 @@ export const NAV: NavGroup[] = [
             href: "/app/settings/company",
             icon: "Building2",
             menu: "settings.company",
+          },
+          {
+            label: "Approval",
+            href: "/app/settings/workflows",
+            icon: "GitBranch",
+            menu: "settings.workflows",
           },
         ],
       },
@@ -617,9 +629,10 @@ export function navForPermissions(
       items: group.items
         .map((item) => ({
           ...item,
-          children: item.children?.filter((child) => canView(child.menu) && (skipWorkspaceFilter || menuAllowedForWorkspace(child.menu, workspaceId ?? null))),
+          children: item.children?.filter((child) => (child.menu === "account" || child.menu === "settings.account" || canView(child.menu)) && (skipWorkspaceFilter || menuAllowedForWorkspace(child.menu, workspaceId ?? null))),
         }))
         .filter((item) => {
+          if (item.menu === "account" || item.menu === "settings.account") return true;
           const wsOk = skipWorkspaceFilter || menuAllowedForWorkspace(item.menu, workspaceId ?? null) || (item.children?.length ?? 0) > 0;
           if (!wsOk && !isShared) return false;
           const visible = item.manage

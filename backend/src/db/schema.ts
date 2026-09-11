@@ -126,6 +126,24 @@ export const refreshTokens = pgTable("refresh_tokens", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const userSignatures = pgTable(
+  "user_signatures",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    userId: bigint("user_id", { mode: "number" })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    signatureData: text("signature_data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_user_signatures_user").on(t.userId),
+    index("idx_user_signatures_user").on(t.userId),
+  ]
+);
+
 // --- RBAC: Role custom + permission + akses entitas ---
 
 export const roles = pgTable("roles", {
@@ -273,6 +291,9 @@ export const companySettings = pgTable("company_settings", {
   companyCode: text("company_code").notNull().default("ESTOQ"),
   address: text("address"),
   taxId: text("tax_id"),
+  phone: text("phone"),
+  email: text("email"),
+  website: text("website"),
   country: text("country").notNull().default("Indonesia"),
   baseCurrency: text("base_currency").notNull().default("IDR"),
   timezone: text("timezone").notNull().default("Asia/Jakarta"),
@@ -849,7 +870,7 @@ export const opnameCountDetails = pgTable(
 
 // --- Supply Chain: master + dokumen (PO / SO / Goods Receipt=Inbound) ---
 
-export const docStatuses = ["DRAFT", "POSTED", "CANCELED"] as const;
+export const docStatuses = ["DRAFT", "POSTED", "CANCELED", "PENDING_APPROVAL", "APPROVED", "REJECTED"] as const;
 export type DocStatus = (typeof docStatuses)[number];
 
 export const receivingStatuses = ["DRAFT", "PENDING_QC", "COMPLETED", "CANCELED", "POSTED"] as const;
@@ -911,6 +932,17 @@ export const purchaseOrders = pgTable(
     exchangeRate: numeric("exchange_rate", { precision: 15, scale: 6 }).notNull().default("1"),
     allowEditOrderDate: boolean("allow_edit_order_date").notNull().default(false),
     qcRequired: boolean("qc_required").notNull().default(true),
+    needApproval: boolean("need_approval").notNull().default(false),
+    currentApprovalLevel: integer("current_approval_level").notNull().default(0),
+    approvalWorkflowId: bigint("approval_workflow_id", { mode: "number" }),
+    preparedSignature: text("prepared_signature"),
+    preparedSignedAt: timestamp("prepared_signed_at", { withTimezone: true }),
+    preparedBy: bigint("prepared_by", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
+    approvedSignature: text("approved_signature"),
+    approvedSignedAt: timestamp("approved_signed_at", { withTimezone: true }),
+    approvedBy: bigint("approved_by", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
+    globalDiscountPercent: numeric("global_discount_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+    additionalCharges: jsonb("additional_charges").$type<{ type: string; amount: string }[]>().notNull().default([]),
     taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull().default("0"),
     taxCategoryId: bigint("tax_category_id", { mode: "number" }).references(() => taxCategories.id, { onDelete: "set null" }),
     priceListId: bigint("price_list_id", { mode: "number" }).references(() => priceLists.id, { onDelete: "set null" }),
@@ -1259,4 +1291,118 @@ export const deliveryLines = pgTable(
     note: text("note"),
   },
   (t) => [index("idx_dll_delivery").on(t.deliveryId)]
+);
+
+export const workflowStatuses = ["DRAFT", "ACTIVE"] as const;
+export type WorkflowStatus = (typeof workflowStatuses)[number];
+
+// ---------------------------------------------------------------------------
+// Workflow Engine — generic untuk PO, SO, GR, dll (setup custom states & transitions)
+// ---------------------------------------------------------------------------
+export const workflows = pgTable(
+  "workflows",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    name: text("name").notNull(),
+    documentType: text("document_type").notNull(), // PO, SO, GR, etc.
+    status: text("status", { enum: workflowStatuses }).notNull().default("DRAFT"),
+    isActive: boolean("is_active").notNull().default(true),
+    isDefault: boolean("is_default").notNull().default(false),
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_workflows_document_type").on(t.documentType), index("idx_workflows_status").on(t.status)]
+);
+
+export const workflowStates = pgTable(
+  "workflow_states",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    workflowId: bigint("workflow_id", { mode: "number" })
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("neutral"), // neutral, success, warning, destructive
+    type: text("type", { enum: ["initial", "intermediate", "final", "rejected"] }).notNull().default("intermediate"),
+    orderNo: integer("order_no").notNull().default(0),
+    requiresSignature: boolean("requires_signature").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_workflow_states_workflow").on(t.workflowId),
+    uniqueIndex("uq_workflow_states_workflow_code").on(t.workflowId, t.code),
+  ]
+);
+
+export const workflowTransitions = pgTable(
+  "workflow_transitions",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    workflowId: bigint("workflow_id", { mode: "number" })
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    fromStateId: bigint("from_state_id", { mode: "number" }).references(() => workflowStates.id, { onDelete: "set null" }),
+    toStateId: bigint("to_state_id", { mode: "number" })
+      .notNull()
+      .references(() => workflowStates.id, { onDelete: "cascade" }),
+    trigger: text("trigger", { enum: ["submit", "approve", "reject", "cancel", "custom"] }).notNull().default("approve"),
+    allowedRoleIds: jsonb("allowed_role_ids").$type<string[]>().notNull().default([]), // publicId array
+    condition: jsonb("condition").$type<{ minAmount?: number; maxAmount?: number } | null>(),
+    requiresComment: boolean("requires_comment").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_workflow_transitions_workflow").on(t.workflowId),
+    index("idx_workflow_transitions_from").on(t.fromStateId),
+    index("idx_workflow_transitions_to").on(t.toStateId),
+  ]
+);
+
+export const workflowInstances = pgTable(
+  "workflow_instances",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    workflowId: bigint("workflow_id", { mode: "number" })
+      .notNull()
+      .references(() => workflows.id),
+    documentType: text("document_type").notNull(),
+    documentId: bigint("document_id", { mode: "number" }).notNull(),
+    currentStateId: bigint("current_state_id", { mode: "number" }).references(() => workflowStates.id),
+    status: text("status", { enum: ["active", "completed", "rejected"] }).notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_workflow_instances_workflow").on(t.workflowId),
+    index("idx_workflow_instances_document").on(t.documentType, t.documentId),
+  ]
+);
+
+export const workflowLogs = pgTable(
+  "workflow_logs",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    instanceId: bigint("instance_id", { mode: "number" })
+      .notNull()
+      .references(() => workflowInstances.id, { onDelete: "cascade" }),
+    fromStateId: bigint("from_state_id", { mode: "number" }).references(() => workflowStates.id),
+    toStateId: bigint("to_state_id", { mode: "number" }).references(() => workflowStates.id),
+    transitionId: bigint("transition_id", { mode: "number" }).references(() => workflowTransitions.id),
+    actorUserId: bigint("actor_user_id", { mode: "number" }).references(() => users.id),
+    actorRole: text("actor_role"),
+    comment: text("comment"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_workflow_logs_instance").on(t.instanceId)]
 );

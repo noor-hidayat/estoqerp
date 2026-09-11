@@ -13,7 +13,13 @@ import {
 
 export const supplyChainRouter = Router();
 
-type DocStatus = "DRAFT" | "POSTED" | "CANCELED";
+// Helper: support both PUT and PATCH for same handler (frontend uses PATCH, legacy may use PUT)
+const putAndPatch = (path: string, ...handlers: any[]) => {
+  (supplyChainRouter as any).put(path, ...handlers);
+  (supplyChainRouter as any).patch(path, ...handlers);
+};
+
+type DocStatus = "DRAFT" | "POSTED" | "CANCELED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
 
 function isUuid(v: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -142,9 +148,58 @@ supplyChainRouter.post("/purchase-orders", async (req, res, next) => {
       priceListId = await resolveInternalId((s as any).priceLists, String(b.priceListId));
       if (!priceListId) return res.status(400).json({ error: "priceListId tidak valid." });
     }
+    let globalDiscountPercent = "0";
+    if (b.globalDiscountPercent !== undefined && b.globalDiscountPercent !== null && String(b.globalDiscountPercent).trim() !== "") {
+      const v = Number(b.globalDiscountPercent);
+      if (!Number.isFinite(v) || v < 0 || v > 100) return res.status(400).json({ error: "globalDiscountPercent harus 0-100." });
+      globalDiscountPercent = String(v);
+    }
+    let additionalCharges: { type: string; amount: string }[] = [];
+    if (Array.isArray(b.additionalCharges)) {
+      const allowed = new Set(["freight", "handling", "other"]);
+      for (const c of b.additionalCharges) {
+        const t = String(c.type ?? "").trim().toLowerCase();
+        if (!allowed.has(t)) return res.status(400).json({ error: `additionalCharges type harus freight, handling, atau other.` });
+        const a = Number(c.amount);
+        if (!Number.isFinite(a) || a < 0) return res.status(400).json({ error: "additionalCharges amount harus >=0." });
+        additionalCharges.push({ type: t, amount: String(a) });
+      }
+    }
     const seriesIdRaw = b.seriesId ?? b.seriesCode ?? null;
     let seriesId: number | null = null;
     if (seriesIdRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesIdRaw));
+    // Determine needApproval: default true jika ada workflow PO isDefault+isActive, else false (bisa di-override client)
+    let needApproval: boolean;
+    if (b.needApproval !== undefined) needApproval = !!b.needApproval;
+    else {
+      const [def] = await db
+        .select({ id: s.workflows.id })
+        .from(s.workflows)
+        .where(and(eq(s.workflows.documentType, "PO"), eq(s.workflows.isDefault, true), eq(s.workflows.isActive, true)))
+        .limit(1);
+      needApproval = !!def;
+    }
+    // Prepared signature snapshot per account (jika ada) — resolve via publicId
+    const actorPublicIdForPrep = (req as any).user?.id ?? null;
+    let actorInternalIdForPrep: number | null = null;
+    if (actorPublicIdForPrep) {
+      const [u] = await db.select({ id: s.users.id }).from(s.users).where(eq(s.users.publicId, actorPublicIdForPrep)).limit(1);
+      actorInternalIdForPrep = u?.id ?? null;
+    }
+    let preparedSignature: string | null = null;
+    let preparedSignedAt: Date | null = null;
+    let preparedBy: number | null = null;
+    if (actorInternalIdForPrep) {
+      const [sig] = await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalIdForPrep)).limit(1);
+      if (sig?.signatureData) {
+        preparedSignature = sig.signatureData;
+        preparedSignedAt = new Date();
+        preparedBy = actorInternalIdForPrep;
+      } else {
+        preparedBy = actorInternalIdForPrep;
+        // tetap set preparedBy walau signature kosong, untuk tracking
+      }
+    }
     // generate documentNo at DRAFT
     const { documentNo, seriesId: resolvedSeriesId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "PO", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.orderDate ? new Date(b.orderDate) : new Date() });
@@ -164,6 +219,12 @@ supplyChainRouter.post("/purchase-orders", async (req, res, next) => {
         exchangeRate: b.exchangeRate != null ? String(b.exchangeRate) : "1",
         allowEditOrderDate: b.allowEditOrderDate ?? false,
         qcRequired: b.qcRequired ?? true,
+        needApproval,
+        preparedSignature,
+        preparedSignedAt,
+        preparedBy,
+        globalDiscountPercent,
+        additionalCharges,
         taxRate: resolvedTaxRate ?? (b.taxRate != null ? String(b.taxRate) : "0"),
         taxCategoryId,
         priceListId,
@@ -210,6 +271,11 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
       exchangeRate: (s as any).purchaseOrders.exchangeRate,
       allowEditOrderDate: s.purchaseOrders.allowEditOrderDate,
       qcRequired: s.purchaseOrders.qcRequired,
+      needApproval: (s.purchaseOrders as any).needApproval,
+      currentApprovalLevel: (s.purchaseOrders as any).currentApprovalLevel,
+      approvalWorkflowId: (s.purchaseOrders as any).approvalWorkflowId,
+      globalDiscountPercent: (s.purchaseOrders as any).globalDiscountPercent,
+      additionalCharges: (s.purchaseOrders as any).additionalCharges,
       taxRate: s.purchaseOrders.taxRate,
       taxCategoryId: (s as any).purchaseOrders.taxCategoryId,
       priceListId: (s as any).purchaseOrders.priceListId,
@@ -238,6 +304,11 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
       exchangeRate: (r as any).exchangeRate ?? "1",
       allowEditOrderDate: (r as any).allowEditOrderDate ?? false,
       qcRequired: (r as any).qcRequired ?? true,
+      needApproval: (r as any).needApproval ?? false,
+      currentApprovalLevel: (r as any).currentApprovalLevel ?? 0,
+      approvalWorkflowId: (r as any).approvalWorkflowId ?? null,
+      globalDiscountPercent: (r as any).globalDiscountPercent ?? "0",
+      additionalCharges: (r as any).additionalCharges ?? [],
       taxRate: (r as any).taxRate ?? "0",
       taxCategoryId: (r as any).taxCategoryId ?? null,
       priceListId: (r as any).priceListId ?? null,
@@ -290,6 +361,14 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
       });
     } else {
       out.forEach((o:any)=> { if (o.priceListId) o.priceListId = String(o.priceListId); });
+    }
+    const wfIds = [...new Set(out.map((o:any)=> o.approvalWorkflowId).filter(Boolean))] as number[];
+    if (wfIds.length) {
+      const wfs = await db.select({ id: s.workflows.id, publicId: s.workflows.publicId }).from(s.workflows).where(inArray(s.workflows.id, wfIds));
+      const map = new Map(wfs.map((x:any)=> [x.id, x.publicId]));
+      out.forEach((o:any)=> { o.approvalWorkflowId = map.get(o.approvalWorkflowId) ?? (o.approvalWorkflowId ? String(o.approvalWorkflowId) : null); });
+    } else {
+      out.forEach((o:any)=> { if (o.approvalWorkflowId) o.approvalWorkflowId = String(o.approvalWorkflowId); });
     }
     res.json(out);
   } catch (e) { next(e); }
@@ -369,6 +448,49 @@ supplyChainRouter.get("/purchase-orders/:id", async (req, res, next) => {
       const [pl] = await db.select({ publicId: (s as any).priceLists.publicId, name: (s as any).priceLists.name }).from((s as any).priceLists).where(eq((s as any).priceLists.id, (row as any).priceListId)).limit(1);
       if (pl) { priceListPublicId = pl.publicId; priceListName = pl.name; }
     }
+    let approvalWorkflowPublicId: string | null = null;
+    if ((row as any).approvalWorkflowId) {
+      const [wf] = await db.select({ publicId: s.workflows.publicId }).from(s.workflows).where(eq(s.workflows.id, (row as any).approvalWorkflowId)).limit(1);
+      if (wf) approvalWorkflowPublicId = wf.publicId;
+    }
+    let preparedByPublicId: string | null = null;
+    let preparedByName: string | null = null;
+    let preparedByRole: string | null = null;
+    if ((row as any).preparedBy) {
+      const [u] = await db.select({ publicId: s.users.publicId, name: s.users.name, roleId: s.users.roleId }).from(s.users).where(eq(s.users.id, (row as any).preparedBy)).limit(1);
+      if (u) {
+        preparedByPublicId = u.publicId;
+        preparedByName = u.name;
+        if (u.roleId) {
+          const [r] = await db.select({ name: s.roles.name }).from(s.roles).where(eq(s.roles.id, u.roleId)).limit(1);
+          if (r) preparedByRole = r.name;
+        }
+      }
+    } else if ((row as any).createdBy) {
+      const [u] = await db.select({ publicId: s.users.publicId, name: s.users.name, roleId: s.users.roleId }).from(s.users).where(eq(s.users.id, (row as any).createdBy)).limit(1);
+      if (u) {
+        preparedByPublicId = u.publicId;
+        preparedByName = u.name;
+        if (u.roleId) {
+          const [r] = await db.select({ name: s.roles.name }).from(s.roles).where(eq(s.roles.id, u.roleId)).limit(1);
+          if (r) preparedByRole = r.name;
+        }
+      }
+    }
+    let approvedByPublicId: string | null = null;
+    let approvedByName: string | null = null;
+    let approvedByRole: string | null = null;
+    if ((row as any).approvedBy) {
+      const [u] = await db.select({ publicId: s.users.publicId, name: s.users.name, roleId: s.users.roleId }).from(s.users).where(eq(s.users.id, (row as any).approvedBy)).limit(1);
+      if (u) {
+        approvedByPublicId = u.publicId;
+        approvedByName = u.name;
+        if (u.roleId) {
+          const [r] = await db.select({ name: s.roles.name }).from(s.roles).where(eq(s.roles.id, u.roleId)).limit(1);
+          if (r) approvedByRole = r.name;
+        }
+      }
+    }
     res.json({
       id: row.publicId,
       publicId: row.publicId,
@@ -388,6 +510,21 @@ supplyChainRouter.get("/purchase-orders/:id", async (req, res, next) => {
       exchangeRate: (row as any).exchangeRate ?? "1",
       allowEditOrderDate: (row as any).allowEditOrderDate ?? false,
       qcRequired: (row as any).qcRequired ?? true,
+      needApproval: (row as any).needApproval ?? false,
+      currentApprovalLevel: (row as any).currentApprovalLevel ?? 0,
+      approvalWorkflowId: approvalWorkflowPublicId,
+      preparedSignature: (row as any).preparedSignature ?? null,
+      preparedSignedAt: (row as any).preparedSignedAt ?? null,
+      preparedBy: preparedByPublicId,
+      preparedByName,
+      preparedByRole,
+      approvedSignature: (row as any).approvedSignature ?? null,
+      approvedSignedAt: (row as any).approvedSignedAt ?? null,
+      approvedBy: approvedByPublicId,
+      approvedByName,
+      approvedByRole,
+      globalDiscountPercent: (row as any).globalDiscountPercent ?? "0",
+      additionalCharges: (row as any).additionalCharges ?? [],
       taxRate: (row as any).taxRate ?? "0",
       taxCategoryId: taxCategoryPublicId,
       taxCategoryName,
@@ -404,7 +541,7 @@ supplyChainRouter.get("/purchase-orders/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-supplyChainRouter.put("/purchase-orders/:id", async (req, res, next) => {
+putAndPatch("/purchase-orders/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -439,6 +576,30 @@ supplyChainRouter.put("/purchase-orders/:id", async (req, res, next) => {
     }
     if (b.allowEditOrderDate !== undefined) patch.allowEditOrderDate = !!b.allowEditOrderDate;
     if (b.qcRequired !== undefined) patch.qcRequired = !!b.qcRequired;
+    if (b.needApproval !== undefined) patch.needApproval = !!b.needApproval;
+    if (b.globalDiscountPercent !== undefined) {
+      const v = Number(b.globalDiscountPercent);
+      if (b.globalDiscountPercent === null || String(b.globalDiscountPercent).trim() === "") {
+        patch.globalDiscountPercent = "0";
+      } else if (!Number.isFinite(v) || v < 0 || v > 100) {
+        return res.status(400).json({ error: "globalDiscountPercent harus 0-100." });
+      } else {
+        patch.globalDiscountPercent = String(v);
+      }
+    }
+    if (b.additionalCharges !== undefined) {
+      if (!Array.isArray(b.additionalCharges)) return res.status(400).json({ error: "additionalCharges harus array." });
+      const allowed = new Set(["freight", "handling", "other"]);
+      const arr: { type: string; amount: string }[] = [];
+      for (const c of b.additionalCharges) {
+        const t = String(c.type ?? "").trim().toLowerCase();
+        if (!allowed.has(t)) return res.status(400).json({ error: `additionalCharges type harus freight, handling, atau other.` });
+        const a = Number(c.amount);
+        if (!Number.isFinite(a) || a < 0) return res.status(400).json({ error: "additionalCharges amount harus >=0." });
+        arr.push({ type: t, amount: String(a) });
+      }
+      patch.additionalCharges = arr;
+    }
     if (b.taxRate !== undefined) patch.taxRate = String(b.taxRate);
     if (b.taxCategoryId !== undefined) {
       if (b.taxCategoryId == null || String(b.taxCategoryId).trim() === "") {
@@ -485,10 +646,47 @@ supplyChainRouter.post("/purchase-orders/:id/post", async (req, res, next) => {
   try {
     const pid = String(req.params.id);
     let where: any = poWhere(pid);
-    const [cur] = await db.select({ id: s.purchaseOrders.id, status: s.purchaseOrders.status }).from(s.purchaseOrders).where(where).limit(1);
+    const [cur] = await db.select({ id: s.purchaseOrders.id, status: s.purchaseOrders.status, needApproval: (s.purchaseOrders as any).needApproval, currentApprovalLevel: (s.purchaseOrders as any).currentApprovalLevel, approvalWorkflowId: (s.purchaseOrders as any).approvalWorkflowId, preparedSignature: (s.purchaseOrders as any).preparedSignature, preparedBy: (s.purchaseOrders as any).preparedBy }).from(s.purchaseOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "PO dibatalkan tidak dapat diposting." });
-    await db.update(s.purchaseOrders).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+    if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya PO berstatus DRAFT yang dapat diposting." });
+    // ensure prepared signature snapshot if missing (per account) — resolve via publicId
+    const actorPublicId = (req as any).user?.id ?? null;
+    let actorInternalId: number | null = null;
+    if (actorPublicId) {
+      const [u] = await db.select({ id: s.users.id }).from(s.users).where(eq(s.users.publicId, actorPublicId)).limit(1);
+      actorInternalId = u?.id ?? null;
+    }
+    if (actorInternalId && !(cur as any).preparedSignature) {
+      const [sig] = await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1);
+      if (sig?.signatureData) {
+        await db.update(s.purchaseOrders).set({ preparedSignature: sig.signatureData, preparedSignedAt: new Date(), preparedBy: actorInternalId }).where(eq(s.purchaseOrders.id, cur.id));
+      } else if (actorInternalId) {
+        await db.update(s.purchaseOrders).set({ preparedBy: actorInternalId, preparedSignedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      }
+    }
+    const needApproval = !!(cur as any).needApproval;
+    if (!needApproval) {
+      await db.update(s.purchaseOrders).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      return res.json({ ok: true });
+    }
+    // needApproval true -> masuk alur approval
+    const [wf] = await db.select({ id: s.workflows.id }).from(s.workflows).where(and(eq(s.workflows.documentType, "PO"), eq(s.workflows.isDefault, true), eq(s.workflows.isActive, true))).limit(1);
+    if (!wf) {
+      // tidak ada workflow default -> langsung APPROVED
+      await db.update(s.purchaseOrders).set({ status: "APPROVED", currentApprovalLevel: 0, approvalWorkflowId: null, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      return res.json({ ok: true });
+    }
+    const states = await db.select({ id: s.workflowStates.id, orderNo: s.workflowStates.orderNo }).from(s.workflowStates).where(eq(s.workflowStates.workflowId, wf.id)).orderBy(s.workflowStates.orderNo);
+    const approvers = states.filter((st: any) => true); // semua state dianggap langkah approve, urut orderNo
+    // filter intermediate saja jika ada type, tapi fallback ke semua
+    const intermediate = await db.select().from(s.workflowStates).where(and(eq(s.workflowStates.workflowId, wf.id), eq(s.workflowStates.type as any, "intermediate"))).then((rows)=> rows.sort((a:any,b:any)=> a.orderNo - b.orderNo));
+    const levels = intermediate.length > 0 ? intermediate : states;
+    if (levels.length === 0) {
+      await db.update(s.purchaseOrders).set({ status: "APPROVED", currentApprovalLevel: 0, approvalWorkflowId: wf.id, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      return res.json({ ok: true });
+    }
+    await db.update(s.purchaseOrders).set({ status: "PENDING_APPROVAL", currentApprovalLevel: 1, approvalWorkflowId: wf.id, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -502,6 +700,75 @@ supplyChainRouter.post("/purchase-orders/:id/cancel", async (req, res, next) => 
     if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "PO sudah dibatalkan." });
     await db.update(s.purchaseOrders).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+supplyChainRouter.post("/purchase-orders/:id/approve", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = poWhere(pid);
+    const [cur] = await db.select({ id: s.purchaseOrders.id, status: s.purchaseOrders.status, needApproval: (s.purchaseOrders as any).needApproval, currentApprovalLevel: (s.purchaseOrders as any).currentApprovalLevel, approvalWorkflowId: (s.purchaseOrders as any).approvalWorkflowId }).from(s.purchaseOrders).where(where).limit(1);
+    if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
+    if (!(cur as any).needApproval) return res.status(400).json({ error: "PO ini tidak membutuhkan approval." });
+    if ((cur as any).status !== "PENDING_APPROVAL") return res.status(400).json({ error: "Hanya PO dengan status Pending Approval yang bisa di-approve." });
+    const actorPublicId = (req as any).user?.id ?? null;
+    let actorInternalId: number | null = null;
+    if (actorPublicId) {
+      const [u] = await db.select({ id: s.users.id }).from(s.users).where(eq(s.users.publicId, actorPublicId)).limit(1);
+      actorInternalId = u?.id ?? null;
+    }
+    const wfId = (cur as any).approvalWorkflowId;
+    let wf: any = null;
+    if (wfId) {
+      const [row] = await db.select({ id: s.workflows.id }).from(s.workflows).where(eq(s.workflows.id, wfId)).limit(1);
+      wf = row;
+    }
+    if (!wf) {
+      const [def] = await db.select({ id: s.workflows.id }).from(s.workflows).where(and(eq(s.workflows.documentType, "PO"), eq(s.workflows.isDefault, true), eq(s.workflows.isActive, true))).limit(1);
+      wf = def;
+    }
+    if (!wf) {
+      const [sig] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
+      await db.update(s.purchaseOrders).set({ status: "APPROVED", approvedSignature: sig?.signatureData ?? null, approvedSignedAt: sig ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      return res.json({ ok: true });
+    }
+    const intermediate = await db.select().from(s.workflowStates).where(and(eq(s.workflowStates.workflowId, wf.id), eq((s.workflowStates as any).type, "intermediate"))).then((rows:any)=> rows.sort((a:any,b:any)=> a.orderNo - b.orderNo));
+    const levels = intermediate.length > 0 ? intermediate : await db.select().from(s.workflowStates).where(eq(s.workflowStates.workflowId, wf.id)).then((rows:any)=> rows.sort((a:any,b:any)=> a.orderNo - b.orderNo));
+    const total = levels.length;
+    const current = Number((cur as any).currentApprovalLevel || 1);
+    const curState = levels[current - 1];
+    if (curState?.requiresSignature) {
+      if (!actorInternalId) return res.status(401).json({ error: "Tidak terautentikasi." });
+      const [sig] = await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1);
+      if (!sig?.signatureData) return res.status(400).json({ error: "Anda belum memiliki signature. Buat di Profile → Signature." });
+    }
+    if (total === 0) {
+      const [sig] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
+      await db.update(s.purchaseOrders).set({ status: "APPROVED", currentApprovalLevel: 0, approvedSignature: sig?.signatureData ?? null, approvedSignedAt: sig ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      return res.json({ ok: true });
+    }
+    const [sigRow] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
+    if (current >= total) {
+      await db.update(s.purchaseOrders).set({ status: "APPROVED", currentApprovalLevel: total, approvedSignature: sigRow?.signatureData ?? null, approvedSignedAt: sigRow ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+    } else {
+      await db.update(s.purchaseOrders).set({ status: "PENDING_APPROVAL", currentApprovalLevel: current + 1, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+    }
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+supplyChainRouter.post("/purchase-orders/:id/reject", async (req, res, next) => {
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  try {
+    const pid = String(req.params.id);
+    let where: any = poWhere(pid);
+    const [cur] = await db.select({ id: s.purchaseOrders.id, status: s.purchaseOrders.status, needApproval: (s.purchaseOrders as any).needApproval }).from(s.purchaseOrders).where(where).limit(1);
+    if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
+    if (!(cur as any).needApproval) return res.status(400).json({ error: "PO ini tidak membutuhkan approval." });
+    if ((cur as any).status !== "PENDING_APPROVAL") return res.status(400).json({ error: "Hanya PO dengan status Pending Approval yang bisa di-reject." });
+    await db.update(s.purchaseOrders).set({ status: "REJECTED", updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -627,7 +894,7 @@ supplyChainRouter.get("/sales-orders/:id", async (req, res, next) => {
     res.json({ ...row, id: row.publicId, _internalId: row.id, documentNo: row.documentNo, soNo: row.documentNo, lines: lines.map((l: any) => ({ ...l, id: l.publicId, _internalId: l.id })) });
   } catch (e) { next(e); }
 });
-supplyChainRouter.put("/sales-orders/:id", async (req, res, next) => {
+putAndPatch("/sales-orders/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.salesOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -773,7 +1040,7 @@ supplyChainRouter.get("/goods-receipts/:id", async (req, res, next) => {
     res.json({ ...row, id: row.publicId, _internalId: row.id, documentNo: row.documentNo, grNo: row.documentNo, lines: lines.map((l: any) => ({ ...l, id: l.publicId, _internalId: l.id })) });
   } catch (e) { next(e); }
 });
-supplyChainRouter.put("/goods-receipts/:id", async (req, res, next) => {
+putAndPatch("/goods-receipts/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.goodsReceipts", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -1000,7 +1267,7 @@ supplyChainRouter.get("/receivings/:id", async (req, res, next) => {
     res.json({ ...row, id: row.publicId, _internalId: row.id, documentNo: row.documentNo, rcvNo: row.documentNo, purchaseOrderId: purchaseOrderPublic, supplierId: supplierPublic, warehouseId: warehousePublic, lines: await mapReceivingLines(lines) });
   } catch (e) { next(e); }
 });
-supplyChainRouter.put("/receivings/:id", async (req, res, next) => {
+putAndPatch("/receivings/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -1052,7 +1319,22 @@ supplyChainRouter.post("/receivings/:id/post", async (req, res, next) => {
       });
       return res.json({ ok: true });
     }
-    // DRAFT → PENDING_QC via legacy post (alias submit)
+    // DRAFT → PENDING_QC atau langsung COMPLETED jika PO tidak butuh QC
+    let qcRequired = true;
+    if (rcv.purchaseOrderId) {
+      const [po] = await db.select({ qcRequired: s.purchaseOrders.qcRequired }).from(s.purchaseOrders).where(eq(s.purchaseOrders.id, rcv.purchaseOrderId)).limit(1);
+      if (po) qcRequired = (po as any).qcRequired ?? true;
+    }
+    if (!qcRequired) {
+      const lines = await receivingLines(db, rcv.id);
+      await db.transaction(async (tx) => {
+        for (const l of lines) {
+          await tx.update(s.receivingLines).set({ qtyAccepted: l.qty, qtyRejected: "0", rejectReason: null }).where(eq(s.receivingLines.id, l.id));
+        }
+        await tx.update(s.receivings).set({ status: "COMPLETED", qcInspectedAt: new Date(), qcInspectedBy: (req as any).user?.internalId ?? null, submittedAt: new Date(), submittedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
+      });
+      return res.json({ ok: true, qcSkipped: true });
+    }
     await db.update(s.receivings).set({ status: "PENDING_QC", submittedAt: new Date(), submittedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -1069,6 +1351,21 @@ supplyChainRouter.post("/receivings/:id/submit", async (req, res, next) => {
     if (!lines.length) return res.status(400).json({ error: "Receiving tanpa item tidak bisa di-submit." });
     for (const l of lines) {
       if (Number(l.qty) <= 0) return res.status(400).json({ error: "Qty Received harus > 0." });
+    }
+    // Jika PO tidak butuh QC → langsung COMPLETED tanpa PENDING_QC
+    let qcRequired = true;
+    if (rcv.purchaseOrderId) {
+      const [po] = await db.select({ qcRequired: s.purchaseOrders.qcRequired }).from(s.purchaseOrders).where(eq(s.purchaseOrders.id, rcv.purchaseOrderId)).limit(1);
+      if (po) qcRequired = (po as any).qcRequired ?? true;
+    }
+    if (!qcRequired) {
+      await db.transaction(async (tx) => {
+        for (const l of lines) {
+          await tx.update(s.receivingLines).set({ qtyAccepted: l.qty, qtyRejected: "0", rejectReason: null }).where(eq(s.receivingLines.id, l.id));
+        }
+        await tx.update(s.receivings).set({ status: "COMPLETED", qcInspectedAt: new Date(), qcInspectedBy: (req as any).user?.internalId ?? null, submittedAt: new Date(), submittedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
+      });
+      return res.json({ ok: true, qcSkipped: true });
     }
     await db.update(s.receivings).set({ status: "PENDING_QC", submittedAt: new Date(), submittedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
     res.json({ ok: true });
@@ -1386,7 +1683,7 @@ supplyChainRouter.get("/qc-inspections/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-supplyChainRouter.put("/qc-inspections/:id", async (req, res, next) => {
+putAndPatch("/qc-inspections/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -1483,7 +1780,7 @@ supplyChainRouter.post("/qc-parameters", async (req, res, next) => {
     res.status(201).json({ id: row.publicId, code: row.code });
   } catch (e) { next(e); }
 });
-supplyChainRouter.put("/qc-parameters/:id", async (req, res, next) => {
+putAndPatch("/qc-parameters/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -1588,7 +1885,7 @@ supplyChainRouter.get("/deliveries/:id", async (req, res, next) => {
     res.json({ ...row, id: row.publicId, _internalId: row.id, documentNo: row.documentNo, deliveryNo: row.documentNo, lines: lines.map((l: any) => ({ ...l, id: l.publicId, _internalId: l.id })) });
   } catch (e) { next(e); }
 });
-supplyChainRouter.put("/deliveries/:id", async (req, res, next) => {
+putAndPatch("/deliveries/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.deliveries", "manage"))) return;
   try {
     const pid = String(req.params.id);

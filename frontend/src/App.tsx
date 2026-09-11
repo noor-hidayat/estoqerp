@@ -72,11 +72,15 @@ const UsersPage = lazy(() => import("@/app/app/settings/users/page"));
 const NewUserPage = lazy(() => import("@/app/app/settings/users/new/page"));
 const EditUserPage = lazy(() => import("@/app/app/settings/users/[id]/page"));
 const RolesPage = lazy(() => import("@/app/app/settings/roles/page"));
+const WorkflowsPage = lazy(() => import("@/app/app/settings/workflows/page"));
+const NewWorkflowPage = lazy(() => import("@/app/app/settings/workflows/new/page"));
+const WorkflowDetailPage = lazy(() => import("@/app/app/settings/workflows/[id]/page"));
 const NewRolePage = lazy(() => import("@/app/app/settings/roles/new/page"));
 const EditRolePage = lazy(() => import("@/app/app/settings/roles/[id]/page"));
 const ImportDataPage = lazy(() => import("@/app/app/settings/import/page"));
 const AiSettingsPage = lazy(() => import("@/app/app/settings/ai/page"));
 const CompanySettingsPage = lazy(() => import("@/app/app/settings/company/page"));
+const AccountPage = lazy(() => import("@/app/app/settings/account/page"));
 const AiChatPage = lazy(() => import("@/app/app/ai/page"));
 const SuppliersPage = lazy(() => import("@/app/app/suppliers/page"));
 const CustomersPage = lazy(() => import("@/app/app/customers/page"));
@@ -217,9 +221,13 @@ export default function App() {
             <Route path="settings/roles" element={<LazyPage fallback={<TableSkeleton columns={6} filters={0} />}><RolesPage /></LazyPage>} />
             <Route path="settings/roles/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewRolePage /></LazyPage>} />
             <Route path="settings/roles/:id" element={<LazyPage fallback={<FormSkeleton fields={6} />}><EditRolePage /></LazyPage>} />
+            <Route path="settings/workflows" element={<LazyPage fallback={<TableSkeleton columns={6} filters={0} />}><WorkflowsPage /></LazyPage>} />
+            <Route path="settings/workflows/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewWorkflowPage /></LazyPage>} />
+            <Route path="settings/workflows/:id" element={<LazyPage fallback={<FormSkeleton fields={6} />}><WorkflowDetailPage /></LazyPage>} />
             <Route path="settings/import" element={<LazyPage fallback={<TableSkeleton columns={4} filters={0} />}><ImportDataPage /></LazyPage>} />
             <Route path="settings/ai" element={<LazyPage fallback={<FormSkeleton fields={6} />}><AiSettingsPage /></LazyPage>} />
             <Route path="settings/company" element={<LazyPage fallback={<FormSkeleton fields={6} />}><CompanySettingsPage /></LazyPage>} />
+            <Route path="settings/account" element={<LazyPage fallback={<FormSkeleton fields={4} />}><AccountPage /></LazyPage>} />
             <Route path="ai" element={<LazyPage fallback={<ChatSkeleton />}><AiChatPage /></LazyPage>} />
             <Route path="suppliers" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><SuppliersPage /></LazyPage>} />
             <Route path="customers" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><CustomersPage /></LazyPage>} />

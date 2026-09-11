@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
-import { X, Coins, ChevronDown, Briefcase, Printer } from "lucide-react";
+import { X, Coins, ChevronDown, Briefcase, Printer, ChevronsUpDown, PackageCheck, FileText, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   usePurchaseOrder,
   useSuppliers,
@@ -14,15 +15,26 @@ import {
   useExchangeRate,
   useUpdatePurchaseOrder,
   usePostPurchaseOrder,
+  useApprovePurchaseOrder,
+  useRejectPurchaseOrder,
   useCancelPurchaseOrder,
   useRemovePurchaseOrder,
   useCreateReceiptFromPo,
   useItemsList,
+  useWorkflows,
+  useWorkflowStates,
+  useUserSignature,
 } from "@/lib/api/query";
 import { useSession } from "@/lib/session";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { DocMenu } from "@/components/ui/doc-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
@@ -33,12 +45,165 @@ import { DocStatusBadge } from "@/components/supply/doc-status";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
 import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableInput } from "@/components/ui/table-input";
 import { useErrorToast } from "@/hooks/use-error-toast";
+import { createPortal } from "react-dom";
+import { useRef } from "react";
+import { Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { formatId, formatNumber } from "@/lib/utils";
 import type { PurchaseOrder } from "@/types";
 
+function ChargeTypeSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const options = [
+    { value: "freight", label: "Freight" },
+    { value: "handling", label: "Handling" },
+    { value: "other", label: "Other" },
+  ];
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [highlight, setHighlight] = useState(0);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
+  const selected = options.find((o) => o.value === value);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? options.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q)) : options;
+  }, [query]);
+  useEffect(() => setHighlight(0), [filtered]);
+  useEffect(() => {
+    if (!open) return;
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${highlight}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [highlight, open]);
+  const openList = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setCoords({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    setOpen(true);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onScroll = () => setOpen(false);
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open]);
+  const pick = (o: { value: string; label: string }) => {
+    onChange(o.value);
+    setQuery("");
+    setOpen(false);
+  };
+  return (
+    <div ref={wrapRef} className="relative min-w-[100px]">
+      <input
+        ref={inputRef}
+        type="text"
+        value={open ? query : (selected?.label ?? value ?? "")}
+        placeholder="Type..."
+        onFocus={() => {
+          openList();
+          setQuery("");
+        }}
+        onChange={(e) => {
+          const v = e.target.value;
+          setQuery(v);
+          // allow free typing, update value directly for free text
+          onChange(v.toLowerCase());
+          if (!open) openList();
+        }}
+        onKeyDown={(e) => {
+          if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+            e.preventDefault();
+            openList();
+            return;
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHighlight((h) => Math.min(h + 1, filtered.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlight((h) => Math.max(h - 1, 0));
+          } else if (e.key === "Enter") {
+            const match = filtered[highlight];
+            if (match && open) {
+              e.preventDefault();
+              pick(match);
+            }
+          } else if (e.key === "Escape") setOpen(false);
+        }}
+        onBlur={() => {
+          // keep typed value if not picking
+          if (query && !selected) {
+            onChange(query.toLowerCase());
+          }
+        }}
+        className="h-8 w-full truncate border-none bg-transparent px-1 text-left text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0"
+      />
+      {open &&
+        coords &&
+        createPortal(
+          <div
+            className="fixed z-50 overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+            style={{ top: coords.top, left: coords.left, width: coords.width }}
+          >
+            <div ref={listRef} className="max-h-48 overflow-y-auto p-1">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-2.5 text-xs text-muted-foreground">No results — press Enter to use &quot;{query}&quot;</p>
+              ) : (
+                filtered.map((o, i) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    data-idx={i}
+                    onMouseEnter={() => setHighlight(i)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      pick(o);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-xs transition-colors hover:bg-muted",
+                      i === highlight && "bg-muted",
+                      o.value === value && "text-primary"
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                    {o.value === value && <Check size={13} strokeWidth={2.5} className="shrink-0 text-primary" />}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+function formatDdMmmYyyy(dateStr?: string | null): string {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 const CURRENCY_SYMBOLS: Record<string, string> = { IDR: "Rp", USD: "$", EUR: "€", SGD: "S$", JPY: "¥", CNY: "¥", MYR: "RM", THB: "฿", AUD: "A$" };
 function sym(cur?: string | null): string {
@@ -142,6 +307,36 @@ function POBody({
   const { data: branches = [] } = useBranches();
   const { data: company } = useCompanySettings();
   const { data: items = [] } = useItemsList();
+  const { data: workflows = [] } = useWorkflows();
+  const workflowIdForPO = (po as any).approvalWorkflowId || (workflows as any[]).find((w: any) => String(w.documentType).toUpperCase() === "PO" && w.isDefault)?.id;
+  const { data: workflowStates = [] } = useWorkflowStates(workflowIdForPO);
+  const { data: mySignature } = useUserSignature();
+  const isDraft = po.status === "DRAFT";
+  const isPendingApproval = String(po.status ?? "").toUpperCase() === "PENDING_APPROVAL";
+  const isApproved = String(po.status ?? "").toUpperCase() === "APPROVED" || (! (po as any).needApproval && (String(po.status ?? "").toUpperCase() === "POSTED" || String(po.status ?? "").toUpperCase() === "POST"));
+  const isRejected = String(po.status ?? "").toUpperCase() === "REJECTED";
+  const isPosted = isApproved; // legacy alias untuk tombol Create/Print
+  const editable = isDraft || editing;
+  const approve = useApprovePurchaseOrder();
+  const rejectHook = useRejectPurchaseOrder();
+  const pendingRoleName = useMemo(() => {
+    if (!isPendingApproval || !(po as any).needApproval) return null;
+    const level = Number((po as any).currentApprovalLevel || 1);
+    const sorted = [...(workflowStates as any[])].sort((a: any, b: any) => (a.orderNo ?? 0) - (b.orderNo ?? 0));
+    const intermediate = sorted.filter((s: any) => s.type === "intermediate");
+    const levels = intermediate.length > 0 ? intermediate : sorted;
+    const st = levels[level - 1];
+    return st?.name ?? `Level ${level}`;
+  }, [isPendingApproval, po, workflowStates]);
+  const pendingRequiresSignature = useMemo(() => {
+    if (!isPendingApproval || !(po as any).needApproval) return false;
+    const level = Number((po as any).currentApprovalLevel || 1);
+    const sorted = [...(workflowStates as any[])].sort((a: any, b: any) => (a.orderNo ?? 0) - (b.orderNo ?? 0));
+    const intermediate = sorted.filter((s: any) => s.type === "intermediate");
+    const levels = intermediate.length > 0 ? intermediate : sorted;
+    const st = levels[level - 1];
+    return !!st?.requiresSignature;
+  }, [isPendingApproval, po, workflowStates]);
   const [form, setForm] = useState({
     supplierId: po.supplierId,
     warehouseId: po.warehouseId,
@@ -157,6 +352,9 @@ function POBody({
     exchangeRate: String((po as any).exchangeRate ?? "1"),
     allowEditOrderDate: (po as any).allowEditOrderDate ?? false,
     qcRequired: (po as any).qcRequired ?? true,
+    needApproval: (po as any).needApproval ?? false,
+    globalDiscountPercent: String((po as any).globalDiscountPercent ?? "0"),
+    additionalCharges: ((po as any).additionalCharges ?? []) as { type: string; amount: string }[],
     taxRate: String((po as any).taxRate ?? "0"),
     taxCategoryId: (po as any).taxCategoryId ?? "",
   });
@@ -165,19 +363,37 @@ function POBody({
   const [rateManuallyEdited, setRateManuallyEdited] = useState(false);
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [accountingOpen, setAccountingOpen] = useState(false);
+  const [chargesOpen, setChargesOpen] = useState(false);
+  const [selectedCharges, setSelectedCharges] = useState<Set<number>>(new Set());
+  const allChargesChecked = editable && form.additionalCharges.length > 0 && selectedCharges.size === form.additionalCharges.length;
+  const someChargesChecked = selectedCharges.size > 0 && selectedCharges.size < form.additionalCharges.length;
+  const toggleAllCharges = (checked: boolean) => {
+    if (checked) setSelectedCharges(new Set(form.additionalCharges.map((_, i) => i)));
+    else setSelectedCharges(new Set());
+  };
+  const toggleCharge = (idx: number, checked: boolean) => {
+    const next = new Set(selectedCharges);
+    if (checked) next.add(idx);
+    else next.delete(idx);
+    setSelectedCharges(next);
+  };
+  const deleteSelectedCharges = () => {
+    setForm((f) => ({ ...f, additionalCharges: f.additionalCharges.filter((_, i) => !selectedCharges.has(i)) }));
+    setSelectedCharges(new Set());
+  };
   const { data: rateData, isFetching: rateFetching } = useExchangeRate(
-    editing && form.currency && form.currency !== baseCurrency ? form.currency : undefined,
-    editing && form.currency && form.currency !== baseCurrency ? baseCurrency : undefined
+    editable && form.currency && form.currency !== baseCurrency ? form.currency : undefined,
+    editable && form.currency && form.currency !== baseCurrency ? baseCurrency : undefined
   );
   useEffect(() => {
-    if (editing && rateData?.rate && !rateManuallyEdited && form.currency !== baseCurrency) {
+    if (editable && rateData?.rate && !rateManuallyEdited && form.currency !== baseCurrency) {
       const fetched = String(rateData.rate);
       if (fetched !== form.exchangeRate) setForm((f) => ({ ...f, exchangeRate: fetched }));
     }
-    if (editing && form.currency === baseCurrency && form.exchangeRate !== "1" && !rateManuallyEdited) {
+    if (editable && form.currency === baseCurrency && form.exchangeRate !== "1" && !rateManuallyEdited) {
       setForm((f) => ({ ...f, exchangeRate: "1" }));
     }
-  }, [rateData?.rate, editing, form.currency, baseCurrency, form.exchangeRate, rateManuallyEdited]);
+  }, [rateData?.rate, editable, form.currency, baseCurrency, form.exchangeRate, rateManuallyEdited]);
   const [lines, setLines] = useState<OrderLineInput[]>(
     (po.lines ?? []).map((l) => ({
       itemId: l.itemId,
@@ -190,6 +406,95 @@ function POBody({
       deliveryDate: (l as unknown as { deliveryDate?: string | null }).deliveryDate ?? "",
     }))
   );
+
+  // Sync form/lines when PO refetched (after save/post) — keep UI consistent
+  useEffect(() => {
+    setForm({
+      supplierId: po.supplierId,
+      warehouseId: po.warehouseId,
+      orderDate: po.orderDate?.slice(0, 10) ?? todayISO(),
+      expectedDate: po.expectedDate?.slice(0, 10) ?? "",
+      notes: po.notes ?? "",
+      department: (po as any).department ?? "",
+      costCenter: (po as any).costCenter ?? "",
+      branchId: (po as any).branchId ?? "",
+      paymentTerms: (po as any).paymentTerms ?? "",
+      priceListId: (po as any).priceListId ?? "",
+      currency: (po as any).currency ?? baseCurrency ?? "IDR",
+      exchangeRate: String((po as any).exchangeRate ?? "1"),
+      allowEditOrderDate: (po as any).allowEditOrderDate ?? false,
+      qcRequired: (po as any).qcRequired ?? true,
+      needApproval: (po as any).needApproval ?? false,
+      globalDiscountPercent: String((po as any).globalDiscountPercent ?? "0"),
+      additionalCharges: ((po as any).additionalCharges ?? []) as { type: string; amount: string }[],
+      taxRate: String((po as any).taxRate ?? "0"),
+      taxCategoryId: (po as any).taxCategoryId ?? "",
+    });
+    setLines(
+      (po.lines ?? []).map((l) => ({
+        itemId: l.itemId,
+        uomId: l.uomId,
+        qty: String(l.qty),
+        unitPrice: l.unitPrice ?? "",
+        discount: (l as any).discount ?? "",
+        batchNumber: l.batchNumber ?? "",
+        note: l.note ?? "",
+        deliveryDate: (l as unknown as { deliveryDate?: string | null }).deliveryDate ?? "",
+      }))
+    );
+  }, [po.publicId, po.updatedAt]);
+
+  const initialSnapshot = useMemo(() => {
+    const f = {
+      supplierId: po.supplierId,
+      warehouseId: po.warehouseId,
+      orderDate: po.orderDate?.slice(0, 10) ?? "",
+      expectedDate: po.expectedDate?.slice(0, 10) ?? "",
+      notes: po.notes ?? "",
+      department: (po as any).department ?? "",
+      costCenter: (po as any).costCenter ?? "",
+      branchId: (po as any).branchId ?? "",
+      paymentTerms: (po as any).paymentTerms ?? "",
+      priceListId: (po as any).priceListId ?? "",
+      currency: (po as any).currency ?? "IDR",
+      exchangeRate: String((po as any).exchangeRate ?? "1"),
+      allowEditOrderDate: (po as any).allowEditOrderDate ?? false,
+      qcRequired: (po as any).qcRequired ?? true,
+      needApproval: (po as any).needApproval ?? false,
+      globalDiscountPercent: String((po as any).globalDiscountPercent ?? "0"),
+      additionalCharges: ((po as any).additionalCharges ?? []) as { type: string; amount: string }[],
+      taxRate: String((po as any).taxRate ?? "0"),
+      taxCategoryId: (po as any).taxCategoryId ?? "",
+    };
+    const l = (po.lines ?? []).map((x: any) => ({
+      itemId: x.itemId,
+      uomId: x.uomId,
+      qty: String(x.qty),
+      unitPrice: x.unitPrice ?? "",
+      discount: (x as any).discount ?? "",
+      batchNumber: x.batchNumber ?? "",
+      note: x.note ?? "",
+      deliveryDate: (x as any).deliveryDate ?? "",
+    }));
+    return JSON.stringify({ form: f, lines: l });
+  }, [po]);
+
+  const dirty = useMemo(() => {
+    const cur = JSON.stringify({
+      form,
+      lines: lines.map((l) => ({
+        itemId: l.itemId,
+        uomId: l.uomId,
+        qty: String(l.qty),
+        unitPrice: l.unitPrice ?? "",
+        discount: (l as any).discount ?? "",
+        batchNumber: l.batchNumber ?? "",
+        note: l.note ?? "",
+        deliveryDate: (l as any).deliveryDate ?? "",
+      })),
+    });
+    return cur !== initialSnapshot;
+  }, [form, lines, initialSnapshot]);
 
   const saveEdit = async () => {
     const valid = lines.filter((l) => l.itemId);
@@ -211,6 +516,9 @@ function POBody({
           exchangeRate: form.exchangeRate || "1",
           allowEditOrderDate: form.allowEditOrderDate,
           qcRequired: form.qcRequired,
+          needApproval: form.needApproval,
+          globalDiscountPercent: form.globalDiscountPercent || "0",
+          additionalCharges: form.additionalCharges,
           taxRate: form.taxRate || "0",
           taxCategoryId: form.taxCategoryId || null,
           lines: valid.map((l) => ({
@@ -233,12 +541,15 @@ function POBody({
 
   const subtotal = lines.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unitPrice || 0), 0);
   const discountTotal = lines.reduce((s, l) => s + Number((l as any).discount || 0), 0);
-  const taxable = Math.max(0, subtotal - discountTotal);
+  const globalDiscountPercentNum = Number(form.globalDiscountPercent || 0);
+  const globalDiscountAmount = subtotal * (globalDiscountPercentNum / 100);
+  const additionalChargesTotal = (form.additionalCharges ?? []).reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+  const taxable = Math.max(0, subtotal - discountTotal - globalDiscountAmount);
   const taxRateNum = Number(form.taxRate || 0);
   const selectedCat = taxCategories.find((c) => c.id === form.taxCategoryId) ?? null;
   const hasTax = !!form.taxCategoryId && taxRateNum > 0;
   const tax = hasTax ? taxable * (taxRateNum / 100) : 0;
-  const grandTotal = taxable + tax;
+  const grandTotal = taxable + tax + additionalChargesTotal;
   const totalQty = lines.reduce((s, l) => s + Number(l.qty || 0), 0);
   const totalAmount = lines.reduce((s, l) => {
     const qty = Number(l.qty || 0);
@@ -247,24 +558,29 @@ function POBody({
     return s + (amt > 0 ? amt : 0);
   }, 0);
   const totalAmountIDR = (() => {
-    const cur = (editing ? form.currency : (po as any).currency || baseCurrency || "IDR").toUpperCase();
+    const cur = (editable ? form.currency : (po as any).currency || baseCurrency || "IDR").toUpperCase();
     if (cur === "IDR") return totalAmount;
-    const rate = Number(editing ? form.exchangeRate : (po as any).exchangeRate || 1);
+    const rate = Number(editable ? form.exchangeRate : (po as any).exchangeRate || 1);
     if (!isFinite(rate) || rate === 0) return totalAmount;
     return totalAmount * rate;
   })();
 
-  const viewTaxRate = editing ? form.taxRate : String((po as any).taxRate ?? "0");
+  const viewTaxRate = editable ? form.taxRate : String((po as any).taxRate ?? "0");
   const viewTaxRateNum = Number(viewTaxRate || 0);
   const viewCatName = (po as any).taxCategoryName ?? null;
   const viewHasTax = !!((po as any).taxCategoryId) && viewTaxRateNum > 0;
-  const viewSubtotal = editing ? subtotal : (po.lines ?? []).reduce((s: number, l: any) => s + Number(l.qty || 0) * Number(l.unitPrice || 0), 0);
-  const viewDiscountTotal = editing ? discountTotal : (po.lines ?? []).reduce((s: number, l: any) => s + Number((l as any).discount || 0), 0);
-  const viewTaxable = Math.max(0, viewSubtotal - viewDiscountTotal);
+  const viewSubtotal = editable ? subtotal : (po.lines ?? []).reduce((s: number, l: any) => s + Number(l.qty || 0) * Number(l.unitPrice || 0), 0);
+  const viewDiscountTotal = editable ? discountTotal : (po.lines ?? []).reduce((s: number, l: any) => s + Number((l as any).discount || 0), 0);
+  const viewGlobalDiscountPercent = editable ? form.globalDiscountPercent : String((po as any).globalDiscountPercent ?? "0");
+  const viewGlobalDiscountPercentNum = Number(viewGlobalDiscountPercent || 0);
+  const viewGlobalDiscountAmount = viewSubtotal * (viewGlobalDiscountPercentNum / 100);
+  const viewAdditionalCharges = editable ? form.additionalCharges : ((po as any).additionalCharges ?? []);
+  const viewAdditionalChargesTotal = (viewAdditionalCharges ?? []).reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+  const viewTaxable = Math.max(0, viewSubtotal - viewDiscountTotal - viewGlobalDiscountAmount);
   const viewTax = viewHasTax ? viewTaxable * (viewTaxRateNum / 100) : 0;
-  const viewGrandTotal = viewTaxable + viewTax;
-  const viewTotalQty = editing ? totalQty : (po.lines ?? []).reduce((s: number, l: any) => s + Number(l.qty || 0), 0);
-  const viewTotalAmount = editing
+  const viewGrandTotal = viewTaxable + viewTax + viewAdditionalChargesTotal;
+  const viewTotalQty = editable ? totalQty : (po.lines ?? []).reduce((s: number, l: any) => s + Number(l.qty || 0), 0);
+  const viewTotalAmount = editable
     ? totalAmount
     : (po.lines ?? []).reduce((s: number, l: any) => {
         const qty = Number(l.qty || 0);
@@ -287,6 +603,27 @@ function POBody({
       await post.mutateAsync(po.id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to post.");
+    }
+  };
+  const onApprove = async () => {
+    if (pendingRequiresSignature && !mySignature?.signatureData) {
+      toast.error("Anda belum memiliki signature — buat di My Account → My Signature.");
+      navigate("/app/settings/account");
+      return;
+    }
+    if (!confirm("Approve this purchase order?")) return;
+    try {
+      await approve.mutateAsync(po.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to approve.");
+    }
+  };
+  const onReject = async () => {
+    if (!confirm("Reject this purchase order?")) return;
+    try {
+      await rejectHook.mutateAsync(po.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to reject.");
     }
   };
   const onCancel = async () => {
@@ -316,8 +653,6 @@ function POBody({
     }
   };
 
-  const isDraft = po.status === "DRAFT";
-
   const supplier = suppliers.find((s) => s.id === po.supplierId);
   const warehouse = warehouses.find((w) => w.id === po.warehouseId);
   return (
@@ -325,34 +660,87 @@ function POBody({
       <div className="print:hidden">
         <FormPage
           title={`PO ${po.documentNo ?? (po as any).poNo ?? formatId(po.id)}`}
-          titleBadge={<DocStatusBadge status={po.status} />}
+          titleBadge={
+            isDraft && dirty ? (
+              <Badge tone="destructive">Not save</Badge>
+            ) : isPendingApproval && (po as any).needApproval && pendingRoleName ? (
+              <Badge tone="warning">Pending for {pendingRoleName}</Badge>
+            ) : (
+              <DocStatusBadge status={po.status} />
+            )
+          }
           actions={
             <div className="flex flex-wrap items-center gap-2">
-              {!editing && (
+              {!editing && isApproved && (
                 <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Print" onClick={() => window.print()}>
                   <Printer size={16} />
                 </Button>
               )}
-              {!editing && (
+              {!editing && isApproved && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" className="h-7 gap-1 bg-black px-3 text-xs text-white hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200" aria-label="Create">
+                      Create <ChevronsUpDown size={14} className="opacity-80" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onClick={() => navigate(`/app/receiving/new?purchaseOrderId=${po.id}`)}
+                    >
+                      <PackageCheck size={14} /> Purchase Receipt
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onClick={() => toast.info("Purchase Invoice belum tersedia")}
+                    >
+                      <FileText size={14} /> Purchase Invoice
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {!editing && isPendingApproval && (po as any).needApproval && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" className="h-7 gap-1 bg-black px-3 text-xs text-white hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200" aria-label="Action">
+                      Action <ChevronsUpDown size={14} className="opacity-80" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem className="gap-2" onClick={onApprove} disabled={approve.isPending}>
+                      <Check size={14} /> Approve
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={onReject} disabled={rejectHook.isPending}>
+                      <X size={14} /> Reject
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {(isDraft || !editing) && (
                 <DocMenu
-                  onEdit={isDraft ? () => setEditing(true) : undefined}
-                  editDisabled={!isDraft}
+                  onEdit={undefined}
                   onCancel={onCancel}
                   onDelete={onDelete}
                   cancelDisabled={po.status === "CANCELED" || post.isPending}
                 />
               )}
-              {!editing && isDraft && (
-                <Button variant="primary" size="sm" onClick={onPost} disabled={post.isPending}>
-                  Submit
-                </Button>
+              {isDraft && (
+                dirty ? (
+                  <Button variant="primary" size="sm" onClick={saveEdit} disabled={update.isPending}>
+                    Save
+                  </Button>
+                ) : (
+                  <Button variant="primary" size="sm" onClick={onPost} disabled={post.isPending}>
+                    Submit
+                  </Button>
+                )
               )}
-              {editing && (
+              {editing && !isDraft && (
                 <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
                   <X size={14} strokeWidth={2} /> Discard
                 </Button>
               )}
-              {editing && (
+              {editing && !isDraft && (
                 <Button variant="primary" size="sm" onClick={saveEdit} disabled={update.isPending}>
                   Save
                 </Button>
@@ -362,7 +750,7 @@ function POBody({
         >
       <FormSection>
         <div className="grid gap-x-6 gap-y-6 sm:grid-cols-3">
-          {editing ? (
+          {editable ? (
             <Select
               label="Supplier"
               value={form.supplierId}
@@ -388,14 +776,14 @@ function POBody({
             label="Order Date"
             value={form.orderDate}
             onChange={(v) => setForm({ ...form, orderDate: v })}
-            disabled={!editing || !form.allowEditOrderDate}
+            disabled={!editable || !form.allowEditOrderDate}
           />
           <div className="row-span-2 flex flex-col justify-center gap-2 py-1">
             <label className="flex items-center gap-2 text-xs cursor-pointer">
               <Checkbox
                 checked={form.allowEditOrderDate}
                 onCheckedChange={(v) => setForm({ ...form, allowEditOrderDate: v === true })}
-                disabled={!editing}
+                disabled={!editable}
               />
               Edit Order Date
             </label>
@@ -403,15 +791,23 @@ function POBody({
               <Checkbox
                 checked={form.qcRequired}
                 onCheckedChange={(v) => setForm({ ...form, qcRequired: v === true })}
-                disabled={!editing}
+                disabled={!editable}
               />
               QC Required
+            </label>
+            <label className="flex items-center gap-2 text-xs cursor-pointer">
+              <Checkbox
+                checked={form.needApproval}
+                onCheckedChange={(v) => setForm({ ...form, needApproval: v === true })}
+                disabled={!editable}
+              />
+              Need Approval
             </label>
           </div>
 
           <Input
             label="Purchaser Name"
-            value={editing ? (user?.name ?? "—") : ((po as unknown as { createdByName?: string }).createdByName ?? supplierName(po.supplierId) ?? "—")}
+            value={editable ? (user?.name ?? "—") : ((po as unknown as { createdByName?: string }).createdByName ?? supplierName(po.supplierId) ?? "—")}
             disabled
             placeholder="Auto dari akun"
           />
@@ -419,7 +815,7 @@ function POBody({
             label="Expected Date"
             value={form.expectedDate}
             onChange={(v) => setForm({ ...form, expectedDate: v })}
-            disabled={!editing}
+            disabled={!editable}
           />
           <div />
         </div>
@@ -433,7 +829,7 @@ function POBody({
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-3">
             <div className="grid gap-x-6 gap-y-6 sm:grid-cols-2">
-              {editing ? (
+              {editable ? (
                 <Input
                   label="Department"
                   placeholder="e.g. Purchasing"
@@ -448,7 +844,7 @@ function POBody({
                   </div>
                 </div>
               )}
-              {editing ? (
+              {editable ? (
                 <Select
                   label="Branch"
                   value={form.branchId}
@@ -472,7 +868,7 @@ function POBody({
               )}
             </div>
             <div className="mt-4 max-w-[260px]">
-              {editing ? (
+              {editable ? (
                 <Input
                   label="Cost Center"
                   placeholder="e.g. CC-001"
@@ -500,7 +896,7 @@ function POBody({
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-3">
             <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
-              {editing ? (
+              {editable ? (
                 <Select
                   label="Currency"
                   value={form.currency || baseCurrency}
@@ -509,7 +905,7 @@ function POBody({
                     setRateManuallyEdited(false);
                     setForm({ ...form, currency: v, exchangeRate: v === baseCurrency ? "1" : form.exchangeRate });
                   }}
-                  disabled={!editing}
+                  disabled={!editable}
                   className="h-8"
                 >
                   {["IDR", "USD", "EUR", "SGD", "JPY", "CNY", "MYR", "THB", "AUD"].map((c) => (
@@ -526,7 +922,7 @@ function POBody({
                   </div>
                 </div>
               )}
-              {editing ? (
+              {editable ? (
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none flex items-center gap-1">
                     Exchange Rate {rateFetching && <span className="text-[11px] text-muted-foreground">(fetching...)</span>}
@@ -558,7 +954,7 @@ function POBody({
         </Collapsible>
         <div className="border-t border-border my-4" />
         <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-          {editing ? (
+          {editable ? (
             <Input
               label="Payment Terms"
               placeholder="e.g. NET 30"
@@ -573,7 +969,7 @@ function POBody({
               </div>
             </div>
           )}
-          {editing ? (
+          {editable ? (
             <Select
               label="Price List"
               value={form.priceListId}
@@ -605,11 +1001,11 @@ function POBody({
             <Textarea
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              disabled={!editing}
-              placeholder={editing ? "Optional notes..." : "—"}
+              disabled={!editable}
+              placeholder={editable ? "Optional notes..." : "—"}
             />
           </div>
-          {editing ? (
+          {editable ? (
             <Select
               label="Target Warehouse"
               value={form.warehouseId}
@@ -637,23 +1033,136 @@ function POBody({
       <FormSection title="Lines">
         <OrderLineTable
           value={lines}
-          onChange={editing ? setLines : () => {}}
-          readOnly={!editing}
+          onChange={editable ? setLines : () => {}}
+          readOnly={!editable}
           headerDeliveryDate={form.expectedDate}
-          currency={editing ? form.currency : (po as any).currency}
-          exchangeRate={editing ? form.exchangeRate : (po as any).exchangeRate}
+          currency={editable ? form.currency : (po as any).currency}
+          exchangeRate={editable ? form.exchangeRate : (po as any).exchangeRate}
           baseCurrency={baseCurrency}
-          priceListId={editing ? form.priceListId : (po as any).priceListId}
-          supplierId={editing ? form.supplierId : po.supplierId}
+          priceListId={editable ? form.priceListId : (po as any).priceListId}
+          supplierId={editable ? form.supplierId : po.supplierId}
         />
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <Input label="Total Quantity" value={formatNumber(editing ? totalQty : viewTotalQty)} disabled className="h-8 bg-zinc-100 text-sm" />
+          <Input label="Total Quantity" value={formatNumber(editable ? totalQty : viewTotalQty)} disabled className="h-8 bg-zinc-100 text-sm" />
           <div className="hidden sm:block" aria-hidden="true" />
-          <Input label="Total Amount (IDR)" value={`Rp ${formatNumber(editing ? totalAmountIDR : viewTotalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
+          <Input label="Total (IDR)" value={`Rp ${formatNumber(editable ? totalAmountIDR : viewTotalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
         </div>
+        <Collapsible open={chargesOpen} onOpenChange={setChargesOpen} className="mt-6">
+          <CollapsibleTrigger asChild>
+            <button type="button" className="flex items-center gap-2 text-sm font-medium hover:text-primary">
+              <span>Additional Charges</span>
+              <ChevronDown size={14} className={`transition-transform ${chargesOpen ? "rotate-180" : ""}`} />
+              {additionalChargesTotal > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  • {sym(editable ? form.currency : (po as any).currency || baseCurrency)} {formatNumber(editable ? additionalChargesTotal : viewAdditionalChargesTotal)}
+                </span>
+              )}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3">
+            <div className="overflow-hidden rounded-lg border border-border">
+              <div className="overflow-x-auto">
+                <Table className="min-w-[500px] table-fixed text-left text-[13px]">
+                  <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
+                    <TableRow className="border-border hover:bg-transparent divide-x divide-border">
+                      <TableHead className="w-8 px-2 text-center">
+                        <Checkbox
+                          checked={allChargesChecked ? true : someChargesChecked ? "indeterminate" : false}
+                          onCheckedChange={(v) => toggleAllCharges(!!v)}
+                          disabled={!editable}
+                          aria-label="select all charges"
+                        />
+                      </TableHead>
+                      <TableHead className="w-10 px-3 text-left">No.</TableHead>
+                      <TableHead className="w-1/2 px-3 text-left">Type</TableHead>
+                      <TableHead className="w-1/2 px-3 text-left">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="[&_tr]:border-border/70 divide-x divide-border">
+                    {(editable ? form.additionalCharges : viewAdditionalCharges).map((c: any, idx: number) => (
+                      <TableRow key={idx} className="border-border/70 hover:bg-transparent divide-x divide-border">
+                        <TableCell className="px-2 text-center">
+                          <Checkbox
+                            checked={selectedCharges.has(idx)}
+                            onCheckedChange={(v) => toggleCharge(idx, !!v)}
+                            disabled={!editable}
+                            aria-label={`select charge ${idx + 1}`}
+                          />
+                        </TableCell>
+                        <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
+                        <TableCell className="p-0 border-r border-border">
+                          {editable ? (
+                            <ChargeTypeSelect
+                              value={c.type}
+                              onChange={(v) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  additionalCharges: f.additionalCharges.map((x, i) => (i === idx ? { ...x, type: v } : x)),
+                                }))
+                              }
+                            />
+                          ) : (
+                            <div className="px-3 py-2 text-[13px] capitalize">{c.type || "—"}</div>
+                          )}
+                        </TableCell>
+                        <TableCell className="p-0">
+                          {editable ? (
+                            <TableInput
+                              value={c.amount}
+                              onChange={(v) =>
+                                setForm((f) => ({
+                                  ...f,
+                                  additionalCharges: f.additionalCharges.map((x, i) => (i === idx ? { ...x, amount: v } : x)),
+                                }))
+                              }
+                              columnTitle="Amount"
+                              isNumeric
+                            />
+                          ) : (
+                            <div className="px-3 py-2 text-right tabular-nums">{c.amount ? formatNumber(c.amount) : "0"}</div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(editable ? form.additionalCharges : viewAdditionalCharges).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                          No additional charges
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              {editable && (
+                <div className="border-t border-border p-2">
+                  {selectedCharges.size > 0 ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 gap-1 px-2.5 text-xs"
+                      onClick={deleteSelectedCharges}
+                    >
+                      <Trash2 size={13} /> Delete
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 px-2.5 text-xs"
+                      onClick={() => setForm((f) => ({ ...f, additionalCharges: [...f.additionalCharges, { type: "freight", amount: "" }] }))}
+                    >
+                      + Add Charge
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
         <div className="mt-6 grid gap-4 sm:grid-cols-3 sm:divide-x sm:divide-border border-t border-border pt-6">
           <div className="space-y-4 sm:pr-4">
-            {editing ? (
+            {editable ? (
               <Select
                 label="Tax Category"
                 value={form.taxCategoryId}
@@ -684,7 +1193,7 @@ function POBody({
             )}
             <div>
               <label className="mb-1.5 block text-sm font-medium leading-none">Tax Rate</label>
-              {editing ? (
+              {editable ? (
                 <Input
                   value={form.taxRate ? String(Math.round(Number(form.taxRate))) : form.taxRate}
                   onChange={(e) => setForm({ ...form, taxRate: e.target.value.replace(/[^0-9]/g, "") })}
@@ -700,39 +1209,71 @@ function POBody({
               )}
             </div>
           </div>
-          <div className="hidden sm:block sm:px-4" aria-hidden="true" />
-          {(editing ? hasTax : viewHasTax) ? (
-            <div className="flex flex-col items-end sm:pl-8">
-              <div className="w-full max-w-[320px] space-y-2 py-2">
+          <div className="space-y-4 sm:px-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium leading-none">Discount (%)</label>
+              {editable ? (
+                <Input
+                  value={form.globalDiscountPercent}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9.]/g, "");
+                    if (v === "" || (/^\d*\.?\d*$/.test(v) && Number(v) <= 100)) {
+                      setForm({ ...form, globalDiscountPercent: v });
+                    }
+                  }}
+                  placeholder="0"
+                  className="h-8 text-sm"
+                  inputMode="decimal"
+                />
+              ) : (
+                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
+                  {viewGlobalDiscountPercent && Number(viewGlobalDiscountPercent) !== 0 ? `${Number(viewGlobalDiscountPercent).toString()}%` : "0%"}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col items-end sm:pl-8">
+            <div className="w-full max-w-[320px] space-y-2 py-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="font-medium tabular-nums">
+                  {sym(editable ? form.currency : (po as any).currency || baseCurrency)} {formatNumber(editable ? subtotal : viewSubtotal)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Discount</span>
+                <span className="font-medium tabular-nums">
+                  - {sym(editable ? form.currency : (po as any).currency || baseCurrency)} {formatNumber(editable ? discountTotal + globalDiscountAmount : viewDiscountTotal + viewGlobalDiscountAmount)}
+                </span>
+              </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Total Amount</span>
+                  <span className="text-muted-foreground">
+                    {editable
+                      ? Number(form.taxRate || 0) === 0
+                        ? "Tax 0%"
+                        : `Tax (${Math.round(Number(form.taxRate))}%)`
+                      : Number(viewTaxRate || 0) === 0
+                        ? "Tax 0%"
+                        : `Tax (${Math.round(Number(viewTaxRate))}%)`}
+                  </span>
                   <span className="font-medium tabular-nums">
-                    {sym(editing ? form.currency : (po as any).currency || baseCurrency)} {formatNumber(editing ? subtotal : viewSubtotal)}
+                    {sym(editable ? form.currency : (po as any).currency || baseCurrency)} {formatNumber(editable ? tax : viewTax)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Discount</span>
-                  <span className="font-medium tabular-nums">
-                    {sym(editing ? form.currency : (po as any).currency || baseCurrency)} {formatNumber(editing ? discountTotal : viewDiscountTotal)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">{editing ? (selectedCat?.name ?? "Tax") : (viewCatName ?? "Tax")}</span>
-                  <span className="font-medium tabular-nums">
-                    {sym(editing ? form.currency : (po as any).currency || baseCurrency)} {formatNumber(editing ? tax : viewTax)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between border-t border-border pt-3 text-sm">
-                  <span className="font-semibold">Grand Total</span>
-                  <span className="font-bold tabular-nums">
-                    {sym(editing ? form.currency : (po as any).currency || baseCurrency)} {formatNumber(editing ? grandTotal : viewGrandTotal)}
-                  </span>
-                </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Additional Charges</span>
+                <span className="font-medium tabular-nums">
+                  {sym(editable ? form.currency : (po as any).currency || baseCurrency)} {formatNumber(editable ? additionalChargesTotal : viewAdditionalChargesTotal)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-border pt-3 text-sm">
+                <span className="font-semibold">Grand Total</span>
+                <span className="font-bold tabular-nums">
+                  {sym(editable ? form.currency : (po as any).currency || baseCurrency)} {formatNumber(editable ? grandTotal : viewGrandTotal)}
+                </span>
+              </div>
               </div>
             </div>
-          ) : (
-            <div />
-          )}
         </div>
       </FormSection>
 
@@ -766,24 +1307,33 @@ function POBody({
               )}
               <div className="leading-tight">
                 <div className="text-[15px] font-bold tracking-tight text-black">{(company as any)?.companyName ?? "PT CONTOH SUKSES MAKMUR"}</div>
-                <div className="mt-0.5 text-[10px] text-black">{(company as any)?.address ?? "Jl. Industri Raya No. 45, Jakarta Selatan 12345"}</div>
-                <div className="text-[10px] text-black">Telp: {(company as any)?.phone ?? "(021) 123-4567"}</div>
-                <div className="text-[10px] text-black">Email: {(company as any)?.email ?? "purchasing@contoh.co.id"}</div>
+                <div className="mt-0.5 text-[10px] leading-snug text-zinc-600 max-w-[360px] whitespace-pre-wrap break-words">{(company as any)?.address ?? "Jl. Industri Raya No. 45, Jakarta Selatan 12345"}</div>
+                <div className="mt-1 text-[10px] text-zinc-600">
+                  {[
+                    `Telp. ${(company as any)?.phone ?? "+62 86746678829"}`,
+                    (company as any)?.email ?? "info@trijaya.co.id",
+                    (company as any)?.website ? String((company as any).website).replace(/^https?:\/\//, "") : "www.trijaya.co.id",
+                  ].join(" · ")}
+                </div>
               </div>
             </div>
-            <div className="text-right">
+            <div className="shrink-0 text-right">
               <div className="text-base font-bold tracking-[0.15em] text-black">PURCHASE ORDER</div>
             </div>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-4 text-[11px]">
             <div className="space-y-1">
-              <div className="flex"><span className="w-24 text-black">No. PO</span><span className="font-medium text-black">{po.documentNo ?? (po as any).poNo ?? formatId(po.id)}</span></div>
-              <div className="flex"><span className="w-24 text-black">Referensi PR</span><span className="text-zinc-700">{(po as any).prNo ?? (po as any).referenceNo ?? (po as any).reference ?? "-"}</span></div>
-              <div className="flex"><span className="w-24 text-black">Payment Terms</span><span className="text-zinc-700">{(po as any).paymentTerms ?? "-"}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">No. PO</span><span className="text-black">{po.documentNo ?? (po as any).poNo ?? formatId(po.id)}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Referensi PR</span><span className="text-black">{(po as any).prNo ?? (po as any).referenceNo ?? (po as any).reference ?? "-"}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Payment Terms</span><span className="text-black">{(po as any).paymentTerms ?? "-"}</span></div>
             </div>
             <div className="space-y-1">
-              <div className="flex"><span className="w-24 text-black">Order Date</span><span className="text-zinc-700">{po.orderDate ? new Date(po.orderDate).toLocaleDateString("id-ID").replace(/\//g, "-") : "-"}</span></div>
-              <div className="flex"><span className="w-24 text-black">Delivery Date</span><span className="text-zinc-700">{po.expectedDate ? new Date(po.expectedDate).toLocaleDateString("id-ID").replace(/\//g, "-") : "-"}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Order Date</span><span className="text-black">{po.orderDate ? new Date(po.orderDate).toLocaleDateString("id-ID").replace(/\//g, "-") : "-"}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Delivery Date</span><span className="text-black">{po.expectedDate ? new Date(po.expectedDate).toLocaleDateString("id-ID").replace(/\//g, "-") : "-"}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Currency</span><span className="text-black">{(po as any).currency ?? baseCurrency ?? "IDR"}</span></div>
+              {String((po as any).currency ?? baseCurrency).toUpperCase() !== String((company as any)?.baseCurrency ?? baseCurrency).toUpperCase() ? (
+                <div className="flex"><span className="w-24 text-zinc-600">Exchange Rate</span><span className="text-black">{(po as any).exchangeRate ?? "1"}</span></div>
+              ) : null}
             </div>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-6 border-t border-zinc-200 pt-4 text-[11px]">
@@ -803,15 +1353,15 @@ function POBody({
           <table className="mt-6 w-full border-collapse text-[11px]">
             <thead>
               <tr className="border-y border-zinc-200 bg-zinc-50">
-                <th className="px-2 py-2 text-center font-medium text-black w-8">No</th>
-                <th className="px-2 py-2 text-left font-medium text-zinc-500">Item Name</th>
-                <th className="px-2 py-2 text-center font-medium text-zinc-500 w-16">Qty</th>
-                <th className="px-2 py-2 text-center font-medium text-zinc-500 w-16">UOM</th>
-                <th className="px-2 py-2 text-right font-medium text-zinc-500 w-28">Rate</th>
-                <th className="px-2 py-2 text-right font-medium text-zinc-500 w-32">Amount</th>
+                <th className="px-2 py-2 text-center font-medium text-zinc-600 w-8">No</th>
+                <th className="px-2 py-2 text-left font-medium text-zinc-600">Item Name</th>
+                <th className="px-2 py-2 text-center font-medium text-zinc-600 w-16">Qty</th>
+                <th className="px-2 py-2 text-center font-medium text-zinc-600 w-16">UOM</th>
+                <th className="px-2 py-2 text-right font-medium text-zinc-600 w-28">Rate</th>
+                <th className="px-2 py-2 text-right font-medium text-zinc-600 w-32">Amount</th>
               </tr>
             </thead>
-            <tbody className="text-[10px]">
+            <tbody className="text-[10px] text-black">
               {(po.lines ?? []).map((l: any, idx: number) => {
                 const it = (lines as any)[idx] ?? l;
                 const qty = Number(it.qty || l.qty || 0);
@@ -821,12 +1371,12 @@ function POBody({
                 const uomRec = (typeof uoms !== "undefined" ? (uoms as any).find((x: any) => x.id === (l.uomId ?? it.uomId)) : null) ?? null;
                 return (
                   <tr key={idx} className="hover:bg-zinc-50/50">
-                    <td className="px-2 py-2 text-center text-zinc-500">{idx + 1}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{idx + 1}</td>
                     <td className="px-2 py-2">{itemRec ? `${itemRec.code}: ${itemRec.name}` : l.itemId}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{formatNumber(qty)}</td>
-                    <td className="px-2 py-2 text-center text-zinc-600">{uomRec?.name ?? "UOM"}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{uomRec?.name ?? "UOM"}</td>
                     <td className="px-2 py-2 text-right tabular-nums">{sym((po as any).currency || baseCurrency)} {formatNumber(price)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums font-medium">{sym((po as any).currency || baseCurrency)} {formatNumber(amt)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">{sym((po as any).currency || baseCurrency)} {formatNumber(amt)}</td>
                   </tr>
                 );
               })}
@@ -834,21 +1384,41 @@ function POBody({
           </table>
           <div className="mt-4 flex justify-end">
             <div className="w-[280px] space-y-0 text-[11px]">
-              <div className="flex justify-between px-2 py-1.5 text-black"><span>Subtotal</span><span className="tabular-nums text-black">{sym((po as any).currency || baseCurrency)} {formatNumber(viewSubtotal)}</span></div>
-              <div className="flex justify-between px-2 py-1.5 text-black"><span>Discount</span><span className="tabular-nums text-black">{sym((po as any).currency || baseCurrency)} {formatNumber(viewDiscountTotal)}</span></div>
-              <div className="flex justify-between px-2 py-1.5 text-zinc-600"><span>PPN</span><span className="tabular-nums text-black">{sym((po as any).currency || baseCurrency)} {formatNumber(viewTax)}</span></div>
-              <div className="flex justify-between px-2 py-1.5 text-black"><span>Ongkir</span><span className="tabular-nums text-black">{sym((po as any).currency || baseCurrency)} {formatNumber(0)}</span></div>
-              <div className="flex justify-between border-t border-zinc-900 px-2 py-2 font-semibold text-black"><span>TOTAL</span><span className="tabular-nums">{sym((po as any).currency || baseCurrency)} {formatNumber(viewGrandTotal)}</span></div>
+              <div className="flex justify-between px-2 py-1.5 text-black"><span className="text-zinc-600">Subtotal</span><span className="tabular-nums font-medium text-black">{sym((po as any).currency || baseCurrency)} {formatNumber(viewSubtotal)}</span></div>
+              <div className="flex justify-between px-2 py-1.5 text-black"><span className="text-zinc-600">Discount</span><span className="tabular-nums font-medium text-black">- {sym((po as any).currency || baseCurrency)} {formatNumber(viewDiscountTotal + viewGlobalDiscountAmount)}</span></div>
+              <div className="flex justify-between px-2 py-1.5 text-black"><span className="text-zinc-600">{Number(viewTaxRate || 0) === 0 ? "Tax 0%" : `Tax (${Math.round(Number(viewTaxRate))}%)`}</span><span className="tabular-nums font-medium text-black">{sym((po as any).currency || baseCurrency)} {formatNumber(viewTax)}</span></div>
+              <div className="flex justify-between px-2 py-1.5 text-black"><span className="text-zinc-600">Additional Charges</span><span className="tabular-nums font-medium text-black">{sym((po as any).currency || baseCurrency)} {formatNumber(viewAdditionalChargesTotal)}</span></div>
+              <div className="flex justify-between border-t border-zinc-900 px-2 py-2 font-semibold text-black"><span>Grand Total</span><span className="tabular-nums">{sym((po as any).currency || baseCurrency)} {formatNumber(viewGrandTotal)}</span></div>
             </div>
           </div>
           <div className="mt-6 border-t border-zinc-200 pt-3 text-[11px]">
             <div className="font-bold uppercase tracking-wide">Notes</div>
             <div className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-700">{(po as any).notes?.trim() ? (po as any).notes : po.notes?.trim() ? po.notes : "-"}</div>
           </div>
-          <div className="mt-6 grid grid-cols-3 gap-4 text-center text-[11px]">
-            <div><div className="border-t border-zinc-300 pt-10 mt-16">Prepared By</div></div>
-            <div><div className="border-t border-zinc-300 pt-10 mt-16">Approved By</div></div>
-            <div><div className="border-t border-zinc-300 pt-10 mt-16">Supplier</div></div>
+          <div className="mt-10 grid grid-cols-2 gap-8 text-center text-[11px]">
+            <div className="flex flex-col items-center">
+              <div className="font-semibold tracking-wide text-black">Prepared By</div>
+              <div className="mt-3 flex h-[64px] w-[180px] items-center justify-center">
+                {(po as any).preparedSignature ? (
+                  <img src={(po as any).preparedSignature} alt="Prepared signature" className="max-h-[64px] max-w-[180px] object-contain" />
+                ) : null}
+              </div>
+              <div className="h-px w-[180px] bg-zinc-900" />
+              <div className="mt-2 text-[10px] font-medium text-black">{(po as any).preparedByName ?? (po as any).createdByName ?? supplierName(po.supplierId) ?? "-"}</div>
+              <div className="text-[10px] text-zinc-600">{formatDdMmmYyyy((po as any).preparedSignedAt ?? po.orderDate)}</div>
+            </div>
+            <div className="flex flex-col items-center">
+              <div className="font-semibold tracking-wide text-black">Approved By</div>
+              <div className="mt-3 flex h-[64px] w-[180px] items-center justify-center">
+                {(po as any).approvedSignature ? (
+                  <img src={(po as any).approvedSignature} alt="Approved signature" className="max-h-[64px] max-w-[180px] object-contain" />
+                ) : null}
+              </div>
+              <div className="h-px w-[180px] bg-zinc-900" />
+              <div className="mt-2 text-[10px] font-medium text-black">{(po as any).approvedByName ?? "-"}</div>
+              {(po as any).approvedByRole ? <div className="text-[10px] text-zinc-600">{(po as any).approvedByRole}</div> : null}
+              <div className="text-[10px] text-zinc-600">{(po as any).approvedSignedAt ? formatDdMmmYyyy((po as any).approvedSignedAt) : (po as any).status === "APPROVED" ? formatDdMmmYyyy((po as any).updatedAt) : "-"}</div>
+            </div>
           </div>
         </div>
       </div>

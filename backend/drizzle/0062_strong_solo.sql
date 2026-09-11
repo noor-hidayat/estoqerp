@@ -1,0 +1,1 @@
+ALTER TABLE "purchase_orders" ADD COLUMN "need_approval" boolean DEFAULT false NOT NULL;

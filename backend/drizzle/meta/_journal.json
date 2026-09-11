@@ -400,6 +400,76 @@
       "when": 1789024466551,
       "tag": "0058_amazing_tomas",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1789108653977,
+      "tag": "0059_marvelous_susan_delgado",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1789110562474,
+      "tag": "0060_loose_wolfsbane",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1789117590542,
+      "tag": "0061_fluffy_tyrannus",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1789124299975,
+      "tag": "0062_strong_solo",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1789125392921,
+      "tag": "0063_calm_beast",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1789126139273,
+      "tag": "0064_tricky_vengeance",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1789127767916,
+      "tag": "0065_lame_orphan",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1789129717564,
+      "tag": "0066_flaky_karnak",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1789136662723,
+      "tag": "0067_abandoned_gabe_jones",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1789139251881,
+      "tag": "0068_mature_sister_grimm",
+      "breakpoints": true
     }
   ]
 }

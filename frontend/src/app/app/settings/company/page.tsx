@@ -33,6 +33,9 @@ export default function CompanySettingsPage() {
         companyCode: data.companyCode ?? "",
         address: data.address ?? "",
         taxId: data.taxId ?? "",
+        phone: (data as any).phone ?? "",
+        email: (data as any).email ?? "",
+        website: (data as any).website ?? "",
         country: data.country ?? "Indonesia",
         baseCurrency: data.baseCurrency ?? "IDR",
         timezone: data.timezone ?? "Asia/Jakarta",
@@ -76,6 +79,9 @@ export default function CompanySettingsPage() {
         companyCode: form.companyCode.trim().toUpperCase(),
         address: form.address?.trim() || null,
         taxId: form.taxId?.trim() || null,
+        phone: form.phone?.trim() || null,
+        email: form.email?.trim() || null,
+        website: form.website?.trim() || null,
         country: form.country,
         baseCurrency: form.baseCurrency,
         timezone: form.timezone,
@@ -145,6 +151,24 @@ export default function CompanySettingsPage() {
               placeholder="NPWP / Tax ID"
               value={form.taxId || ""}
               onChange={(e) => setForm({ ...form, taxId: e.target.value })}
+            />
+            <Input
+              label="Phone"
+              placeholder="+62 21 1234 5678"
+              value={form.phone || ""}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+            <Input
+              label="Email"
+              placeholder="info@company.com"
+              value={form.email || ""}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+            <Input
+              label="Website"
+              placeholder="https://company.com"
+              value={form.website || ""}
+              onChange={(e) => setForm({ ...form, website: e.target.value })}
             />
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium leading-none">Company Logo</label>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   useAllWarehouses,
   useCreateReceiving,
@@ -36,6 +36,8 @@ function nowTime() {
 
 export default function NewReceivingPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialPoId = searchParams.get("purchaseOrderId") ?? "";
   const { data: pos = [], isLoading: posLoading } = usePurchaseOrders();
   const { data: warehouses = [], isLoading: warehousesLoading } = useAllWarehouses();
   const { data: suppliers = [] } = useSuppliers();
@@ -49,12 +51,17 @@ export default function NewReceivingPage() {
   const [error, setError] = useState("");
   useErrorToast(error);
 
-  const [poId, setPoId] = useState("");
+  const [poId, setPoId] = useState(initialPoId);
   const [warehouseId, setWarehouseId] = useState("");
   const [postingDate, setPostingDate] = useState(todayISO());
   const [postingTime, setPostingTime] = useState(nowTime());
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<OrderLineInput[]>([]);
+
+  // Sync when ?purchaseOrderId changes (e.g. navigasi dari PO Create → Purchase Receipt)
+  useEffect(() => {
+    if (initialPoId) setPoId(initialPoId);
+  }, [initialPoId]);
 
   const { data: poDetail } = usePurchaseOrder(poId || undefined);
   const supplierIdForSelected = (poDetail as any)?.supplierId ?? pos.find((p) => p.id === poId)?.supplierId ?? "";

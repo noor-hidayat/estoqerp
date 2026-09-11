@@ -496,7 +496,7 @@ export interface MovementInput {
 
 // ---- Supply Chain ----
 
-export type DocStatus = "DRAFT" | "POSTED" | "CANCELED";
+export type DocStatus = "DRAFT" | "POSTED" | "CANCELED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
 export type ReceivingStatus = "DRAFT" | "PENDING_QC" | "COMPLETED" | "CANCELED" | "POSTED";
 
 /** Suppliers & Customers share an identical field shape. */
@@ -566,6 +566,19 @@ export interface PurchaseOrder {
   taxCategoryPercentage?: string | null;
   allowEditOrderDate?: boolean;
   qcRequired?: boolean;
+  needApproval?: boolean;
+  currentApprovalLevel?: number;
+  approvalWorkflowId?: string | null;
+  preparedSignature?: string | null;
+  preparedSignedAt?: string | null;
+  preparedBy?: string | null;
+  preparedByName?: string | null;
+  preparedByRole?: string | null;
+  approvedSignature?: string | null;
+  approvedSignedAt?: string | null;
+  approvedBy?: string | null;
+  approvedByRole?: string | null;
+  approvedByName?: string | null;
   createdBy?: string | null;
   createdByName?: string | null;
   createdAt?: string;
@@ -817,6 +830,47 @@ export interface PriceListLine {
   currency: string;
   minQty: string | number;
   notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Workflow {
+  id: string;
+  code?: string;
+  name: string;
+  documentType: string;
+  status: "DRAFT" | "ACTIVE";
+  isActive: boolean;
+  isDefault: boolean;
+  version: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorkflowState {
+  id: string;
+  workflowId: string;
+  code: string;
+  name: string;
+  color: string;
+  type: "initial" | "intermediate" | "final" | "rejected";
+  orderNo: number;
+  requiresSignature?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorkflowTransition {
+  id: string;
+  workflowId: string;
+  code: string;
+  name: string;
+  fromStateId: string | null;
+  toStateId: string;
+  trigger: "submit" | "approve" | "reject" | "cancel" | "custom";
+  allowedRoleIds: string[];
+  condition?: { minAmount?: number; maxAmount?: number } | null;
+  requiresComment: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

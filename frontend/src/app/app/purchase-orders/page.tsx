@@ -118,7 +118,10 @@ export default function PurchaseOrdersPage() {
             >
               <option value="all">All status</option>
               <option value="DRAFT">Draft</option>
+              <option value="PENDING_APPROVAL">Pending Approval</option>
+              <option value="APPROVED">Approved</option>
               <option value="POSTED">Posted</option>
+              <option value="REJECTED">Rejected</option>
               <option value="CANCELED">Canceled</option>
             </Select>
             <Select

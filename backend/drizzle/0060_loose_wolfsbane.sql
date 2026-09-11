@@ -1,0 +1,1 @@
+ALTER TABLE "purchase_orders" ADD COLUMN "additional_charges" jsonb DEFAULT '[]'::jsonb NOT NULL;

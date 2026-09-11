@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { ChevronsUpDown, LogOut } from "lucide-react";
 import { useSession, ROLE_LABELS } from "@/lib/session";
 import { hueBg } from "@/lib/utils";
-import { useStockMovement, useOpnameProject } from "@/lib/api/query";
+import { useStockMovement, useOpnameProject, useRoles } from "@/lib/api/query";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -37,6 +37,12 @@ export function Topbar() {
 
   const { data: movement } = useStockMovement(ids.movementId);
   const { data: project } = useOpnameProject(ids.projectId);
+  const { data: roles = [] } = useRoles();
+  const activeRoleName = useMemo(() => {
+    if (!user) return "";
+    const r = (roles as any[]).find((x) => x.id === user.role || x.publicId === user.role || x.code === user.role);
+    return r?.name ?? ROLE_LABELS[user.role] ?? user.role;
+  }, [roles, user?.role]);
 
   // Title dinamis: transaksi → nama tipe transaksi, stock opname → nama project.
   const dynamicSubtitle = useMemo(
@@ -128,7 +134,7 @@ export function Topbar() {
                   {user.name}
                 </span>
                 <span className="block truncate text-[10.5px] text-muted-foreground">
-                  {ROLE_LABELS[user.role] ?? user.role}
+                  {activeRoleName}
                 </span>
               </span>
               <ChevronsUpDown
@@ -166,9 +172,15 @@ export function Topbar() {
                 Active role
               </span>
               <Badge tone="success" dot className="px-2.5 py-1">
-                {ROLE_LABELS[user.role] ?? user.role}
+                {activeRoleName}
               </Badge>
             </div>
+            <DropdownMenuItem
+              className="gap-2.5 px-4 py-2.5 text-[13px] font-medium"
+              onClick={() => router.push("/app/settings/account")}
+            >
+              My Account
+            </DropdownMenuItem>
             <DropdownMenuSeparator className="mx-2" />
             <DropdownMenuItem
               className="gap-2.5 px-4 py-2.5 text-[13px] font-medium text-destructive focus:bg-destructive/10 focus:text-destructive"

@@ -456,6 +456,28 @@ export function usePostPurchaseOrder() {
   });
 }
 
+export function useApprovePurchaseOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/purchase-orders/${id}/approve`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders", id] });
+    },
+  });
+}
+
+export function useRejectPurchaseOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/purchase-orders/${id}/reject`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders", id] });
+    },
+  });
+}
+
 export function useCancelPurchaseOrder() {
   const qc = useQueryClient();
   return useMutation({
@@ -1356,5 +1378,141 @@ export function useRemoveDocumentSeries() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/document-series/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentSeries"] }); },
+  });
+}
+
+// ---- Workflows (generic approval) ----
+export function useWorkflows() {
+  return useQuery({
+    queryKey: ["workflows"],
+    queryFn: () => api.get<import("@/types").Workflow[]>("/workflows"),
+  });
+}
+export function useWorkflow(id?: string) {
+  return useQuery({
+    queryKey: ["workflows", id],
+    queryFn: () => api.get<import("@/types").Workflow & { states: import("@/types").WorkflowState[]; transitions: import("@/types").WorkflowTransition[] }>(`/workflows/${id}`),
+    enabled: !!id,
+  });
+}
+export function useCreateWorkflow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => api.post("/workflows", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflows"] }),
+  });
+}
+export function useUpdateWorkflow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.put(`/workflows/${id}`, patch),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["workflows"] }); qc.invalidateQueries({ queryKey: ["workflows", (v as any).id] }); },
+  });
+}
+export function useRemoveWorkflow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/workflows/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflows"] }),
+  });
+}
+export function useSubmitWorkflow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/workflows/${id}/submit`, {}),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["workflows"] });
+      qc.invalidateQueries({ queryKey: ["workflows", id] });
+    },
+  });
+}
+export function useWorkflowStates(workflowId?: string) {
+  return useQuery({
+    queryKey: ["workflowStates", workflowId],
+    queryFn: () => api.get<import("@/types").WorkflowState[]>(`/workflows/${workflowId}/states`),
+    enabled: !!workflowId,
+  });
+}
+export function useCreateWorkflowState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workflowId, body }: { workflowId: string; body: unknown }) => api.post(`/workflows/${workflowId}/states`, body),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["workflowStates", (v as any).workflowId] }),
+  });
+}
+export function useUpdateWorkflowState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.put(`/workflow-states/${id}`, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflowStates"] }),
+  });
+}
+export function useRemoveWorkflowState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/workflow-states/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflowStates"] }),
+  });
+}
+export function useWorkflowTransitions(workflowId?: string) {
+  return useQuery({
+    queryKey: ["workflowTransitions", workflowId],
+    queryFn: () => api.get<import("@/types").WorkflowTransition[]>(`/workflows/${workflowId}/transitions`),
+    enabled: !!workflowId,
+  });
+}
+export function useCreateWorkflowTransition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workflowId, body }: { workflowId: string; body: unknown }) => api.post(`/workflows/${workflowId}/transitions`, body),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["workflowTransitions", (v as any).workflowId] }),
+  });
+}
+export function useUpdateWorkflowTransition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.put(`/workflow-transitions/${id}`, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflowTransitions"] }),
+  });
+}
+export function useRemoveWorkflowTransition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/workflow-transitions/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflowTransitions"] }),
+  });
+}
+
+export function useUserSignature() {
+  return useQuery({
+    queryKey: ["userSignature", "me"],
+    queryFn: () => api.get<{ id: string; signatureData: string; updatedAt: string } | null>("/user-signatures/me"),
+  });
+}
+export function useUpsertUserSignature() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (signatureData: string) => api.put("/user-signatures/me", { signatureData }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["userSignature", "me"] }),
+  });
+}
+export function useDeleteUserSignature() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.del("/user-signatures/me"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["userSignature", "me"] }),
+  });
+}
+
+export function useUpdateMe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: { name?: string; email?: string; phone?: string | null; password?: string }) =>
+      api.put<{ user: import("@/types").User }>("/auth/me", patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["me"] });
+      // session will refresh on focus, but also invalidate user queries
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
   });
 }

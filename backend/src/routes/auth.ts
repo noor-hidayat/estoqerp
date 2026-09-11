@@ -270,6 +270,60 @@ authRouter.post(
   res.status(201).json({ user: await toPublicUser(created) });
 });
 
+authRouter.put("/me", requireAuth, async (req, res) => {
+  const user = req.user as AuthUser;
+  const row = await findUserById(user.id);
+  if (!row) {
+    res.status(404).json({ error: "User tidak ditemukan." });
+    return;
+  }
+  const b = req.body ?? {};
+  const patch: Record<string, any> = {};
+  if (b.name !== undefined) {
+    const v = String(b.name).trim();
+    if (!v) {
+      res.status(400).json({ error: "Nama wajib diisi." });
+      return;
+    }
+    patch.name = v;
+  }
+  if (b.email !== undefined) {
+    const v = String(b.email).trim().toLowerCase();
+    if (!v || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+      res.status(400).json({ error: "Format email tidak valid." });
+      return;
+    }
+    const [exists] = await db.select({ id: users.id }).from(users).where(eq(users.email, v)).limit(1);
+    if (exists && exists.id !== row.id) {
+      res.status(409).json({ error: "Email sudah terdaftar." });
+      return;
+    }
+    patch.email = v;
+  }
+  if (b.phone !== undefined) {
+    if (b.phone === null) patch.phone = null;
+    else {
+      const v = String(b.phone).trim();
+      patch.phone = !v || v.toLowerCase() === "null" ? null : v;
+    }
+  }
+  if (b.password !== undefined && String(b.password).trim() !== "") {
+    const pw = String(b.password);
+    if (pw.length < 6) {
+      res.status(400).json({ error: "Password minimal 6 karakter." });
+      return;
+    }
+    patch.passwordHash = await bcrypt.hash(pw, 10);
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: "Tidak ada field yang diubah." });
+    return;
+  }
+  const [updated] = await db.update(users).set(patch).where(eq(users.id, row.id)).returning();
+  const pub = await toPublicUser(updated);
+  res.json({ user: pub });
+});
+
 authRouter.get("/me", requireAuth, async (req, res) => {
   const user = req.user as AuthUser;
   const row = await findUserById(user.id);
