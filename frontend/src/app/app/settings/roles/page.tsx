@@ -143,6 +143,7 @@ export default function RolesPage() {
         getRowId={(r) => r.id}
         searchPlaceholder="Search roles..."
         getSearchText={(r) => r.name}
+        onRowClick={(r) => navigate(`/app/settings/roles/${r.id}`)}
         selectable
         selectedKeys={selected}
         onSelectionChange={setSelected}

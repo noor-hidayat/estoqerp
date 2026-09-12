@@ -49,29 +49,139 @@ export default function CompanySettingsPage() {
 
   const dirty = JSON.stringify(form) !== snapshot;
 
-  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Kompres logo via canvas agar tidak trigger 413 Payload Too Large.
+  // Base64 menambah ~33% ukuran -> 4MB file = ~5.3MB JSON > limit nginx 1MB & express 10MB.
+  // Kita resize max 512px dan export JPEG/WebP ~0.8 quality, target <500KB.
+  const compressImageToDataUrl = (file: File, maxDim = 512, quality = 0.8): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          const ratio = Math.min(maxDim / w, maxDim / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          URL.revokeObjectURL(url);
+          reject(new Error("Canvas tidak support"));
+          return;
+        }
+        // putihkan background untuk JPEG (jaga logo transparan tetap terlihat)
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        // PNG dengan transparansi: pertahankan PNG, selain itu JPEG lebih kecil
+        const isPng = file.type === "image/png";
+        const mime = isPng ? "image/png" : "image/jpeg";
+        try {
+          const dataUrl = canvas.toDataURL(mime, quality);
+          resolve(dataUrl);
+        } catch (e) {
+          reject(e as Error);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Gagal memuat gambar"));
+      };
+      img.src = url;
+    });
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // reset agar pilih file sama tetap trigger onChange
+    e.target.value = "";
     if (!file) return;
-    if (file.size > 4 * 1024 * 1024) {
-      toast.error("Logo terlalu besar (max 4MB).");
-      return;
-    }
     if (!file.type.startsWith("image/")) {
       toast.error("File harus gambar.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = String(reader.result);
-      setForm({ ...form, logo: base64 });
-    };
-    reader.readAsDataURL(file);
+    // file mentah >4MB sudah kita tolak sebelum kompres (hindari OOM), tapi kompres akan turunkan <500KB
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error("Logo terlalu besar (max 4MB sebelum kompres). Silakan pilih file <4MB.");
+      return;
+    }
+    try {
+      let dataUrl: string;
+      // SVG tidak perlu kompres canvas
+      if (file.type === "image/svg+xml") {
+        const reader = new FileReader();
+        dataUrl = await new Promise<string>((res, rej) => {
+          reader.onload = () => res(String(reader.result));
+          reader.onerror = () => rej(new Error("Gagal baca file"));
+          reader.readAsDataURL(file);
+        });
+      } else {
+        dataUrl = await compressImageToDataUrl(file, 512, 0.8);
+        // jika hasil masih >1MB, coba ulang dengan dimensi lebih kecil & quality lebih rendah
+        if (dataUrl.length > 1 * 1024 * 1024) {
+          dataUrl = await compressImageToDataUrl(file, 256, 0.7);
+        }
+      }
+      if (dataUrl.length > 5 * 1024 * 1024) {
+        toast.error("Logo masih terlalu besar (>5MB setelah kompres). Gunakan gambar lebih kecil.");
+        return;
+      }
+      if (dataUrl.length > 500 * 1024) {
+        toast.message(`Logo ${Math.round(dataUrl.length / 1024)}KB — disarankan <500KB agar cetak cepat.`);
+      }
+      setForm((prev: any) => ({ ...prev, logo: dataUrl }));
+    } catch (err: any) {
+      toast.error(err?.message || "Gagal memproses logo.");
+    }
   };
+
+  const compressDataUrl = (dataUrl: string, maxDim = 512, quality = 0.8): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          const r = Math.min(maxDim / w, maxDim / h);
+          w = Math.round(w * r); h = Math.round(h * r);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("Canvas tidak support")); return; }
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        try { resolve(canvas.toDataURL("image/jpeg", quality)); } catch (e) { reject(e as Error); }
+      };
+      img.onerror = () => reject(new Error("Gagal kompres logo lama"));
+      img.src = dataUrl;
+    });
 
   const handleSave = async () => {
     if (!form.companyName?.trim() || !form.companyCode?.trim()) {
       toast.error("Company Name dan Company Code wajib diisi.");
       return;
+    }
+    // Auto-kompres logo lama yang kelewat besar (mis. sudah tersimpan 5MB sebelum fix) agar save tidak selalu 413
+    let logoToSend: string | null = form.logo || null;
+    if (logoToSend && logoToSend.startsWith("data:image/") && logoToSend.length > 1 * 1024 * 1024) {
+      try {
+        toast.message("Logo lama terlalu besar, mengompres...");
+        logoToSend = await compressDataUrl(logoToSend, 512, 0.8);
+        if (logoToSend.length > 1 * 1024 * 1024) logoToSend = await compressDataUrl(logoToSend, 256, 0.7);
+        if (logoToSend.length > 5 * 1024 * 1024) {
+          toast.error("Logo masih >5MB setelah kompres. Klik Remove lalu upload ulang logo <500KB.");
+          return;
+        }
+        // update form state agar snapshot sinkron setelah sukses
+        setForm((prev: any) => ({ ...prev, logo: logoToSend }));
+      } catch {
+        toast.error("Gagal mengompres logo lama. Hapus logo lalu upload ulang.");
+        return;
+      }
     }
     try {
       await update.mutateAsync({
@@ -86,7 +196,7 @@ export default function CompanySettingsPage() {
         baseCurrency: form.baseCurrency,
         timezone: form.timezone,
         fiscalYear: form.fiscalYear,
-        logo: form.logo || null,
+        logo: logoToSend,
       });
       toast.success("Company settings disimpan.");
       setSnapshot(JSON.stringify(form));
@@ -192,7 +302,7 @@ export default function CompanySettingsPage() {
                       </Button>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground">PNG/JPG max 4MB, dipakai di setiap dokumen cetak.</p>
+                  <p className="text-[11px] text-muted-foreground">PNG/JPG max 4MB → auto-kompres ke &lt;500KB (512px) agar tidak 413, dipakai di setiap dokumen cetak.</p>
                 </div>
               </div>
             </div>

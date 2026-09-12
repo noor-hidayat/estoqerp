@@ -1,7 +1,17 @@
 // Pohon menu RBAC — sumber kebenaran untuk ekspansi permission coarse → granular.
 // Disinkronkan dengan MENU_GROUPS di frontend (components/roles/role-form.tsx).
+// Update 2026-09-12: tambah Supply Chain + settings.workflows/company agar sinkron dengan NAV.
 
 export const MENU_CHILDREN: Record<string, string[]> = {
+  dashboard: [],
+  supply: [
+    "supply.suppliers",
+    "supply.customers",
+    "supply.purchaseOrders",
+    "supply.salesOrders",
+    "supply.goodsReceipts",
+    "supply.deliveries",
+  ],
   master: [
     "master.items",
     "master.itemGroups",
@@ -43,10 +53,12 @@ export const MENU_CHILDREN: Record<string, string[]> = {
     "settings.roles",
     "settings.roles.new",
     "settings.roles.edit",
+    "settings.workflows",
+    "settings.company",
+    "settings.import",
     "settings.columnWidth",
   ],
   ai: [],
-  dashboard: [],
 };
 
 export const ALL_MENUS: string[] = [

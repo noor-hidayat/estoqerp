@@ -30,7 +30,8 @@ app.use(
     origin: config.corsOrigin === "*" ? true : config.corsOrigin,
   })
 );
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ limit: "20mb", extended: true }));
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
@@ -64,10 +65,18 @@ app.use((_req, res) => {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error("API error:", err);
+  const anyErr = err as { status?: number; statusCode?: number; type?: string; message?: string };
+  const status = anyErr?.status ?? anyErr?.statusCode;
+  // body-parser / express.json PayloadTooLargeError -> type === 'entity.too.large', status 413
+  if (status === 413 || anyErr?.type === "entity.too.large") {
+    res.status(413).json({ error: "Payload terlalu besar. Logo maksimal 5MB (disarankan <500KB, PNG/JPG). Silakan kompres/ resize gambar sebelum upload." });
+    return;
+  }
+  const httpStatus = typeof status === "number" && status >= 400 && status < 600 ? status : 500;
   const message = err instanceof Error ? err.message : "Terjadi kesalahan pada server.";
-  res.status(500).json({ error: message });
+  res.status(httpStatus).json({ error: message });
 });
 
-app.listen(config.port, () => {
-  console.log(`StockOpname API berjalan di http://localhost:${config.port}`);
+app.listen(config.port, "0.0.0.0", () => {
+  console.log(`StockOpname API berjalan di http://0.0.0.0:${config.port}`);
 });

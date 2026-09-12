@@ -119,6 +119,7 @@ export default function UsersPage() {
         selectable
         searchPlaceholder="Search users..."
         getSearchText={(u) => `${u.name} ${u.email}`}
+        onRowClick={(u) => navigate(`/app/settings/users/${u.id}`)}
         minWidth={720}
         emptyIcon={<Users size={26} strokeWidth={2} />}
         emptyTitle="No users"
