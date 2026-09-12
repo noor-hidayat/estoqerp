@@ -6,6 +6,7 @@ import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
 import { Link } from "react-router-dom";
@@ -32,7 +33,7 @@ export default function EditItemGroupPage() {
 
   useEffect(() => {
     if (itemGroup) {
-      const init = { code: itemGroup.code, name: itemGroup.name };
+      const init = { code: itemGroup.code, name: itemGroup.name, isActive: (itemGroup as any).isActive !== false };
       setForm(init);
       setSnapshot(JSON.stringify(init));
     }
@@ -76,7 +77,7 @@ export default function EditItemGroupPage() {
     });
     if (!confirmed) return;
     try {
-      await updateItemGroup.mutateAsync({ id: id!, patch: { code: form.code.trim(), name: form.name.trim() } });
+      await updateItemGroup.mutateAsync({ id: id!, patch: { code: form.code.trim(), name: form.name.trim(), isActive: !!form.isActive } });
       toast.success("Updated");
       setSnapshot(JSON.stringify(form));
       setEditing(false);
@@ -163,6 +164,13 @@ export default function EditItemGroupPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               disabled={!editing}
             />
+            <div className="sm:col-span-2 flex items-center justify-between rounded-md border border-border px-3 py-2.5">
+              <div>
+                <div className="text-sm font-medium leading-none">Active</div>
+                <div className="text-xs text-muted-foreground">{form.isActive ? "Active" : "Inactive"}</div>
+              </div>
+              <Switch checked={!!form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: !!v })} disabled={!editing} />
+            </div>
           </FormGrid>
         </FormSection>
       </FormPage>

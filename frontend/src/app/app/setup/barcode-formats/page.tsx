@@ -1,45 +1,24 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {Plus, Trash2, Pencil} from "lucide-react";
+import {Plus, Trash2, MoreVertical, Pencil, Trash, Power} from "lucide-react";
 import { useBarcodeFormats, useRemove, useUpdate } from "@/lib/api/query";
-import { formatDate, timeAgo } from "@/lib/utils";
-import { sortSegments } from "@/lib/barcode/parser";
+import { timeAgo } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
-import { Toggle } from "@/components/ui/toggle";
 import { ShellLoader } from "@/components/ui/loader";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
-import { fieldColor, fieldLabelShort } from "@/components/barcode/segment-visualizer";
-import { cx } from "@/lib/utils";
-import type { BarcodeFormat, BarcodeSegment } from "@/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { BarcodeFormat } from "@/types";
 
-function SegmentChips({ segments }: { segments: BarcodeSegment[] }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {sortSegments(segments).map((seg) => {
-        const c = fieldColor(seg.field);
-        return (
-          <span
-            key={seg.id}
-            className={cx(
-              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-              c.bg,
-              c.text
-            )}
-            title={fieldLabelShort(seg.field)}
-          >
-            {seg.start}–{seg.end}
-            <span className="opacity-60">·</span>
-            {fieldLabelShort(seg.field)}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
+
 
 export default function BarcodeFormatsPage() {
   const navigate = useNavigate();
@@ -65,8 +44,19 @@ export default function BarcodeFormatsPage() {
     [formats]
   );
 
-  const toggleActive = (id: string, next: boolean) => {
-    update.mutate({ id, patch: { isActive: next } });
+  const handleDeleteOne = async (id: string) => {
+    if (!confirm("Hapus format ini?")) return;
+    try {
+      await removeFormat.mutateAsync(id);
+    } catch (e: any) {
+      alert(e.message ?? "Cannot delete format.");
+    }
+  };
+
+  const handleToggleActive = async (f: BarcodeFormat) => {
+    const next = !f.isActive;
+    if (!confirm(next ? `Activate "${f.name}"?` : `Deactivate "${f.name}"?`)) return;
+    update.mutate({ id: f.id, patch: { isActive: next } });
   };
 
   if (isLoading) {
@@ -84,55 +74,25 @@ export default function BarcodeFormatsPage() {
   const columns: DataTableColumn<BarcodeFormat>[] = [
     {
       id: "name",
-      header: "Format",
+      header: "Name",
       sortValue: (f) => f.name,
       cell: (f) => (
-        <button
-          onClick={() => navigate(`/app/setup/barcode-formats/${f.id}`)}
-          className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
-          title="Buka format"
-        >
+        <span className="inline-flex items-center font-medium whitespace-nowrap truncate" title={f.name}>
           {f.name}
-        </button>
+        </span>
       ),
-      className: "min-w-[180px]",
-    },
-    {
-      id: "segments",
-      header: "Segment Definition",
-      cell: (f) => <SegmentChips segments={f.segments} />,
-      className: "min-w-[260px]",
-    },
-    {
-      id: "qty",
-      header: "Qty",
-      cell: (f) => (
-        <Badge tone={f.qtyPerFormat ? "violet" : "amber"}>
-          {f.qtyPerFormat ? "Auto from item" : "Manual per scan"}
-        </Badge>
-      ),
+      className: "min-w-[360px] pr-8 whitespace-nowrap",
     },
     {
       id: "status",
       header: "Status",
+      sortValue: (f) => (f.isActive ? 1 : 0),
       cell: (f) => (
-        <div className="flex items-center gap-3">
-          <Toggle checked={f.isActive} onChange={(next) => toggleActive(f.id, next)} />
-          <Badge tone={f.isActive ? "emerald" : "neutral"} dot>
-            {f.isActive ? "Active" : "Inactive"}
-          </Badge>
-        </div>
+        <Badge tone={f.isActive ? "success" : "neutral"} className="rounded-md text-[11px]">
+          {f.isActive ? "Active" : "Inactive"}
+        </Badge>
       ),
-    },
-    {
-      id: "updated",
-      header: "Updated",
-      sortValue: (f) => f.updatedAt ?? "",
-      cell: (f) => (
-        <span className="whitespace-nowrap text-xs text-muted-foreground">
-          {formatDate(f.updatedAt)}
-        </span>
-      ),
+      className: "w-[130px] pr-8",
     },
     {
       id: "created",
@@ -143,25 +103,33 @@ export default function BarcodeFormatsPage() {
           {timeAgo(f.createdAt)}
         </span>
       ),
+      className: "w-[170px] pr-8",
     },
     {
       id: "actions",
-      header: "",
+      header: "Action",
       cell: (f) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/app/setup/barcode-formats/${f.id}`);
-          }}
-        >
-          <Pencil size={12} strokeWidth={2} />
-          Edit
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()}>
+              <MoreVertical size={14} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/app/setup/barcode-formats/${f.id}`); }} className="gap-2">
+              <Pencil size={14} /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleToggleActive(f); }} className="gap-2">
+              <Power size={14} /> {f.isActive ? "Deactivate" : "Activate"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteOne(f.id); }} className="gap-2 text-destructive focus:text-destructive">
+              <Trash size={14} /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
-      className: "w-[90px] text-right",
+      className: "w-[70px] text-center",
+      align: "center",
     },
   ];
 
@@ -204,7 +172,7 @@ export default function BarcodeFormatsPage() {
             </Button>
           ) : null
         }
-        minWidth={900}
+        minWidth={760}
         emptyIcon={null}
         emptyTitle="No barcode formats yet"
         emptyDescription="Create your first format to define how barcodes are parsed into data segments."

@@ -136,6 +136,31 @@ export function useAllWarehouses() {
   });
 }
 
+export function useSubWarehouses(parentId?: string) {
+  return useQuery({
+    queryKey: ["warehouses", { parentId }],
+    queryFn: () => api.get<Warehouse[]>(`/warehouses${qs(parentId ? { parentId } : { parentId: "null" })}`),
+    enabled: !!parentId,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useTopWarehouses(branchId?: string) {
+  const params: Record<string, unknown> = { parentId: "null" };
+  if (branchId) params.branchId = branchId;
+  return useQuery({
+    queryKey: ["warehouses", params],
+    queryFn: () => api.get<Warehouse[]>(`/warehouses${qs(params)}`),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useLocation(id?: string) {
   return useResourceOne<Location>("locations", id);
 }
@@ -381,6 +406,146 @@ export function useCustomers(params?: Record<string, unknown>) {
 
 export function useCustomer(id?: string) {
   return useResourceOne<Customer>("customers", id);
+}
+
+// ---- Supply Chain: Purchase Requests (PR) ----
+
+export function usePurchaseRequests(params?: Record<string, unknown>) {
+  return useResourceList<import("@/types").PurchaseRequest>("purchase-requests", params);
+}
+
+export function usePurchaseRequest(id?: string) {
+  return useResourceOne<import("@/types").PurchaseRequest>("purchase-requests", id);
+}
+
+export function useCreatePurchaseRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => api.post<{ id: string }>("/purchase-requests", body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); },
+  });
+}
+
+export function useUpdatePurchaseRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/purchase-requests/${id}`, patch),
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); },
+  });
+}
+
+export function useRemovePurchaseRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/purchase-requests/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); },
+  });
+}
+
+export function usePostPurchaseRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/purchase-requests/${id}/post`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); },
+  });
+}
+
+export function useApprovePurchaseRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/purchase-requests/${id}/approve`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); },
+  });
+}
+
+export function useRejectPurchaseRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/purchase-requests/${id}/reject`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); },
+  });
+}
+
+export function useCancelPurchaseRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/purchase-requests/${id}/cancel`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); },
+  });
+}
+
+export function useCreatePOFromPR() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<{ id: string; documentNo: string }>(`/purchase-requests/${id}/create-po`, {}),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-orders"] }); },
+  });
+}
+
+// ---- Supply Chain: Material Requests (MR) ----
+
+export function useMaterialRequests(params?: Record<string, unknown>) {
+  return useResourceList<import("@/types").MaterialRequest>("material-requests", params);
+}
+
+export function useMaterialRequest(id?: string) {
+  return useResourceOne<import("@/types").MaterialRequest>("material-requests", id);
+}
+
+export function useCreateMaterialRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => api.post<{ id: string }>("/material-requests", body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["material-requests"] }); },
+  });
+}
+
+export function useUpdateMaterialRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/material-requests/${id}`, patch),
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); qc.invalidateQueries({ queryKey: ["material-requests", id] }); },
+  });
+}
+
+export function useRemoveMaterialRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/material-requests/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["material-requests"] }); },
+  });
+}
+
+export function usePostMaterialRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/material-requests/${id}/post`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); qc.invalidateQueries({ queryKey: ["material-requests", id] }); },
+  });
+}
+
+export function useApproveMaterialRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/material-requests/${id}/approve`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); qc.invalidateQueries({ queryKey: ["material-requests", id] }); },
+  });
+}
+
+export function useRejectMaterialRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/material-requests/${id}/reject`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); qc.invalidateQueries({ queryKey: ["material-requests", id] }); },
+  });
+}
+
+export function useCancelMaterialRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/material-requests/${id}/cancel`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); qc.invalidateQueries({ queryKey: ["material-requests", id] }); },
+  });
 }
 
 // ---- Supply Chain: Purchase Orders ----

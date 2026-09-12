@@ -90,6 +90,8 @@ export async function nextDocumentNo(
   // Map legacy type codes to names (code column removed, only name remains)
   const TYPE_CODE_TO_NAME: Record<string, string> = {
     PO: "Purchase Order",
+    PR: "Purchase Request",
+    MR: "Material Request",
     SO: "Sales Order",
     RCV: "Receiving",
     QC: "QC Inspection",

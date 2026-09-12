@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
@@ -45,6 +46,7 @@ export default function EditItemPage() {
         uomQty: item.uomQty,
         description: item.description ?? "",
         isFinishGood: (item as any).isFinishGood ?? false,
+        isActive: (item as any).isActive !== false,
       };
       setForm(init);
       setSnapshot(JSON.stringify(init));
@@ -94,6 +96,7 @@ export default function EditItemPage() {
           uomQty: form.uomQty,
           description: form.description?.trim() || null,
           isFinishGood: form.isFinishGood,
+          isActive: !!form.isActive,
         },
       });
       toast.success("Updated");
@@ -241,6 +244,13 @@ export default function EditItemPage() {
               <Label htmlFor="isFinishGoodEdit" className="text-sm font-medium leading-none cursor-pointer">
                 Finish Good (bisa di-return customer)
               </Label>
+            </div>
+            <div className="sm:col-span-2 flex items-center justify-between rounded-md border border-border px-3 py-2.5">
+              <div>
+                <div className="text-sm font-medium leading-none">Active</div>
+                <div className="text-xs text-muted-foreground">{form.isActive ? "Active" : "Inactive"}</div>
+              </div>
+              <Switch checked={!!form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: !!v })} disabled={!editing} />
             </div>
           </FormGrid>
           </FormSection>

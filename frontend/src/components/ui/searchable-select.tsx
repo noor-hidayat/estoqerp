@@ -43,7 +43,7 @@ export function SearchableSelect({
   onBlur,
   emptyLabel,
   className,
-  anchorSelected = true,
+  anchorSelected = false,
 }: {
   label?: string;
   options: SearchableOption[];
@@ -94,21 +94,45 @@ export function SearchableSelect({
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    // When anchor is active and query empty we must include selected even if excludeSelected=true
     const sourceForAnchor = anchorEnabled && q === "" && value ? options : available;
-    const base = q
+    const baseRaw = q
       ? sourceForAnchor.filter((o) => o.label.toLowerCase().includes(q))
       : sourceForAnchor;
+    // Reorder: last selected always at position 1 (top) when query empty
+    let base = baseRaw;
+    if (q === "" && value) {
+      const selIdx = baseRaw.findIndex((o) => o.value === value);
+      if (selIdx > 0) {
+        const sel = baseRaw[selIdx];
+        base = [sel, ...baseRaw.slice(0, selIdx), ...baseRaw.slice(selIdx + 1)];
+      } else if (selIdx === -1) {
+        const selOpt = options.find((o) => o.value === value);
+        if (selOpt) {
+          // selected not in base (e.g. excludeSelected), prepend it
+          const alreadyInBase = baseRaw.some((o) => o.value === selOpt.value);
+          if (!alreadyInBase) base = [selOpt, ...baseRaw];
+        }
+      }
+    }
     const list = emptyLabel
       ? [{ value: "", label: emptyLabel }, ...base]
       : base;
-    const hasSelected = value !== "" && list.some((o) => o.value === value);
-    // Anchor: show full list (no slice) so 1-4 can be above and 6-10 below trigger.
-    // For large lists still cap via max-height + scroll, but don't slice so surrounding items stay visible.
-    if (anchorEnabled && q === "" && hasSelected) {
-      return list;
+    // When emptyLabel exists, selected should be right after it (pos 1 among data): move selected to index 1
+    let finalList = list;
+    if (emptyLabel && q === "" && value && value !== "") {
+      const selIdx2 = list.findIndex((o) => o.value === value);
+      if (selIdx2 > 1) {
+        const sel = list[selIdx2];
+        const without = list.filter((_, i) => i !== selIdx2);
+        // keep empty at 0, selected at 1
+        finalList = [without[0], sel, ...without.slice(1)];
+      }
     }
-    return list.slice(0, maxSuggestions);
+    const hasSelected = value !== "" && finalList.some((o) => o.value === value);
+    if (anchorEnabled && q === "" && hasSelected) {
+      return finalList;
+    }
+    return finalList.slice(0, maxSuggestions);
   }, [available, options, query, maxSuggestions, emptyLabel, value, anchorEnabled]);
 
   const totalMatches = useMemo(() => {

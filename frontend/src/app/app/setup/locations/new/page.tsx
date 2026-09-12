@@ -6,6 +6,7 @@ import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import {
   FormPage,
@@ -16,7 +17,7 @@ import { toast } from "sonner";
 
 export default function NewLocationPage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ code: "", name: "", warehouseId: "" });
+  const [form, setForm] = useState({ code: "", name: "", warehouseId: "", isActive: true });
 
   const { data: allLocations = [] } = useLocations();
   const { data: warehouses = [], isLoading: warehousesLoading } = useAllWarehouses();
@@ -56,7 +57,7 @@ export default function NewLocationPage() {
     });
     if (!confirmed) return;
     try {
-      await insertLocation.mutateAsync({ code: form.code.trim(), name: form.name, warehouseId: form.warehouseId });
+      await insertLocation.mutateAsync({ code: form.code.trim(), name: form.name, warehouseId: form.warehouseId, isActive: !!form.isActive });
       toast.success("Created");
       navigate("/app/setup/locations");
     } catch (e: any) {
@@ -111,6 +112,13 @@ export default function NewLocationPage() {
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
+            </div>
+            <div className="sm:col-span-2 flex items-center justify-between rounded-md border border-border px-3 py-2.5">
+              <div>
+                <div className="text-sm font-medium leading-none">Active</div>
+                <div className="text-xs text-muted-foreground">{form.isActive ? "Active" : "Inactive"}</div>
+              </div>
+              <Switch checked={!!form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: !!v })} />
             </div>
           </FormGrid>
         </FormSection>

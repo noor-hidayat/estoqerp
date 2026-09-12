@@ -313,18 +313,29 @@ export const branches = pgTable("branches", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const warehouses = pgTable("warehouses", {
-  id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
-  publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
-  branchId: bigint("branch_id", { mode: "number" })
-    .notNull()
-    .references(() => branches.id, { onDelete: "cascade" }),
-  code: text("code").notNull(),
-  name: text("name").notNull(),
-  description: text("description"),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const warehouses = pgTable(
+  "warehouses",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    branchId: bigint("branch_id", { mode: "number" })
+      .notNull()
+      .references(() => branches.id, { onDelete: "cascade" }),
+    parentId: bigint("parent_id", { mode: "number" }).references((): any => warehouses.id, { onDelete: "set null" }),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    picName: text("pic_name"),
+    picPhone: text("pic_phone"),
+    picEmail: text("pic_email"),
+    address: text("address"),
+    phone: text("phone"),
+    email: text("email"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_warehouses_parent").on(t.parentId), index("idx_warehouses_branch_parent").on(t.branchId, t.parentId)]
+);
 
 export const locations = pgTable("locations", {
   id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
@@ -354,6 +365,7 @@ export const uom = pgTable("uom", {
   publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
   code: text("code").notNull().unique(),
   name: text("name").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
   createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -984,6 +996,137 @@ export const purchaseOrderLines = pgTable(
     deliveryDate: date("delivery_date"),
   },
   (t) => [index("idx_pol_po").on(t.purchaseOrderId)]
+);
+
+export const purchaseRequests = pgTable(
+  "purchase_requests",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    documentNo: text("document_no").unique(),
+    seriesId: bigint("series_id", { mode: "number" }).references(() => documentSeries.id),
+    supplierId: bigint("supplier_id", { mode: "number" }).references(() => suppliers.id),
+    warehouseId: bigint("warehouse_id", { mode: "number" })
+      .notNull()
+      .references(() => warehouses.id),
+    requestDate: date("request_date").notNull(),
+    expectedDate: date("expected_date"),
+    urgency: text("urgency", { enum: ["LOW", "MEDIUM", "HIGH"] }).notNull().default("MEDIUM"),
+    status: text("status", { enum: docStatuses }).notNull().default("DRAFT"),
+    notes: text("notes"),
+    department: text("department"),
+    costCenter: text("cost_center"),
+    currency: text("currency").notNull().default("IDR"),
+    exchangeRate: numeric("exchange_rate", { precision: 15, scale: 6 }).notNull().default("1"),
+    needApproval: boolean("need_approval").notNull().default(false),
+    currentApprovalLevel: integer("current_approval_level").notNull().default(0),
+    approvalWorkflowId: bigint("approval_workflow_id", { mode: "number" }),
+    preparedSignature: text("prepared_signature"),
+    preparedSignedAt: timestamp("prepared_signed_at", { withTimezone: true }),
+    preparedBy: bigint("prepared_by", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
+    approvedSignature: text("approved_signature"),
+    approvedSignedAt: timestamp("approved_signed_at", { withTimezone: true }),
+    approvedBy: bigint("approved_by", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
+    globalDiscountPercent: numeric("global_discount_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+    additionalCharges: jsonb("additional_charges").$type<{ type: string; amount: string }[]>().notNull().default([]),
+    taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+    taxCategoryId: bigint("tax_category_id", { mode: "number" }).references(() => taxCategories.id, { onDelete: "set null" }),
+    createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
+    branchId: bigint("branch_id", { mode: "number" }).references(() => branches.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_purchase_requests_supplier").on(t.supplierId),
+    index("idx_purchase_requests_wh").on(t.warehouseId),
+    index("idx_purchase_requests_status").on(t.status),
+    index("idx_purchase_requests_document_no").on(t.documentNo),
+    index("idx_purchase_requests_public_id").on(t.publicId),
+  ]
+);
+
+export const purchaseRequestLines = pgTable(
+  "purchase_request_lines",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    purchaseRequestId: bigint("purchase_request_id", { mode: "number" })
+      .notNull()
+      .references(() => purchaseRequests.id, { onDelete: "cascade" }),
+    itemId: bigint("item_id", { mode: "number" })
+      .notNull()
+      .references(() => items.id),
+    uomId: bigint("uom_id", { mode: "number" })
+      .notNull()
+      .references(() => uom.id),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
+    discount: numeric("discount", { precision: 15, scale: 2 }).notNull().default("0"),
+    batchNumber: text("batch_number"),
+    note: text("note"),
+    deliveryDate: date("delivery_date"),
+  },
+  (t) => [index("idx_prl_pr").on(t.purchaseRequestId)]
+);
+
+export const materialRequests = pgTable(
+  "material_requests",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    documentNo: text("document_no").unique(),
+    seriesId: bigint("series_id", { mode: "number" }).references(() => documentSeries.id),
+    warehouseId: bigint("warehouse_id", { mode: "number" })
+      .notNull()
+      .references(() => warehouses.id),
+    requestDate: date("request_date").notNull(),
+    expectedDate: date("expected_date"),
+    urgency: text("urgency", { enum: ["LOW", "MEDIUM", "HIGH"] }).notNull().default("MEDIUM"),
+    status: text("status", { enum: docStatuses }).notNull().default("DRAFT"),
+    notes: text("notes"),
+    department: text("department"),
+    costCenter: text("cost_center"),
+    needApproval: boolean("need_approval").notNull().default(false),
+    currentApprovalLevel: integer("current_approval_level").notNull().default(0),
+    approvalWorkflowId: bigint("approval_workflow_id", { mode: "number" }),
+    preparedSignature: text("prepared_signature"),
+    preparedSignedAt: timestamp("prepared_signed_at", { withTimezone: true }),
+    preparedBy: bigint("prepared_by", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
+    approvedSignature: text("approved_signature"),
+    approvedSignedAt: timestamp("approved_signed_at", { withTimezone: true }),
+    approvedBy: bigint("approved_by", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
+    createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
+    branchId: bigint("branch_id", { mode: "number" }).references(() => branches.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_material_requests_wh").on(t.warehouseId),
+    index("idx_material_requests_status").on(t.status),
+    index("idx_material_requests_document_no").on(t.documentNo),
+    index("idx_material_requests_public_id").on(t.publicId),
+  ]
+);
+
+export const materialRequestLines = pgTable(
+  "material_request_lines",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    materialRequestId: bigint("material_request_id", { mode: "number" })
+      .notNull()
+      .references(() => materialRequests.id, { onDelete: "cascade" }),
+    itemId: bigint("item_id", { mode: "number" })
+      .notNull()
+      .references(() => items.id),
+    uomId: bigint("uom_id", { mode: "number" })
+      .notNull()
+      .references(() => uom.id),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    note: text("note"),
+    deliveryDate: date("delivery_date"),
+  },
+  (t) => [index("idx_mrl_mr").on(t.materialRequestId)]
 );
 
 export const salesOrders = pgTable(

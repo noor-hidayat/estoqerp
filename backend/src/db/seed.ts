@@ -64,6 +64,8 @@ async function ensureDocumentTypes() {
     return;
   }
   const types = [
+    { name: "Purchase Request", prefix: "PR", description: "Permintaan Pembelian" },
+    { name: "Material Request", prefix: "MR", description: "Permintaan Material" },
     { name: "Purchase Order", prefix: "PO", description: "Pesanan Pembelian" },
     { name: "Sales Order", prefix: "SO", description: "Pesanan Penjualan" },
     { name: "Goods Receipt", prefix: "GR", description: "Penerimaan Barang" },
@@ -143,6 +145,49 @@ async function ensureReceivingDocType() {
   }
 }
 
+async function ensurePurchaseRequestDocType() {
+  let [type] = await db.select().from(documentTypes).where(eq(documentTypes.name, "Purchase Request")).limit(1);
+  if (!type) {
+    [type] = await db.insert(documentTypes).values({ name: "Purchase Request", description: "Permintaan Pembelian", isActive: true }).returning();
+    console.log(`Document type Purchase Request created`);
+  }
+  let [series] = await db.select().from(documentSeries).where(eq(documentSeries.documentTypeId, type.id)).limit(1);
+  if (!series) {
+    await db.insert(documentSeries).values({
+      documentTypeId: type.id,
+      name: "Default Purchase Request",
+      prefix: "PR",
+      format: "{PREFIX}-{YYMM}-{SEQ:4}",
+      padding: 4,
+      resetPolicy: "MONTHLY",
+      isDefault: true,
+      branchSpecific: false,
+      isActive: true,
+    });
+    console.log(`Default PR series (PR) created`);
+  }
+  let [mrType] = await db.select().from(documentTypes).where(eq(documentTypes.name, "Material Request")).limit(1);
+  if (!mrType) {
+    [mrType] = await db.insert(documentTypes).values({ name: "Material Request", description: "Permintaan Material", isActive: true }).returning();
+    console.log(`Document type Material Request created`);
+  }
+  const [mrSeries] = await db.select().from(documentSeries).where(eq(documentSeries.documentTypeId, mrType.id)).limit(1);
+  if (!mrSeries) {
+    await db.insert(documentSeries).values({
+      documentTypeId: mrType.id,
+      name: "Default Material Request",
+      prefix: "MR",
+      format: "{PREFIX}-{YYMM}-{SEQ:4}",
+      padding: 4,
+      resetPolicy: "MONTHLY",
+      isDefault: true,
+      branchSpecific: false,
+      isActive: true,
+    });
+    console.log(`Default MR series (MR) created`);
+  }
+}
+
 async function ensureBranchAccessForAdmin(adminId: number, roleMap: Map<string, number>) {
   // Ensure admin role has no branch restriction (isSystem bypass), but for non-system we add default?
   // Skip for sys admin
@@ -199,6 +244,7 @@ async function main() {
   await ensureWorkspaces();
   await ensureDocumentTypes();
   await ensureReceivingDocType();
+  await ensurePurchaseRequestDocType();
   // Note: dummy data intentionally not seeded per request (data dummy di hapus)
   // If you need to wipe old dummy data, uncomment truncate section below
   // await db.execute(sql`TRUNCATE ... CASCADE`)

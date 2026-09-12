@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAllWarehouses, useBranches, useInsert } from "@/lib/api/query";
 import { MANAGER_ROLES } from "@/lib/roles";
@@ -6,6 +6,8 @@ import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import {
   FormPage,
@@ -16,11 +18,16 @@ import { toast } from "sonner";
 
 export default function NewWarehousePage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ code: "", name: "", branchId: "" });
+  const [form, setForm] = useState({ code: "", name: "", branchId: "", parentId: "", picName: "", picPhone: "", picEmail: "", address: "", phone: "", email: "", isActive: true });
 
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: branches = [], isLoading: branchesLoading } = useBranches();
   const insertWarehouse = useInsert("warehouses");
+
+  const parentOptions = useMemo(() => {
+    if (!form.branchId) return [];
+    return warehouses.filter((w) => w.branchId === form.branchId);
+  }, [warehouses, form.branchId]);
 
   const handleCreate = async () => {
     if (!form.code.trim() || !form.name.trim() || !form.branchId) {
@@ -33,6 +40,14 @@ export default function NewWarehousePage() {
       )
     ) {
       toast.error("Warehouse code already in use.");
+      return;
+    }
+    if (form.picEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.picEmail.trim())) {
+      toast.error("PIC email tidak valid.");
+      return;
+    }
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      toast.error("Email warehouse tidak valid.");
       return;
     }
     const confirmed = await new Promise<boolean>((resolve) => {
@@ -56,7 +71,19 @@ export default function NewWarehousePage() {
     });
     if (!confirmed) return;
     try {
-      await insertWarehouse.mutateAsync({ code: form.code.trim(), name: form.name.trim(), branchId: form.branchId });
+      await insertWarehouse.mutateAsync({
+        code: form.code.trim(),
+        name: form.name.trim(),
+        branchId: form.branchId,
+        parentId: form.parentId || null,
+        picName: form.picName.trim() || null,
+        picPhone: form.picPhone.trim() || null,
+        picEmail: form.picEmail.trim() || null,
+        address: form.address.trim() || null,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        isActive: !!form.isActive,
+      });
       toast.success("Created");
       navigate("/app/setup/warehouses");
     } catch (e: any) {
@@ -109,6 +136,72 @@ export default function NewWarehousePage() {
                 label="Warehouse name"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Select
+                label="Parent"
+                value={form.parentId}
+                onChange={(e) => setForm({ ...form, parentId: e.target.value })}
+              >
+                <option value="">— Without parent (Central Warehouse) —</option>
+                {parentOptions.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name} ({w.code})
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1 text-[11px] text-muted-foreground">Contoh: buat <b>JATI</b> tanpa parent, lalu buat <b>Gdg Bahan Baku / Gdg Sparepart</b> dengan Parent = JATI.</p>
+            </div>
+            <div className="sm:col-span-2 flex items-center justify-between rounded-md border border-border px-3 py-2.5">
+              <div>
+                <div className="text-sm font-medium leading-none">Active</div>
+                <div className="text-xs text-muted-foreground">Non-aktif akan jadi Inactive di tabel</div>
+              </div>
+              <Switch checked={!!form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: !!v })} />
+            </div>
+          </FormGrid>
+        </FormSection>
+        <FormSection title="PIC & Kontak (dipakai di PO)">
+          <FormGrid>
+            <Input
+              label="PIC Name"
+              placeholder="Budi"
+              value={form.picName}
+              onChange={(e) => setForm({ ...form, picName: e.target.value })}
+            />
+            <Input
+              label="PIC Phone"
+              placeholder="0812..."
+              value={form.picPhone}
+              onChange={(e) => setForm({ ...form, picPhone: e.target.value })}
+            />
+            <Input
+              label="PIC Email"
+              placeholder="budi@contoh.com"
+              value={form.picEmail}
+              onChange={(e) => setForm({ ...form, picEmail: e.target.value })}
+            />
+            <Input
+              label="Telp Warehouse"
+              placeholder="021-..."
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+            <div className="sm:col-span-2">
+              <Input
+                label="Email Warehouse"
+                placeholder="gudang@contoh.com"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
+            <div className="sm:col-span-2 space-y-1.5">
+              <label className="text-sm font-medium leading-none">Alamat Warehouse</label>
+              <Textarea
+                placeholder="Jl. ..."
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
             </div>
           </FormGrid>

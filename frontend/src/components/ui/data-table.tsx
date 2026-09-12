@@ -766,7 +766,7 @@ export function DataTable<T>({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {pageSizes.map((size) => (
+                    {[pageSize, ...pageSizes.filter((s) => s !== pageSize)].map((size) => (
                       <SelectItem key={size} value={String(size)}>
                         {size}
                       </SelectItem>

@@ -112,11 +112,20 @@ create table if not exists branches (
 create table if not exists warehouses (
   id text primary key,
   branch_id text not null references branches (id) on delete cascade,
+  parent_id text references warehouses (id) on delete set null, -- [BARU] hierarki: JATI induk dari GDG Bahan Baku, GDG Sparepart, dll
   code text not null,
   name text not null,
-  description text,                            -- [BARU]
-  is_active boolean not null default true      -- [BARU]
+  description text,
+  pic_name text,                               -- [BARU] dipakai PO
+  pic_phone text,
+  pic_email text,
+  address text,
+  phone text,
+  email text,
+  is_active boolean not null default true
 );
+create index if not exists idx_warehouses_parent on warehouses (parent_id);
+create index if not exists idx_warehouses_branch_parent on warehouses (branch_id, parent_id);
 
 -- [AKTIF]
 create table if not exists locations (

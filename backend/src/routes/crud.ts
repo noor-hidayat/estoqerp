@@ -17,6 +17,7 @@ const FK_MAP: Record<string, AnyPgTable> = {
   userId: schema.users,
   branchId: schema.branches,
   warehouseId: schema.warehouses,
+  parentId: schema.warehouses,
   locationId: schema.locations,
   itemGroupId: schema.itemGroups,
   itemId: schema.items,
@@ -133,7 +134,7 @@ const DELETE_BLOCK_MESSAGES: Record<string, string> = {
   itemGroups: "Grup item ini masih dipakai oleh item — pindahkan item ke grup lain atau hapus item-nya terlebih dahulu.",
   items: "Item ini masih tercatat dalam hasil stock opname (scan detail) — data opname yang sudah masuk perhitungan tidak bisa dihapus.",
   branches: "Branch ini masih dipakai oleh gudang atau project opname — pindahkan atau hapus data terkait terlebih dahulu.",
-  warehouses: "Gudang ini masih dipakai oleh lokasi, project opname, atau stock balance — pindahkan atau hapus data terkait terlebih dahulu.",
+  warehouses: "Gudang ini masih dipakai oleh lokasi, sub-gudang, project opname, atau stock balance — pindahkan atau hapus data terkait terlebih dahulu.",
   locations: "Lokasi ini masih dipakai oleh scan opname atau stock — hapus data terkait terlebih dahulu.",
   roles: "Role ini masih dipakai oleh user — pindahkan user ke role lain terlebih dahulu.",
   users: "User ini masih terkait dengan data lain di sistem — tidak dapat dihapus.",
@@ -584,6 +585,16 @@ async function buildWhere(req: Request, table: AnyPgTable, tableName: string) {
       const internal = await resolveBranchId(branchId);
       if (internal !== null) conditions.push(eq(s.warehouses.branchId, internal));
     }
+    const parentId = queryStr(req, "parentId");
+    if (parentId !== null) {
+      if (parentId === "null" || parentId === "") {
+        conditions.push(sql`${s.warehouses.parentId} IS NULL`);
+      } else {
+        const internal = await resolveWarehouseId(parentId);
+        if (internal !== null) conditions.push(eq(s.warehouses.parentId, internal));
+        else conditions.push(sql`FALSE`);
+      }
+    }
   }
   if (tableName === "locations") {
     const warehouseId = queryStr(req, "warehouseId");
@@ -792,6 +803,12 @@ crudRouter.get("/:table", async (req, res) => {
           const bMap = new Map(bs.map((b) => [b.id as unknown as number, b.publicId]));
           rows.forEach((r: any) => { if (r.branchId != null && bMap.has(r.branchId)) r.branchId = bMap.get(r.branchId); });
         }
+        const pIds = [...new Set(rows.map((r: any) => r.parentId).filter(Boolean))] as number[];
+        if (pIds.length) {
+          const ps = await db.select({ id: schema.warehouses.id, publicId: schema.warehouses.publicId }).from(schema.warehouses).where(inArray(schema.warehouses.id, pIds as any));
+          const pMap = new Map(ps.map((p) => [p.id as unknown as number, p.publicId]));
+          rows.forEach((r: any) => { if (r.parentId != null && pMap.has(r.parentId)) r.parentId = pMap.get(r.parentId); });
+        }
       }
       if (tableName === "locations" && rows.length > 0) {
         const wIds = [...new Set(rows.map((r: any) => r.warehouseId).filter(Boolean))] as number[];
@@ -807,6 +824,12 @@ crudRouter.get("/:table", async (req, res) => {
           const bs2 = await db.select({ id: schema.branches.id, publicId: schema.branches.publicId }).from(schema.branches).where(inArray(schema.branches.id, bIds2 as any));
           const bMap2 = new Map(bs2.map((b) => [b.id as unknown as number, b.publicId]));
           rows.forEach((r: any) => { if (r.branchId != null && bMap2.has(r.branchId)) r.branchId = bMap2.get(r.branchId); });
+        }
+        const pIds2 = [...new Set(rows.map((r: any) => r.parentId).filter(Boolean))] as number[];
+        if (pIds2.length) {
+          const ps2 = await db.select({ id: schema.warehouses.id, publicId: schema.warehouses.publicId }).from(schema.warehouses).where(inArray(schema.warehouses.id, pIds2 as any));
+          const pMap2 = new Map(ps2.map((p) => [p.id as unknown as number, p.publicId]));
+          rows.forEach((r: any) => { if (r.parentId != null && pMap2.has(r.parentId)) r.parentId = pMap2.get(r.parentId); });
         }
       }
       if (tableName === "locations" && rows.length > 0) {
@@ -905,6 +928,12 @@ crudRouter.get("/:table", async (req, res) => {
           const bs = await db.select({ id: schema.branches.id, publicId: schema.branches.publicId }).from(schema.branches).where(inArray(schema.branches.id, bIds as any));
           const bMap = new Map(bs.map((b) => [b.id as unknown as number, b.publicId]));
           rows.forEach((r: any) => { if (r.branchId != null && bMap.has(r.branchId)) r.branchId = bMap.get(r.branchId); });
+        }
+        const pIds = [...new Set(rows.map((r: any) => r.parentId).filter(Boolean))] as number[];
+        if (pIds.length) {
+          const ps = await db.select({ id: schema.warehouses.id, publicId: schema.warehouses.publicId }).from(schema.warehouses).where(inArray(schema.warehouses.id, pIds as any));
+          const pMap = new Map(ps.map((p) => [p.id as unknown as number, p.publicId]));
+          rows.forEach((r: any) => { if (r.parentId != null && pMap.has(r.parentId)) r.parentId = pMap.get(r.parentId); });
         }
       }
       if (tableName === "locations" && rows.length > 0) {
@@ -1180,6 +1209,10 @@ crudRouter.get("/:table/:id", async (req, res) => {
         const [b] = await db.select({ publicId: schema.branches.publicId }).from(schema.branches).where(eq(schema.branches.id, sanitized.branchId)).limit(1);
         if (b) sanitized.branchId = b.publicId;
       }
+      if (sanitized.parentId) {
+        const [p] = await db.select({ publicId: schema.warehouses.publicId }).from(schema.warehouses).where(eq(schema.warehouses.id, sanitized.parentId)).limit(1);
+        if (p) sanitized.parentId = p.publicId;
+      }
     }
     if (tableName === "locations" && sanitized) {
       if (sanitized.warehouseId) {
@@ -1255,6 +1288,16 @@ crudRouter.post("/:table", async (req, res) => {
     let values = coerceDates(req.body);
     values = await resolveIncomingIds(values);
     if (!(await enforceEntity(req, values))) return res.status(403).json({ error: "Tidak memiliki akses entitas." });
+    if (tableName === "warehouses" && values.parentId != null) {
+      const parentIdNum = Number(values.parentId);
+      if (values.branchId != null) {
+        const [parent] = await db.select({ branchId: schema.warehouses.branchId }).from(schema.warehouses).where(eq(schema.warehouses.id, parentIdNum as any)).limit(1);
+        if (!parent) return res.status(400).json({ error: "Induk warehouse tidak ditemukan." });
+        if (Number(parent.branchId) !== Number(values.branchId)) return res.status(400).json({ error: "Branch sub-gudang harus sama dengan gudang induk." });
+      }
+      // cegah self-reference (walaupun insert belum punya id, tetap validasi numeric)
+      // cycle depth >1 akan dicek pada PATCH
+    }
     if (tableName === "userSettings" && req.user) {
       const userInternal = req.user.internalId ?? (isUuid(req.user.id) ? (await db.select({id: schema.users.id}).from(schema.users).where(eq(schema.users.publicId, req.user.id)).limit(1).then(r=>r[0]?.id) ) : Number(req.user.id));
       values.userId = userInternal;
@@ -1534,6 +1577,26 @@ crudRouter.patch("/:table/:id", async (req, res) => {
         if (dup) return res.status(409).json({ error: "Item dengan supplier/customer tersebut sudah ada di price list ini." });
       }
       values.updatedAt = new Date();
+    }
+    if (tableName === "warehouses" && values.parentId !== undefined) {
+      // resolve current warehouse id
+      let curId: number | null = null;
+      if (publicIdCol && isUuid(paramId)) {
+        const [cur] = await db.select({ id: schema.warehouses.id, branchId: schema.warehouses.branchId }).from(schema.warehouses).where(eq(schema.warehouses.publicId, paramId)).limit(1);
+        curId = cur?.id ?? null;
+        if (values.branchId == null && cur) (values as any)._branchIdForCheck = cur.branchId;
+      } else if (/^\d+$/.test(paramId)) curId = Number(paramId);
+      if (values.parentId != null) {
+        const parentIdNum = Number(values.parentId);
+        if (curId != null && parentIdNum === curId) return res.status(400).json({ error: "Gudang tidak bisa menjadi induk dirinya sendiri." });
+        const [parent] = await db.select({ branchId: schema.warehouses.branchId, parentId: schema.warehouses.parentId }).from(schema.warehouses).where(eq(schema.warehouses.id, parentIdNum as any)).limit(1);
+        if (!parent) return res.status(400).json({ error: "Induk warehouse tidak ditemukan." });
+        // cegah cycle sederhana: induk tidak boleh punya parent yang sama dengan cur (A<-B, B<-A)
+        if (parent.parentId != null && curId != null && Number(parent.parentId) === curId) return res.status(400).json({ error: "Cycle terdeteksi: induk sudah merupakan anak dari gudang ini." });
+        const branchToCheck = values.branchId != null ? Number(values.branchId) : ((values as any)._branchIdForCheck != null ? Number((values as any)._branchIdForCheck) : null);
+        if (branchToCheck != null && Number(parent.branchId) !== branchToCheck) return res.status(400).json({ error: "Branch sub-gudang harus sama dengan gudang induk." });
+        delete (values as any)._branchIdForCheck;
+      }
     }
     const [row] = await db.update(table).set(values).where(whereCond).returning();
     if (!row) { res.status(404).json({ error: "Data tidak ditemukan." }); return; }

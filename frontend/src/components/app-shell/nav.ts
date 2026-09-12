@@ -224,6 +224,16 @@ export const NAV: NavGroup[] = [
         menu: "supply.customers",
       },
       {
+        label: "Request",
+        href: "/app/purchase-requests",
+        icon: "FileText",
+        menu: "supply.purchaseRequests",
+        children: [
+          { label: "Purchase Request", href: "/app/purchase-requests", icon: "FileText", menu: "supply.purchaseRequests" },
+          { label: "Material Request", href: "/app/material-requests", icon: "FileText", menu: "supply.materialRequests" },
+        ],
+      },
+      {
         label: "Purchase Orders",
         href: "/app/purchase-orders",
         icon: "ShoppingCart",
@@ -392,9 +402,9 @@ export const NAV: NavGroup[] = [
 ];
 
 export const WORKSPACE_MENU_MAP: Record<string, string[]> = {
-  "wsp-purchasing": ["dashboard", "supply.suppliers", "supply.purchaseOrders", "supply.goodsReceipts", "supply.deliveries", "ai"],
-  "wsp-marketing": ["dashboard", "supply.customers", "supply.salesOrders", "supply.deliveries", "ai"],
-  "wsp-quality": ["dashboard", "supply.goodsReceipts", "ai"],
+  "wsp-purchasing": ["dashboard", "supply.suppliers", "supply.purchaseRequests", "supply.materialRequests", "supply.purchaseOrders", "supply.goodsReceipts", "supply.deliveries", "ai"],
+  "wsp-marketing": ["dashboard", "supply.customers", "supply.salesOrders", "supply.deliveries", "supply.purchaseRequests", "supply.materialRequests", "ai"],
+  "wsp-quality": ["dashboard", "supply.goodsReceipts", "supply.purchaseRequests", "supply.materialRequests", "ai"],
 };
 
 // ---------------------------------------------------------------------------
@@ -418,6 +428,16 @@ export const WAREHOUSE_NAV: NavGroup[] = [
         href: "/app/transaction",
         icon: "ArrowLeftRight",
         menu: "inventory.transactions",
+      },
+      {
+        label: "Request",
+        href: "/app/purchase-requests",
+        icon: "FileText",
+        menu: "supply.purchaseRequests",
+        children: [
+          { label: "Purchase Request", href: "/app/purchase-requests", icon: "FileText", menu: "supply.purchaseRequests" },
+          { label: "Material Request", href: "/app/material-requests", icon: "FileText", menu: "supply.materialRequests" },
+        ],
       },
       {
         label: "Inbound",
@@ -505,6 +525,16 @@ export const QUALITY_NAV: NavGroup[] = [
     title: "Menu",
     items: [
       {
+        label: "Request",
+        href: "/app/purchase-requests",
+        icon: "FileText",
+        menu: "supply.purchaseRequests",
+        children: [
+          { label: "Purchase Request", href: "/app/purchase-requests", icon: "FileText", menu: "supply.purchaseRequests" },
+          { label: "Material Request", href: "/app/material-requests", icon: "FileText", menu: "supply.materialRequests" },
+        ],
+      },
+      {
         label: "QC Inspection",
         href: "/app/qc",
         icon: "ClipboardCheck",
@@ -533,6 +563,16 @@ export const PURCHASING_NAV: NavGroup[] = [
         href: "/app/suppliers",
         icon: "Truck",
         menu: "supply.suppliers",
+      },
+      {
+        label: "Request",
+        href: "/app/purchase-requests",
+        icon: "FileText",
+        menu: "supply.purchaseRequests",
+        children: [
+          { label: "Purchase Request", href: "/app/purchase-requests", icon: "FileText", menu: "supply.purchaseRequests" },
+          { label: "Material Request", href: "/app/material-requests", icon: "FileText", menu: "supply.materialRequests" },
+        ],
       },
       {
         label: "Purchase Orders",
@@ -564,6 +604,16 @@ export const MARKETING_NAV: NavGroup[] = [
   {
     title: "Menu",
     items: [
+      {
+        label: "Request",
+        href: "/app/purchase-requests",
+        icon: "FileText",
+        menu: "supply.purchaseRequests",
+        children: [
+          { label: "Purchase Request", href: "/app/purchase-requests", icon: "FileText", menu: "supply.purchaseRequests" },
+          { label: "Material Request", href: "/app/material-requests", icon: "FileText", menu: "supply.materialRequests" },
+        ],
+      },
       {
         label: "Customers",
         href: "/app/customers",

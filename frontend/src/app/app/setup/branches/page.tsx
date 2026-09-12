@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {Building2, Plus, Trash2, Pencil} from "lucide-react";
-import { useBranches, useAllWarehouses, useRemove } from "@/lib/api/query";
+import {Building2, Plus, Trash2, MoreVertical, Pencil, Trash, Power} from "lucide-react";
+import { useBranches, useRemove, useUpdate } from "@/lib/api/query";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
@@ -11,13 +11,38 @@ import { Badge } from "@/components/ui/badge";
 import { ShellLoader } from "@/components/ui/loader";
 import { timeAgo } from "@/lib/utils";
 import type { Branch } from "@/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function BranchesPage() {
   const navigate = useNavigate();
   const { data: branches = [], isLoading: branchesLoading } = useBranches();
-  const { data: warehouses = [] } = useAllWarehouses();
   const removeBranch = useRemove("branches");
+  const updateBranch = useUpdate("branches");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const handleDeleteOne = async (id: string) => {
+    if (!confirm("Hapus branch ini?")) return;
+    try {
+      await removeBranch.mutateAsync(id);
+    } catch (e: any) {
+      alert(e.message ?? "Cannot delete branch.");
+    }
+  };
+
+  const handleToggleActive = async (b: Branch) => {
+    const next = (b as any).isActive === false;
+    if (!confirm(next ? `Activate branch "${b.name}"?` : `Deactivate branch "${b.name}"?`)) return;
+    try {
+      await updateBranch.mutateAsync({ id: b.id, patch: { isActive: next } });
+    } catch (e: any) {
+      alert(e.message ?? "Failed to update status.");
+    }
+  };
 
   const handleBulkRemove = async () => {
     const n = selected.size;
@@ -35,66 +60,66 @@ export default function BranchesPage() {
 
   const columns: DataTableColumn<Branch>[] = [
     {
-      id: "code",
-      header: "Code",
-      sortValue: (b) => b.code,
-      cell: (b) => <span className="text-xs text-muted-foreground">{b.code}</span>,
-    },
-    {
       id: "name",
       header: "Branch Name",
       sortValue: (b) => b.name,
       cell: (b) => (
-        <button
-          onClick={() => navigate(`/app/setup/branches/${b.id}`)}
-          className="truncate text-left font-medium text-foreground transition-colors hover:text-primary"
-          title="Edit branch"
-        >
+        <span className="inline-flex items-center font-medium whitespace-nowrap truncate" title={b.name}>
           {b.name}
-        </button>
+        </span>
       ),
-      className: "min-w-[200px]",
+      className: "min-w-[320px] pr-8 whitespace-nowrap",
     },
     {
       id: "city",
       header: "City",
       sortValue: (b) => b.city,
-      cell: (b) => <span className="text-muted-foreground">{b.city}</span>,
+      cell: (b) => <Badge tone="neutral" className="rounded-md">{b.city}</Badge>,
+      className: "w-[180px] pr-8",
     },
     {
-      id: "warehouses",
-      header: "Warehouse Count",
-      align: "right",
+      id: "status",
+      header: "Status",
+      sortValue: (b) => (b.isActive === false ? 0 : 1),
       cell: (b) => (
-        <Badge tone="neutral">
-          {warehouses.filter((w) => w.branchId === b.id).length} warehouses
+        <Badge tone={b.isActive === false ? "neutral" : "success"} className="rounded-md text-[11px]">
+          {b.isActive === false ? "Inactive" : "Active"}
         </Badge>
       ),
+      className: "w-[110px] pr-8",
     },
     {
       id: "created",
       header: "Created",
       sortValue: (b) => b.createdAt ?? "",
       cell: (b) => <span className="text-xs text-muted-foreground">{timeAgo(b.createdAt)}</span>,
+      className: "w-[170px] pr-8",
     },
     {
       id: "actions",
-      header: "",
+      header: "Action",
       cell: (b) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/app/setup/branches/${b.id}`);
-          }}
-        >
-          <Pencil size={12} strokeWidth={2} />
-          Edit
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()}>
+              <MoreVertical size={14} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/app/setup/branches/${b.id}`); }} className="gap-2">
+              <Pencil size={14} /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleToggleActive(b); }} className="gap-2">
+              <Power size={14} /> {(b as any).isActive === false ? "Activate" : "Deactivate"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteOne(b.id); }} className="gap-2 text-destructive focus:text-destructive">
+              <Trash size={14} /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
-      className: "w-[90px] text-right",
+      className: "w-[70px] text-center",
+      align: "center",
     },
   ];
 
@@ -137,7 +162,7 @@ export default function BranchesPage() {
             </Button>
           ) : null
         }
-        minWidth={640}
+        minWidth={890}
         emptyIcon={<Building2 size={26} strokeWidth={2} />}
         emptyTitle="No branches yet"
         emptyDescription="Add your first branch for the organization structure."

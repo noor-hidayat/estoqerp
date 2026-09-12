@@ -61,14 +61,24 @@ export interface Branch {
   code: string;
   name: string;
   city: string;
+  isActive?: boolean;
   createdAt?: string;
 }
 
 export interface Warehouse {
   id: string;
   branchId: string;
+  parentId?: string | null;
   code: string;
   name: string;
+  description?: string | null;
+  picName?: string | null;
+  picPhone?: string | null;
+  picEmail?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  isActive?: boolean;
   createdAt?: string;
 }
 
@@ -77,6 +87,7 @@ export interface Location {
   warehouseId: string;
   code: string;
   name: string;
+  isActive?: boolean;
   createdAt?: string;
 }
 
@@ -84,6 +95,7 @@ export interface ItemGroup {
   id: string;
   code: string;
   name: string;
+  isActive?: boolean;
   createdAt?: string;
 }
 
@@ -339,6 +351,7 @@ export interface Uom {
   id: string;
   code: string;
   name: string;
+  isActive?: boolean;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
@@ -586,6 +599,103 @@ export interface PurchaseOrder {
   lines?: PurchaseOrderLine[];
   /** Linked Goods Receipts (populated on detail fetch). */
   receipts?: GoodsReceipt[];
+}
+
+export interface PurchaseRequestLine {
+  id: string;
+  purchaseRequestId?: string;
+  itemId: string;
+  uomId: string;
+  qty: string;
+  unitPrice?: string | null;
+  discount?: string | null;
+  batchNumber?: string | null;
+  note?: string | null;
+  deliveryDate?: string | null;
+}
+
+export interface PurchaseRequest {
+  id: string;
+  publicId?: string;
+  documentNo?: string | null;
+  prNo: string | number;
+  supplierId?: string | null;
+  warehouseId: string;
+  requestDate: string;
+  expectedDate?: string | null;
+  urgency?: "LOW" | "MEDIUM" | "HIGH" | string | null;
+  notes?: string | null;
+  department?: string | null;
+  costCenter?: string | null;
+  currency?: string | null;
+  exchangeRate?: string | number | null;
+  status: DocStatus;
+  needApproval?: boolean;
+  currentApprovalLevel?: number;
+  approvalWorkflowId?: string | null;
+  globalDiscountPercent?: string | number | null;
+  additionalCharges?: { type: string; amount: string }[] | null;
+  taxRate?: string | null;
+  taxCategoryId?: string | null;
+  taxCategoryName?: string | null;
+  taxCategoryPercentage?: string | null;
+  preparedSignature?: string | null;
+  preparedSignedAt?: string | null;
+  preparedBy?: string | null;
+  preparedByName?: string | null;
+  approvedSignature?: string | null;
+  approvedSignedAt?: string | null;
+  approvedBy?: string | null;
+  approvedByName?: string | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  lines?: PurchaseRequestLine[];
+}
+
+export interface MaterialRequestLine {
+  id: string;
+  materialRequestId?: string;
+  itemId: string;
+  uomId: string;
+  qty: string;
+  unitPrice?: string | null;
+  discount?: string | null;
+  batchNumber?: string | null;
+  note?: string | null;
+  deliveryDate?: string | null;
+}
+
+export interface MaterialRequest {
+  id: string;
+  publicId?: string;
+  documentNo?: string | null;
+  mrNo: string | number;
+  warehouseId: string;
+  requestDate: string;
+  expectedDate?: string | null;
+  urgency?: "LOW" | "MEDIUM" | "HIGH" | string | null;
+  notes?: string | null;
+  department?: string | null;
+  costCenter?: string | null;
+  status: DocStatus;
+  needApproval?: boolean;
+  currentApprovalLevel?: number;
+  approvalWorkflowId?: string | null;
+  preparedSignature?: string | null;
+  preparedSignedAt?: string | null;
+  preparedBy?: string | null;
+  preparedByName?: string | null;
+  approvedSignature?: string | null;
+  approvedSignedAt?: string | null;
+  approvedBy?: string | null;
+  approvedByName?: string | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  lines?: MaterialRequestLine[];
 }
 
 export interface SalesOrderLine {

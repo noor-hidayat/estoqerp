@@ -5,6 +5,7 @@ import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
@@ -32,7 +33,7 @@ export default function EditUomPage() {
 
   useEffect(() => {
     if (uom) {
-      const init = { code: uom.code, name: uom.name };
+      const init = { code: uom.code, name: uom.name, isActive: (uom as any).isActive !== false };
       setForm(init);
       setSnapshot(JSON.stringify(init));
     }
@@ -74,7 +75,7 @@ export default function EditUomPage() {
     });
     if (!confirmed) return;
     try {
-      await updateUom.mutateAsync({ id: id!, patch: { code: form.code.trim(), name: form.name.trim() } });
+      await updateUom.mutateAsync({ id: id!, patch: { code: form.code.trim(), name: form.name.trim(), isActive: !!form.isActive } });
       toast.success("Updated");
       setSnapshot(JSON.stringify(form));
       setEditing(false);
@@ -163,6 +164,13 @@ export default function EditUomPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               disabled={!editing}
             />
+            <div className="sm:col-span-2 flex items-center justify-between rounded-md border border-border px-3 py-2.5">
+              <div>
+                <div className="text-sm font-medium leading-none">Active</div>
+                <div className="text-xs text-muted-foreground">{form.isActive ? "Active" : "Inactive"}</div>
+              </div>
+              <Switch checked={!!form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: !!v })} disabled={!editing} />
+            </div>
           </FormGrid>
         </FormSection>
       </FormPage>
