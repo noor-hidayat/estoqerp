@@ -88,6 +88,9 @@ export async function hasPermission(
   // Cocok persis.
   if (perms.some((p) => p.menu === menu && p.action === action)) return true;
 
+  // "manage" dianggap terpenuhi bila punya create/update/delete/manage pada menu yang sama
+  if (action === "manage" && perms.some((p) => p.menu === menu && ["create", "update", "delete", "manage"].includes(p.action))) return true;
+
   if (perms.some((p) => p.menu === menu)) {
     // Aksi apa pun pada menu itu tetap berarti boleh melihat halamannya.
     return action === "view";
@@ -95,6 +98,11 @@ export async function hasPermission(
 
   // Action "view": submenu mana pun mengizinkan view menu induknya.
   if (action === "view" && perms.some((p) => p.menu.startsWith(menu + "."))) {
+    return true;
+  }
+
+  // "manage" juga boleh via submenu write
+  if (action === "manage" && perms.some((p) => p.menu.startsWith(menu + ".") && ["create", "update", "delete", "manage"].includes(p.action))) {
     return true;
   }
 

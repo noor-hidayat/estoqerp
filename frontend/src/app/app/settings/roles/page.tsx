@@ -29,7 +29,7 @@ export default function RolesPage() {
   const removeAccess = useRemove("branchAccesses");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const sorted = useMemo(() => (roles ?? []).slice().sort((a, b) => a.name.localeCompare(b.name)), [roles]);
+  const sorted = useMemo(() => (roles ?? []).filter((r) => !r.isSystem).slice().sort((a, b) => a.name.localeCompare(b.name)), [roles]);
 
   const handleBulkDelete = async () => {
     const deletableIds = new Set(sorted.filter((r) => !r.isSystem).map((r) => r.id));

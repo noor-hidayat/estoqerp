@@ -240,6 +240,10 @@ export default function AccountSignaturePage() {
     }
   };
 
+  const { isSystem } = useSession() as any;
+  if (isSystem) {
+    return <div className="py-20 text-center text-muted-foreground">Administrator tidak memiliki akses My Account.</div>;
+  }
   if (isLoading) return <div className="py-20 text-center text-muted-foreground">Loading…</div>;
   if (!user) return <div className="py-20 text-center text-muted-foreground">Tidak terautentikasi.</div>;
 

@@ -75,19 +75,29 @@ const MENU_GROUPS: MenuGroup[] = [
   {
     masterKey: "inbound",
     title: "Inbound",
+    // Dipetakan sesuai workspace NAV:
+    // Warehouse → Receiving, GRN, Putaway, Supplier Return (menu keys PO/GR, filter by workspace)
+    // Purchasing → Suppliers, Purchase Orders, Goods Receipts
     menus: [
       { key: "supply.suppliers", label: "Suppliers" },
-      { key: "supply.purchaseOrders", label: "Purchase Orders / Receiving" },
-      { key: "supply.goodsReceipts", label: "Goods Receipts / GRN / Putaway" },
+      { key: "supply.purchaseOrders", label: "Receiving" },
+      { key: "supply.goodsReceipts", label: "GRN" },
+      { key: "supply.goodsReceipts", label: "Putaway" },
+      { key: "supply.goodsReceipts", label: "Supplier Return" },
     ],
   },
   {
     masterKey: "outbound",
     title: "Outbound",
+    // Warehouse → Delivery Order (SO), Picking, Packing, Dispatch/Shipment, Customer Return (Deliveries)
+    // Marketing → Customers, Sales Orders, Deliveries
     menus: [
       { key: "supply.customers", label: "Customers" },
-      { key: "supply.salesOrders", label: "Sales Orders" },
-      { key: "supply.deliveries", label: "Deliveries / Dispatch / Picking" },
+      { key: "supply.salesOrders", label: "Sales Orders / Delivery Order" },
+      { key: "supply.deliveries", label: "Picking" },
+      { key: "supply.deliveries", label: "Packing" },
+      { key: "supply.deliveries", label: "Dispatch / Shipment" },
+      { key: "supply.deliveries", label: "Customer Return" },
     ],
   },
   {
@@ -171,20 +181,98 @@ function collectNavMenus(groups: typeof NAV): Set<string> {
 }
 const SHARED_MENUS = collectNavMenus(NAV.filter((g) => (g as any).shared));
 function menusForWorkspaceCode(code: string | null): Set<string> {
-  if (!code) return new Set(MENU_GROUPS.flatMap((g) => g.menus.map((m) => m.key)));
+  // Jika code tidak dikenal (mis. workspace baru atau mapping gagal), jangan buka semua menu
+  // — hanya kembalikan shared (Settings/Setup) + dashboard/ai agar fail-closed.
+  if (!code) return new Set([...SHARED_MENUS, "dashboard", "ai"]);
   const dedicated =
     code === "warehouse" ? WAREHOUSE_NAV
     : code === "purchasing" ? PURCHASING_NAV
     : code === "marketing" ? MARKETING_NAV
     : code === "quality" ? QUALITY_NAV
     : null;
-  if (!dedicated) return new Set(MENU_GROUPS.flatMap((g) => g.menus.map((m) => m.key)));
+  if (!dedicated) return new Set([...SHARED_MENUS, "dashboard", "ai"]);
   const s = collectNavMenus(dedicated as any);
   // shared menus (Setting/Setup) selalu tersedia di semua workspace
   for (const m of SHARED_MENUS) s.add(m);
   // Dashboard & AI selalu tersedia meski tidak di dedicated nav
   s.add("dashboard"); s.add("ai");
   return s;
+}
+
+// --- Dynamic MenuGroups dari NAV (sesuai workspace, bukan static) ---
+// Konversi NavItem (dengan children) → MenuGroup untuk Role Management.
+// Tiap NavItem dengan children menjadi 1 grup (title = label, masterKey = menu).
+// Anak-anak dengan menu key sama digabung labelnya (mis. GRN/Putaway share goodsReceipts).
+function navGroupsToMenuGroups(navGroups: typeof NAV): MenuGroup[] {
+  const groups: MenuGroup[] = [];
+  for (const g of navGroups) {
+    for (const item of g.items) {
+      if ((item as any).children && (item as any).children.length > 0) {
+        const children = (item as any).children as typeof item[];
+        // Kumpulkan menu unik per key, gabung label bila duplikat (GRN/Putaway share key)
+        const seen = new Map<string, MenuItem>();
+        for (const c of children) {
+          const existing = seen.get(c.menu);
+          if (!existing) {
+            seen.set(c.menu, { key: c.menu, label: c.label });
+          } else if (!existing.label.includes(c.label)) {
+            existing.label += " / " + c.label;
+          }
+        }
+        // Jika parent punya menu berbeda dari children, tampilkan parent sebagai row parent
+        const childKeys = new Set(children.map((c) => c.menu));
+        const menus: MenuItem[] = [];
+        if (!childKeys.has(item.menu)) {
+          menus.push({ key: item.menu, label: item.label, parent: true });
+        }
+        menus.push(...seen.values());
+        groups.push({ masterKey: item.menu, title: item.label, menus });
+      } else {
+        groups.push({ masterKey: item.menu, title: item.label, menus: [{ key: item.menu, label: item.label }] });
+      }
+    }
+  }
+  return groups;
+}
+function menuGroupsForWorkspaceCodeDynamic(code: string | null): MenuGroup[] {
+  if (!code) return [];
+  const dedicated =
+    code === "warehouse" ? WAREHOUSE_NAV
+    : code === "purchasing" ? PURCHASING_NAV
+    : code === "marketing" ? MARKETING_NAV
+    : code === "quality" ? QUALITY_NAV
+    : null;
+  if (!dedicated) return [];
+  const base = [...(dedicated as unknown as typeof NAV), ...NAV.filter((g) => (g as any).shared)];
+  return navGroupsToMenuGroups(base as any);
+}
+function buildWorkspaceMenuGroups(codes: string[]): MenuGroup[] {
+  // Union semua workspace terpilih, dedup by title+masterKey
+  const map = new Map<string, MenuGroup>();
+  for (const code of codes) {
+    const gs = menuGroupsForWorkspaceCodeDynamic(code);
+    for (const g of gs) {
+      const key = g.title + "|" + g.masterKey;
+      if (!map.has(key)) {
+        map.set(key, { ...g, menus: [...g.menus] });
+      } else {
+        // Merge menus bila grup sama muncul di multiple workspace (mis. Dashboard)
+        const existing = map.get(key)!;
+        const seen = new Set(existing.menus.map((m) => m.key));
+        for (const m of g.menus) {
+          if (!seen.has(m.key)) {
+            seen.add(m.key);
+            existing.menus.push(m);
+          } else {
+            // Merge label bila duplikat key beda label (jarang)
+            const ex = existing.menus.find((x) => x.key === m.key);
+            if (ex && !ex.label.includes(m.label)) ex.label += " / " + m.label;
+          }
+        }
+      }
+    }
+  }
+  return [...map.values()];
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -254,7 +342,7 @@ export function RoleForm({ role }: { role?: Role }) {
   const insertRoleAccess = useInsert("branchAccesses");
   const insertWsAccess = useInsert("workspaceAccesses");
 
-  const isLoading = rolesLoading || permsLoading || accessesLoading || wsAccessLoading || branchesLoading || whsLoading || locsLoading;
+  const isLoading = rolesLoading || (role ? permsLoading || accessesLoading || wsAccessLoading : false);
 
   const [name, setName] = useState(role?.name ?? "");
   const [active, setActive] = useState(role?.active ?? true);
@@ -368,13 +456,23 @@ export function RoleForm({ role }: { role?: Role }) {
   // Alur: Branch (EntityAccess) → Workspace → Menu. Jika belum pilih workspace, menu di-hide.
   const wsCodeOf = (wsId: string): string | null => {
     const list = (workspaces && workspaces.length > 0 ? workspaces : (WORKSPACES as unknown as typeof workspaces)) as any[];
-    const found = list.find((w: any) => w.id === wsId || (w as any).publicId === wsId);
+    const found = list.find((w: any) => w.id === wsId || (w as any).publicId === wsId || (w as any).code === wsId);
     if (found?.code) return found.code as string;
-    // fallback mapping id wsp-* → code
+    // fallback mapping publicId → code (uuid v7 seed & legacy wsp-*)
     if (wsId === "wsp-warehouse" || wsId === "22222222-2222-4222-8222-222222222222") return "warehouse";
     if (wsId === "wsp-purchasing" || wsId === "33333333-3333-4333-8333-333333333333") return "purchasing";
     if (wsId === "wsp-marketing" || wsId === "44444444-4444-4444-8444-444444444444") return "marketing";
     if (wsId === "wsp-quality" || wsId === "55555555-5555-4555-8555-555555555555") return "quality";
+    // fallback untuk data lama yang masih menyimpan internal bigint id (2..5) atau numeric string
+    const num = Number(wsId);
+    if (!Number.isNaN(num)) {
+      if (num === 2 || num === 222) return "warehouse";
+      if (num === 3 || num === 333) return "purchasing";
+      if (num === 4 || num === 444) return "marketing";
+      if (num === 5 || num === 555) return "quality";
+      // kalau id internal 1 pernah jadi stockopname/warehouse lama
+      if (num === 1) return "warehouse";
+    }
     return null;
   };
   const allowedMenuKeys = (() => {
@@ -390,16 +488,30 @@ export function RoleForm({ role }: { role?: Role }) {
   const hasWorkspace = checkedWs.size > 0;
   const hasBranch = checked.branches.size > 0 || checked.warehouses.size > 0;
 
-  // Filter grup/menu berdasarkan workspace terpilih (union). Hanya menu yang ada di workspace yg tampil.
-  // Contoh: marketing → hanya dashboard, ai, supply.customers/salesOrders/deliveries (+ shared Settings bila ada).
-  const workspaceFilteredGroups = hasWorkspace
-    ? MENU_GROUPS.map((g) => ({
-        ...g,
-        menus: g.menus.filter((m) => allowedMenuKeys.has(m.key)),
-      })).filter((g) => g.menus.length > 0)
-    : [];
+  // Pemetaan menu sesuai workspace (dinamis dari NAV, bukan static).
+  // Contoh: warehouse → Inbound: Receiving, GRN, Putaway, Supplier Return (dari WAREHOUSE_NAV)
+  //         purchasing → Suppliers, Purchase Orders, Goods Receipts, dll.
+  // Shared (Settings/Setup) selalu ikut. Jika dynamic gagal, fallback ke filter static MENU_GROUPS.
+  const workspaceFilteredGroups = (() => {
+    if (!hasWorkspace) return [] as MenuGroup[];
+    const codes = [...checkedWs].map(wsCodeOf).filter((c): c is string => !!c);
+    if (codes.length === 0) return [] as MenuGroup[];
+    const dynamic = buildWorkspaceMenuGroups(codes);
+    if (dynamic.length > 0) {
+      // Filter lagi by allowedMenuKeys agar menu yang tidak diizinkan workspace tidak bocor
+      // (dynamic sudah sesuai, tapi tetap intersect dengan allowed keys untuk safety)
+      return dynamic
+        .map((g) => ({ ...g, menus: g.menus.filter((m) => allowedMenuKeys.has(m.key)) }))
+        .filter((g) => g.menus.length > 0);
+    }
+    // fallback static
+    return MENU_GROUPS.map((g) => ({
+      ...g,
+      menus: g.menus.filter((m) => allowedMenuKeys.has(m.key)),
+    })).filter((g) => g.menus.length > 0);
+  })();
 
-  const allowedGroups = workspaceFilteredGroups.filter((g) => masterAllowed(g.masterKey));
+  const allowedGroups = workspaceFilteredGroups;
 
   const menuState = (menuKey: string, menu: MenuItem) => {
     const acts = perms[menuKey];
@@ -409,9 +521,13 @@ export function RoleForm({ role }: { role?: Role }) {
   };
 
   const groupState = (menus: MenuItem[]) => {
-    const total = menus.reduce((a, m) => a + (perms[m.key]?.size ?? 0), 0);
-    const expected = menus.reduce((a, m) => a + actionsFor(m).length, 0);
-    return { checked: total === expected, none: total === 0, count: total };
+    // Deduplicate by menu key agar Inbound GRN/Putaway yang share key tidak double-count
+    const uniq = new Map<string, MenuItem>();
+    for (const m of menus) if (!uniq.has(m.key)) uniq.set(m.key, m);
+    const uniqMenus = [...uniq.values()];
+    const total = uniqMenus.reduce((a, m) => a + (perms[m.key]?.size ?? 0), 0);
+    const expected = uniqMenus.reduce((a, m) => a + actionsFor(m).length, 0);
+    return { checked: total === expected && expected > 0, none: total === 0, count: total };
   };
 
   const toggleGroup = (title: string) => {
@@ -548,7 +664,7 @@ export function RoleForm({ role }: { role?: Role }) {
         </FormSection>
 
         {/* Step 1 — Branch */}
-        <FormSection title="1 — Branch Access" description="Pilih branch / warehouse dulu. Langkah ini opsional, tapi sesuai alur: Branch → Workspace → Menu.">
+        <FormSection title="1 — Branch Access">
           <EntityAccess
             branches={branches ?? []}
             warehouses={warehouses ?? []}
@@ -556,13 +672,10 @@ export function RoleForm({ role }: { role?: Role }) {
             checked={checked}
             toggle={toggleAccess}
           />
-          {!hasBranch && (
-            <p className="mt-2 text-[11px] text-muted-foreground">Belum pilih branch? Tidak apa — lanjut pilih workspace. (Kosong = akses semua branch dianggap follow workspace.)</p>
-          )}
         </FormSection>
 
         {/* Step 2 — Workspace */}
-        <FormSection title="2 — Workspace Access" description="Pilih workspace yang boleh diakses role ini. Menu pada langkah 3 akan otomatis difilter sesuai workspace terpilih.">
+        <FormSection title="2 — Workspace Access">
           <div className="grid gap-2 sm:grid-cols-2">
             {((workspaces && workspaces.length > 0 ? workspaces : (WORKSPACES as unknown as typeof workspaces)) as { id: string; name: string; description?: string | null; icon: string }[]).map((ws) => {
               const on = checkedWs.has(ws.id);
@@ -583,23 +696,17 @@ export function RoleForm({ role }: { role?: Role }) {
             <Button variant="outline" size="sm" onClick={() => setCheckedWs(new Set(((workspaces && workspaces.length > 0 ? workspaces : (WORKSPACES as unknown as typeof workspaces)) as { id:string }[]).map((w)=>w.id)))}>Select all</Button>
             <Button variant="outline" size="sm" onClick={() => setCheckedWs(new Set())}>Clear</Button>
           </div>
-          {!hasWorkspace && (
-            <p className="mt-2 text-[11px] text-amber-600">Pilih minimal 1 workspace supaya daftar Menu Access (langkah 3) muncul. Contoh: pilih <b>Purchasing</b> → hanya menu Purchasing (Suppliers, PO, GR) yang tampil.</p>
-          )}
-          {hasWorkspace && (
-            <p className="mt-2 text-[11px] text-muted-foreground">Workspace terpilih: <b>{[...checkedWs].map((id) => wsCodeOf(id) ?? id).join(", ")}</b> — {workspaceFilteredGroups.length} grup menu tersedia.</p>
-          )}
         </FormSection>
 
-        {/* Step 3 — Menu Access: HIDDEN sebelum workspace dipilih, tidak bisa kasih akses */}
+        {/* Step 3 — Menu Access: HIDDEN sebelum workspace dipilih */}
         {hasWorkspace && (
-        <FormSection title="3 — Menu Access" description={`Hanya menu yang ada di workspace terpilih yang ditampilkan (${workspaceFilteredGroups.length} grup). Centang parent lalu atur aksi View/Create/Edit/Delete.`}>
+        <FormSection title="3 — Menu Access">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => workspaceFilteredGroups.forEach((g) => toggleMasterAccess(g.masterKey, true))}
+                onClick={() => workspaceFilteredGroups.forEach((g) => toggleGroupAccess(g.menus, true))}
                 disabled={workspaceFilteredGroups.length===0}
               >
                 Select all (filtered)
@@ -607,7 +714,7 @@ export function RoleForm({ role }: { role?: Role }) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => workspaceFilteredGroups.forEach((g) => toggleMasterAccess(g.masterKey, false))}
+                onClick={() => workspaceFilteredGroups.forEach((g) => toggleGroupAccess(g.menus, false))}
               >
                 Clear
               </Button>
@@ -615,131 +722,143 @@ export function RoleForm({ role }: { role?: Role }) {
           </div>
           <div className="grid gap-1.5 sm:grid-cols-2">
             {workspaceFilteredGroups.map((g) => {
-              const on = masterAllowed(g.masterKey);
+              const gs = groupState(g.menus);
+              const on = gs.checked;
+              const indeterminate = !gs.checked && !gs.none;
               return (
                 <label
-                  key={g.masterKey}
+                  key={g.title + "|" + g.masterKey}
                   className={cx(
                     "flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors",
                     on
                         ? "border-primary/60 bg-primary/10"
-                        : "border-border bg-card hover:bg-muted/50"
+                        : indeterminate
+                          ? "border-amber-300 bg-amber-50"
+                          : "border-border bg-card hover:bg-muted/50"
                   )}
                 >
                   <input
                     type="checkbox"
                     checked={on}
-                    onChange={() => toggleMasterAccess(g.masterKey, !on)}
+                    ref={(el) => { if (el) el.indeterminate = indeterminate; }}
+                    onChange={() => toggleGroupAccess(g.menus, !on)}
                     className="h-4 w-4 cursor-pointer rounded border-border accent-primary"
                   />
-                  <span className={cx("text-[13px] font-medium", on ? "text-primary" : "text-foreground")}>
+                  <span className={cx("text-[13px] font-medium", on ? "text-primary" : indeterminate ? "text-amber-700" : "text-foreground")}>
                     {g.title}
                   </span>
-                  <span className="ml-auto text-[10px] text-muted-foreground">{g.menus.length} menu</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">{g.menus.length} menu{gs.count>0?` • ${gs.count} akses`:``}</span>
                 </label>
               );
             })}
           </div>
 
           <div className="mt-4 border-t border-border pt-4">
-            {allowedGroups.length === 0 ? (
-              <p className="py-6 text-center text-[12.5px] text-muted-foreground">
-                {workspaceFilteredGroups.length===0 ? "Tidak ada menu untuk workspace terpilih." : "Check the parent menu above to set permissions."}
-              </p>
-            ) : (
-              <div className="max-h-[46vh] space-y-2 overflow-y-auto pr-1">
-                {allowedGroups.map((group) => {
-                  const gs = groupState(group.menus);
-                  const isOpen = openGroups.has(group.title);
-                  return (
-                    <div key={group.title} className="overflow-hidden rounded-lg border border-border">
-                      <div className="flex items-center gap-2 border-b border-border/70 bg-muted px-3 py-2">
-                        <TriStateCheck
-                          checked={gs.checked}
-                          indeterminate={!gs.checked && !gs.none}
-                          onChange={() => toggleGroupAccess(group.menus, !gs.checked)}
-                          label={`Select all ${group.title} menus`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => toggleGroup(group.title)}
-                          className="flex flex-1 items-center justify-between gap-2 text-left"
-                        >
-                      <span className="text-[12.5px] font-bold uppercase tracking-wider text-muted-foreground">
-                        {group.title}
-                      </span>
-                      <span className="flex items-center gap-2">
-                        {gs.count > 0 && (
-                          <span className="rounded bg-primary/10 px-1.5 py-px text-[10px] font-semibold text-primary">
-                            {gs.count}
-                          </span>
-                        )}
-                        {isOpen ? (
-                          <ChevronDown size={14} strokeWidth={2} className="text-muted-foreground" />
-                        ) : (
-                          <ChevronRight size={14} strokeWidth={2} className="text-muted-foreground" />
-                        )}
-                      </span>
-                    </button>
-                  </div>
-
-                  {isOpen && (
-                    <div className="divide-y divide-border">
-                      {group.menus.map((m) => {
-                        const ms = menuState(m.key, m);
-                        const depth = m.key.split(".").length - 1;
-                        const menuActions = actionsFor(m);
-                        return (
-                          <div
-                            key={m.key}
-                            className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 hover:bg-muted/50"
-                            style={{ paddingLeft: 12 + depth * 14 }}
-                          >
-                            <TriStateCheck
-                              checked={ms.checked}
-                              indeterminate={!ms.all && !ms.none}
-                              onChange={() => toggleMenuAccess(m, !ms.checked)}
-                              label={`Access ${m.label}`}
-                            />
-                            <span className="flex min-w-[130px] flex-1 items-center gap-1.5 sm:flex-none">
-                              {m.parent && (
-                                <span className="rounded bg-secondary px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-secondary-foreground">
-                                  Parent
-                                </span>
-                              )}
-                              <span className="text-[12.5px] font-medium text-foreground">
-                                {m.label}
-                              </span>
-                            </span>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                              {menuActions.map((a) => {
-                                const on = perms[m.key]?.has(a) ?? false;
-                                return (
-                                  <label
-                                    key={a}
-                                    className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-muted-foreground transition-colors hover:text-foreground"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={on}
-                                      onChange={() => togglePerm(m.key, a)}
-                                      className="h-3.5 w-3.5 cursor-pointer rounded border-border accent-primary"
-                                    />
-                                    {ACTION_LABELS[a]}
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+            {(() => {
+              // Collapsible hanya menampilkan menu yang dicentang di Menu Akses
+              const checkedGroups = workspaceFilteredGroups
+                .map((g) => ({ ...g, menus: g.menus.filter((m) => perms[m.key] && perms[m.key].size > 0) }))
+                .filter((g) => g.menus.length > 0);
+              if (checkedGroups.length === 0) {
+                return (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center">
+                    <p className="text-[12.5px] text-muted-foreground">Belum ada menu terpilih</p>
                   </div>
                 );
-              })}
-              </div>
-            )}
+              }
+              return (
+                <div className="max-h-[46vh] space-y-2 overflow-y-auto pr-1">
+                  {checkedGroups.map((group) => {
+                    const gs = groupState(group.menus);
+                    const isOpen = openGroups.has(group.title);
+                    return (
+                      <div key={group.title} className="overflow-hidden rounded-lg border border-border">
+                        <div className="flex items-center gap-2 border-b border-border/70 bg-muted px-3 py-2">
+                          <TriStateCheck
+                            checked={gs.checked}
+                            indeterminate={!gs.checked && !gs.none}
+                            onChange={() => toggleGroupAccess(group.menus, !gs.checked)}
+                            label={`Select all ${group.title} menus`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => toggleGroup(group.title)}
+                            className="flex flex-1 items-center justify-between gap-2 text-left"
+                          >
+                            <span className="text-[12.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                              {group.title}
+                            </span>
+                            <span className="flex items-center gap-2">
+                              <span className="rounded bg-primary/10 px-1.5 py-px text-[10px] font-semibold text-primary">
+                                {group.menus.length} terpilih • {gs.count} akses
+                              </span>
+                              {isOpen ? (
+                                <ChevronDown size={14} strokeWidth={2} className="text-muted-foreground" />
+                              ) : (
+                                <ChevronRight size={14} strokeWidth={2} className="text-muted-foreground" />
+                              )}
+                            </span>
+                          </button>
+                        </div>
+
+                        {isOpen && (
+                          <div className="divide-y divide-border">
+                            {group.menus.map((m) => {
+                              const ms = menuState(m.key, m);
+                              const depth = m.key.split(".").length - 1;
+                              const menuActions = actionsFor(m);
+                              return (
+                                <div
+                                  key={m.key}
+                                  className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 hover:bg-muted/50"
+                                  style={{ paddingLeft: 12 + depth * 14 }}
+                                >
+                                  <TriStateCheck
+                                    checked={ms.checked}
+                                    indeterminate={!ms.all && !ms.none}
+                                    onChange={() => toggleMenuAccess(m, !ms.checked)}
+                                    label={`Access ${m.label}`}
+                                  />
+                                  <span className="flex min-w-[130px] flex-1 items-center gap-1.5 sm:flex-none">
+                                    {m.parent && (
+                                      <span className="rounded bg-secondary px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide text-secondary-foreground">
+                                        Parent
+                                      </span>
+                                    )}
+                                    <span className="text-[12.5px] font-medium text-foreground">
+                                      {m.label}
+                                    </span>
+                                  </span>
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                    {menuActions.map((a) => {
+                                      const on = perms[m.key]?.has(a) ?? false;
+                                      return (
+                                        <label
+                                          key={a}
+                                          className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-muted-foreground transition-colors hover:text-foreground"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={on}
+                                            onChange={() => togglePerm(m.key, a)}
+                                            className="h-3.5 w-3.5 cursor-pointer rounded border-border accent-primary"
+                                          />
+                                          {ACTION_LABELS[a]}
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </FormSection>
         )}

@@ -35,5 +35,16 @@ export default function EditRolePage() {
     );
   }
 
+  if (role.isSystem) {
+    return (
+      <RoleGuard roles={["role_sys_admin"]} menus={["settings.roles"]}>
+        <p className="py-20 text-center text-lg font-semibold text-foreground">Administrator role tidak ditampilkan</p>
+        <div className="text-center">
+          <Link to="/app/settings/roles" className="text-sm text-primary hover:text-primary/80">Back to Roles</Link>
+        </div>
+      </RoleGuard>
+    );
+  }
+
   return <RoleForm role={role} />;
 }

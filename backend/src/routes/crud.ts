@@ -234,6 +234,61 @@ function sanitizeRow(table: AnyPgTable, row: Record<string, unknown>) {
   if (r.documentNo) r.documentNo = r.documentNo;
   return r;
 }
+
+// Enrich FK bigint ids → publicId for access tables (frontend uses publicId).
+async function enrichAccessRows(tableName: string, rows: any[]): Promise<any[]> {
+  if (!rows.length) return rows;
+  if (tableName === "workspaceAccesses") {
+    const wsIds = [...new Set(rows.map((r: any) => r.workspaceId).filter((v: any) => v != null))];
+    const roleIds = [...new Set(rows.map((r: any) => r.roleId).filter((v: any) => v != null))];
+    const wsMap = new Map<number, string>();
+    const roleMap = new Map<number, string>();
+    if (wsIds.length) {
+      const wsRows = await db.select({ id: schema.workspaces.id, publicId: schema.workspaces.publicId }).from(schema.workspaces).where(inArray(schema.workspaces.id, wsIds as any));
+      for (const w of wsRows) wsMap.set(w.id as unknown as number, w.publicId);
+    }
+    if (roleIds.length) {
+      const roleRows = await db.select({ id: schema.roles.id, publicId: schema.roles.publicId }).from(schema.roles).where(inArray(schema.roles.id, roleIds as any));
+      for (const r of roleRows) roleMap.set(r.id as unknown as number, r.publicId);
+    }
+    rows.forEach((r: any) => {
+      if (r.workspaceId != null && wsMap.has(r.workspaceId)) r.workspaceId = wsMap.get(r.workspaceId);
+      if (r.roleId != null && roleMap.has(r.roleId)) r.roleId = roleMap.get(r.roleId);
+    });
+  } else if (tableName === "branchAccesses") {
+    const roleIds = [...new Set(rows.map((r: any) => r.roleId).filter((v: any) => v != null))];
+    const branchIds = [...new Set(rows.filter((r: any) => r.entityType === "BRANCH").map((r: any) => r.entityId).filter((v: any) => v != null))];
+    const whIds = [...new Set(rows.filter((r: any) => r.entityType === "WAREHOUSE").map((r: any) => r.entityId).filter((v: any) => v != null))];
+    const roleMap = new Map<number, string>();
+    if (roleIds.length) {
+      const roleRows = await db.select({ id: schema.roles.id, publicId: schema.roles.publicId }).from(schema.roles).where(inArray(schema.roles.id, roleIds as any));
+      for (const r of roleRows) roleMap.set(r.id as unknown as number, r.publicId);
+    }
+    const branchMap = new Map<number, string>();
+    if (branchIds.length) {
+      const bRows = await db.select({ id: schema.branches.id, publicId: schema.branches.publicId }).from(schema.branches).where(inArray(schema.branches.id, branchIds as any));
+      for (const b of bRows) branchMap.set(b.id as unknown as number, b.publicId);
+    }
+    const whMap = new Map<number, string>();
+    if (whIds.length) {
+      const wRows = await db.select({ id: schema.warehouses.id, publicId: schema.warehouses.publicId }).from(schema.warehouses).where(inArray(schema.warehouses.id, whIds as any));
+      for (const w of wRows) whMap.set(w.id as unknown as number, w.publicId);
+    }
+    rows.forEach((r: any) => {
+      if (r.roleId != null && roleMap.has(r.roleId)) r.roleId = roleMap.get(r.roleId);
+      if (r.entityType === "BRANCH" && r.entityId != null && branchMap.has(r.entityId)) r.entityId = branchMap.get(r.entityId);
+      if (r.entityType === "WAREHOUSE" && r.entityId != null && whMap.has(r.entityId)) r.entityId = whMap.get(r.entityId);
+    });
+  } else if (tableName === "rolePermissions") {
+    const roleIds = [...new Set(rows.map((r: any) => r.roleId).filter((v: any) => v != null))];
+    if (roleIds.length) {
+      const roleRows = await db.select({ id: schema.roles.id, publicId: schema.roles.publicId }).from(schema.roles).where(inArray(schema.roles.id, roleIds as any));
+      const map = new Map(roleRows.map((r) => [r.id as unknown as number, r.publicId]));
+      rows.forEach((r: any) => { if (r.roleId != null && map.has(r.roleId)) r.roleId = map.get(r.roleId); });
+    }
+  }
+  return rows;
+}
 async function enforceSettingsOwner(req: Request, res: Response): Promise<boolean> {
   if (!req.user) return false;
   if (await isAdminUser(req.user.role)) return true;
@@ -580,6 +635,22 @@ async function buildWhere(req: Request, table: AnyPgTable, tableName: string) {
       if (internal !== null) conditions.push(eq(s.branchAccesses.roleId, internal));
     }
   }
+  if (tableName === "workspaceAccesses") {
+    const roleId = queryStr(req, "roleId");
+    if (roleId) {
+      let internal: number|null = null;
+      if (isUuid(roleId)) { const [r] = await db.select({id: s.roles.id}).from(s.roles).where(eq(s.roles.publicId, roleId)).limit(1); internal = r?.id ?? null; }
+      else if (/^\d+$/.test(roleId)) internal = Number(roleId);
+      if (internal !== null) conditions.push(eq(s.workspaceAccesses.roleId, internal));
+    }
+    const workspaceId = queryStr(req, "workspaceId");
+    if (workspaceId) {
+      let internal: number|null = null;
+      if (isUuid(workspaceId)) { const [w] = await db.select({id: s.workspaces.id}).from(s.workspaces).where(eq(s.workspaces.publicId, workspaceId)).limit(1); internal = w?.id ?? null; }
+      else if (/^\d+$/.test(workspaceId)) internal = Number(workspaceId);
+      if (internal !== null) conditions.push(eq(s.workspaceAccesses.workspaceId, internal));
+    }
+  }
   if (tableName === "opnameWarehouses") {
     const opnameId = queryStr(req, "opnameId");
     if (opnameId) {
@@ -699,6 +770,7 @@ crudRouter.get("/:table", async (req, res) => {
       if (orderBy) q = q.orderBy(orderBy);
       q = q.offset(offset).limit(pageSize);
       let rows = (await q).map((r) => sanitizeRow(table, r as Record<string, unknown>));
+      rows = await enrichAccessRows(tableName, rows);
       if (tableName === "items" && rows.length > 0) {
         const igIds = [...new Set(rows.map((r: any) => r.itemGroupId).filter(Boolean))] as number[];
         const uomIds2 = [...new Set(rows.map((r: any) => r.uomId).filter(Boolean))] as number[];
@@ -711,6 +783,38 @@ crudRouter.get("/:table", async (req, res) => {
           const us = await db.select({ id: schema.uom.id, publicId: schema.uom.publicId }).from(schema.uom).where(inArray(schema.uom.id, uomIds2 as any));
           const map = new Map(us.map((x: any) => [x.id, x.publicId]));
           rows.forEach((r: any) => { if (r.uomId) r.uomId = map.get(r.uomId) ?? r.uomId; });
+        }
+      }
+      if (tableName === "warehouses" && rows.length > 0) {
+        const bIds = [...new Set(rows.map((r: any) => r.branchId).filter(Boolean))] as number[];
+        if (bIds.length) {
+          const bs = await db.select({ id: schema.branches.id, publicId: schema.branches.publicId }).from(schema.branches).where(inArray(schema.branches.id, bIds as any));
+          const bMap = new Map(bs.map((b) => [b.id as unknown as number, b.publicId]));
+          rows.forEach((r: any) => { if (r.branchId != null && bMap.has(r.branchId)) r.branchId = bMap.get(r.branchId); });
+        }
+      }
+      if (tableName === "locations" && rows.length > 0) {
+        const wIds = [...new Set(rows.map((r: any) => r.warehouseId).filter(Boolean))] as number[];
+        if (wIds.length) {
+          const ws = await db.select({ id: schema.warehouses.id, publicId: schema.warehouses.publicId }).from(schema.warehouses).where(inArray(schema.warehouses.id, wIds as any));
+          const wMap = new Map(ws.map((w) => [w.id as unknown as number, w.publicId]));
+          rows.forEach((r: any) => { if (r.warehouseId != null && wMap.has(r.warehouseId)) r.warehouseId = wMap.get(r.warehouseId); });
+        }
+      }
+      if (tableName === "warehouses" && rows.length > 0) {
+        const bIds2 = [...new Set(rows.map((r: any) => r.branchId).filter(Boolean))] as number[];
+        if (bIds2.length) {
+          const bs2 = await db.select({ id: schema.branches.id, publicId: schema.branches.publicId }).from(schema.branches).where(inArray(schema.branches.id, bIds2 as any));
+          const bMap2 = new Map(bs2.map((b) => [b.id as unknown as number, b.publicId]));
+          rows.forEach((r: any) => { if (r.branchId != null && bMap2.has(r.branchId)) r.branchId = bMap2.get(r.branchId); });
+        }
+      }
+      if (tableName === "locations" && rows.length > 0) {
+        const wIds2 = [...new Set(rows.map((r: any) => r.warehouseId).filter(Boolean))] as number[];
+        if (wIds2.length) {
+          const ws2 = await db.select({ id: schema.warehouses.id, publicId: schema.warehouses.publicId }).from(schema.warehouses).where(inArray(schema.warehouses.id, wIds2 as any));
+          const wMap2 = new Map(ws2.map((w) => [w.id as unknown as number, w.publicId]));
+          rows.forEach((r: any) => { if (r.warehouseId != null && wMap2.has(r.warehouseId)) r.warehouseId = wMap2.get(r.warehouseId); });
         }
       }
       // Enrich FKs to publicId for priceLists/priceListLines
@@ -766,6 +870,7 @@ crudRouter.get("/:table", async (req, res) => {
       if (whereCond) q = q.where(whereCond);
       if (orderBy) q = q.orderBy(orderBy);
       let rows = (await q).map((r) => sanitizeRow(table, r as Record<string, unknown>));
+      rows = await enrichAccessRows(tableName, rows);
       if (tableName === "items" && rows.length > 0) {
         const igIds = [...new Set(rows.map((r: any) => r.itemGroupId).filter(Boolean))] as number[];
         const uomIds2 = [...new Set(rows.map((r: any) => r.uomId).filter(Boolean))] as number[];
@@ -792,6 +897,22 @@ crudRouter.get("/:table", async (req, res) => {
           const custs = await db.select({ id: schema.customers.id, publicId: schema.customers.publicId }).from(schema.customers).where(inArray(schema.customers.id, customerIds as any));
           const map = new Map(custs.map((x) => [x.id, x.publicId]));
           rows.forEach((r: any) => { if (r.customerId) r.customerId = map.get(r.customerId) ?? r.customerId; });
+        }
+      }
+      if (tableName === "warehouses" && rows.length > 0) {
+        const bIds = [...new Set(rows.map((r: any) => r.branchId).filter(Boolean))] as number[];
+        if (bIds.length) {
+          const bs = await db.select({ id: schema.branches.id, publicId: schema.branches.publicId }).from(schema.branches).where(inArray(schema.branches.id, bIds as any));
+          const bMap = new Map(bs.map((b) => [b.id as unknown as number, b.publicId]));
+          rows.forEach((r: any) => { if (r.branchId != null && bMap.has(r.branchId)) r.branchId = bMap.get(r.branchId); });
+        }
+      }
+      if (tableName === "locations" && rows.length > 0) {
+        const wIds = [...new Set(rows.map((r: any) => r.warehouseId).filter(Boolean))] as number[];
+        if (wIds.length) {
+          const ws = await db.select({ id: schema.warehouses.id, publicId: schema.warehouses.publicId }).from(schema.warehouses).where(inArray(schema.warehouses.id, wIds as any));
+          const wMap = new Map(ws.map((w) => [w.id as unknown as number, w.publicId]));
+          rows.forEach((r: any) => { if (r.warehouseId != null && wMap.has(r.warehouseId)) r.warehouseId = wMap.get(r.warehouseId); });
         }
       }
       if (tableName === "priceListLines" && rows.length > 0) {
@@ -1022,6 +1143,56 @@ crudRouter.get("/:table/:id", async (req, res) => {
     const [row] = await db.select().from(table).where(whereCond).limit(1);
     if (!row) { res.status(404).json({ error: "Data tidak ditemukan." }); return; }
     const sanitized: any = sanitizeRow(table, row as Record<string, unknown>);
+    // Enrich access tables FKs → publicId
+    if (sanitized) {
+      if (tableName === "workspaceAccesses") {
+        if (sanitized.workspaceId) {
+          const [w] = await db.select({ publicId: schema.workspaces.publicId }).from(schema.workspaces).where(eq(schema.workspaces.id, sanitized.workspaceId)).limit(1);
+          if (w) sanitized.workspaceId = w.publicId;
+        }
+        if (sanitized.roleId) {
+          const [r] = await db.select({ publicId: schema.roles.publicId }).from(schema.roles).where(eq(schema.roles.id, sanitized.roleId)).limit(1);
+          if (r) sanitized.roleId = r.publicId;
+        }
+      } else if (tableName === "branchAccesses") {
+        if (sanitized.roleId) {
+          const [r] = await db.select({ publicId: schema.roles.publicId }).from(schema.roles).where(eq(schema.roles.id, sanitized.roleId)).limit(1);
+          if (r) sanitized.roleId = r.publicId;
+        }
+        if (sanitized.entityId) {
+          if (sanitized.entityType === "BRANCH") {
+            const [b] = await db.select({ publicId: schema.branches.publicId }).from(schema.branches).where(eq(schema.branches.id, sanitized.entityId)).limit(1);
+            if (b) sanitized.entityId = b.publicId;
+          } else if (sanitized.entityType === "WAREHOUSE") {
+            const [w] = await db.select({ publicId: schema.warehouses.publicId }).from(schema.warehouses).where(eq(schema.warehouses.id, sanitized.entityId)).limit(1);
+            if (w) sanitized.entityId = w.publicId;
+          }
+        }
+      } else if (tableName === "rolePermissions") {
+        if (sanitized.roleId) {
+          const [r] = await db.select({ publicId: schema.roles.publicId }).from(schema.roles).where(eq(schema.roles.id, sanitized.roleId)).limit(1);
+          if (r) sanitized.roleId = r.publicId;
+        }
+      }
+    }
+    if (tableName === "warehouses" && sanitized) {
+      if (sanitized.branchId) {
+        const [b] = await db.select({ publicId: schema.branches.publicId }).from(schema.branches).where(eq(schema.branches.id, sanitized.branchId)).limit(1);
+        if (b) sanitized.branchId = b.publicId;
+      }
+    }
+    if (tableName === "locations" && sanitized) {
+      if (sanitized.warehouseId) {
+        const [w] = await db.select({ publicId: schema.warehouses.publicId }).from(schema.warehouses).where(eq(schema.warehouses.id, sanitized.warehouseId)).limit(1);
+        if (w) sanitized.warehouseId = w.publicId;
+      }
+    }
+    if (tableName === "users" && sanitized) {
+      if ((sanitized as any).roleId) {
+        const [r] = await db.select({ publicId: schema.roles.publicId }).from(schema.roles).where(eq(schema.roles.id, (sanitized as any).roleId)).limit(1);
+        if (r) { (sanitized as any).role = r.publicId; (sanitized as any).roleId = r.publicId; }
+      }
+    }
     if (tableName === "priceLists" && sanitized) {
       if (sanitized.supplierId) {
         const [sup] = await db.select({ publicId: schema.suppliers.publicId }).from(schema.suppliers).where(eq(schema.suppliers.id, sanitized.supplierId)).limit(1);

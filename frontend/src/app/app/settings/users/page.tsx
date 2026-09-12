@@ -40,7 +40,13 @@ export default function UsersPage() {
     return r?.name ?? ROLE_LABELS[roleId] ?? roleId;
   };
 
+  const isAdminRole = (roleId: string) => {
+    const r = (roles ?? []).find((x) => x.id === roleId);
+    return !!r?.isSystem;
+  };
+
   const toggleActive = (u: User, next: boolean) => {
+    if (isAdminRole(u.role)) return;
     updateUser.mutate({ id: u.id, patch: { active: next } });
   };
 
@@ -80,14 +86,27 @@ export default function UsersPage() {
     {
       id: "status",
       header: "Status",
-      cell: (u) => (
-        <div className="flex items-center gap-2.5">
-          <Toggle checked={u.active} onChange={(next) => toggleActive(u, next)} />
-          <Badge tone={u.active ? "emerald" : "neutral"} dot>
-            {u.active ? "Active" : "Inactive"}
-          </Badge>
-        </div>
-      ),
+      cell: (u) => {
+        const locked = isAdminRole(u.role);
+        if (locked) {
+          return (
+            <div className="flex items-center gap-2.5">
+              <Badge tone={u.active ? "emerald" : "neutral"} dot>
+                {u.active ? "Active" : "Inactive"}
+              </Badge>
+              <span className="text-[10px] text-muted-foreground">locked</span>
+            </div>
+          );
+        }
+        return (
+          <div className="flex items-center gap-2.5">
+            <Toggle checked={u.active} onChange={(next) => toggleActive(u, next)} />
+            <Badge tone={u.active ? "emerald" : "neutral"} dot>
+              {u.active ? "Active" : "Inactive"}
+            </Badge>
+          </div>
+        );
+      },
     },
     {
       id: "created",
@@ -119,7 +138,11 @@ export default function UsersPage() {
         selectable
         searchPlaceholder="Search users..."
         getSearchText={(u) => `${u.name} ${u.email}`}
-        onRowClick={(u) => navigate(`/app/settings/users/${u.id}`)}
+        onRowClick={(u) => {
+          if (isAdminRole(u.role)) return;
+          navigate(`/app/settings/users/${u.id}`);
+        }}
+        rowClassName={(u) => (isAdminRole(u.role) ? "opacity-60" : "")}
         minWidth={720}
         emptyIcon={<Users size={26} strokeWidth={2} />}
         emptyTitle="No users"

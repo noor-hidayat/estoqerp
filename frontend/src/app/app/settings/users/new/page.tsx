@@ -123,7 +123,7 @@ export default function NewUserPage() {
               value={form.roleId}
               onChange={(e) => setForm({ ...form, roleId: e.target.value })}
             >
-              {(roles ?? []).filter((r) => r.active).map((r) => (
+              {(roles ?? []).filter((r) => r.active && !r.isSystem).map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>

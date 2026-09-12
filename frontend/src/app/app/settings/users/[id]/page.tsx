@@ -111,6 +111,21 @@ export default function EditUserPage() {
     );
   }
 
+  const isAdminUser = (() => {
+    const r = (roles ?? []).find((x) => x.id === user.role);
+    return !!r?.isSystem;
+  })();
+  if (isAdminUser) {
+    return (
+      <RoleGuard roles={["role_sys_admin"]} menus={["settings.users"]}>
+        <p className="py-20 text-center text-lg font-semibold text-foreground">Administrator tidak dapat diedit</p>
+        <div className="text-center">
+          <Link to="/app/settings/users" className="text-sm text-primary hover:text-primary/80">Back to Users</Link>
+        </div>
+      </RoleGuard>
+    );
+  }
+
   return (
     <RoleGuard roles={["role_sys_admin"]} menus={["settings.users"]}>
       <FormPage
@@ -145,7 +160,7 @@ export default function EditUserPage() {
               value={form.roleId}
               onChange={(e) => setForm({ ...form, roleId: e.target.value })}
             >
-              {(roles ?? []).filter((r) => r.active).map((r) => (
+              {(roles ?? []).filter((r) => r.active && !r.isSystem).map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>

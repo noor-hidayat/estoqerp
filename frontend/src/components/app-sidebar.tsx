@@ -30,7 +30,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           : wsCode === "marketing"
             ? "wsp-marketing"
             : activeId ?? null
-  const groups = navForPermissions(canView, canManage, wsKey)
+  let groups = navForPermissions(canView, canManage, wsKey)
+  // Administrator tidak memiliki My Account
+  if (isSystem) {
+    groups = groups
+      .map((g) => ({
+        ...g,
+        items: g.items
+          .map((it) => ({
+            ...it,
+            children: it.children?.filter((c) => c.menu !== "account" && c.menu !== "settings.account"),
+          }))
+          .filter((it) => it.menu !== "account" && it.menu !== "settings.account"),
+      }))
+      .filter((g) => g.items.length > 0)
+  }
 
   return (
     <Sidebar collapsible="icon" {...props}>

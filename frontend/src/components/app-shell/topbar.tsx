@@ -24,7 +24,7 @@ export function Topbar() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const router = { push: (to: string) => navigate(to), replace: (to: string) => navigate(to, { replace: true }), back: () => navigate(-1) } as any;
-  const { user, signOut } = useSession();
+  const { user, signOut, isSystem } = useSession();
 
   const ids = useMemo(() => {
     const m = pathname.match(/^\/app\/transaction\/([^/]+)/);
@@ -175,12 +175,14 @@ export function Topbar() {
                 {activeRoleName}
               </Badge>
             </div>
-            <DropdownMenuItem
-              className="gap-2.5 px-4 py-2.5 text-[13px] font-medium"
-              onClick={() => router.push("/app/settings/account")}
-            >
-              My Account
-            </DropdownMenuItem>
+            {!isSystem && (
+              <DropdownMenuItem
+                className="gap-2.5 px-4 py-2.5 text-[13px] font-medium"
+                onClick={() => router.push("/app/settings/account")}
+              >
+                My Account
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator className="mx-2" />
             <DropdownMenuItem
               className="gap-2.5 px-4 py-2.5 text-[13px] font-medium text-destructive focus:bg-destructive/10 focus:text-destructive"
