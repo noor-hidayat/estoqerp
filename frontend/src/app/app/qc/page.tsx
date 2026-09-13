@@ -69,7 +69,7 @@ export default function InboundQcPage() {
         loading={isLoading}
         searchPlaceholder="Cari ID..."
         getSearchText={(q) => `${qcNo(q)}`}
-        onRowClick={(q) => navigate(`/app/qc/${q.documentNo ?? q.id}`)}
+        onRowClick={(q) => navigate(`/app/qc/${encodeURIComponent(q.id)}`)}
         filters={
           <div className="flex gap-2">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 w-44 text-xs">

@@ -204,7 +204,8 @@ function TableSearchSelect({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+    // Tabel internal: dropdown hanya setelah ketik, jangan tampilkan semua opsi saat kosong (hindari ceklis kolom kosong)
+    return q ? options.filter((o) => o.label.toLowerCase().includes(q)) : [];
   }, [options, query]);
 
   useEffect(() => {
@@ -272,15 +273,22 @@ function TableSearchSelect({
         value={open ? query : (selected?.label ?? "")}
         placeholder={placeholder}
         onFocus={() => {
-          openList();
+          // Jangan buka dropdown saat klik kolom kosong — hanya setelah ketik (sesuai spec table)
           setQuery("");
+          setOpen(false);
         }}
         onChange={(e) => {
-          setQuery(e.target.value);
-          if (!open) openList();
+          const v = e.target.value;
+          setQuery(v);
+          if (v.trim()) {
+            if (!open) openList();
+          } else {
+            setOpen(false);
+          }
         }}
         onKeyDown={(e) => {
           if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+            if (!query.trim()) return;
             e.preventDefault();
             openList();
             return;
@@ -595,6 +603,9 @@ export function MovementForm({
   const { data: types = [], isLoading: typesLoading } = useMovementTypes();
   const { data: items = [] } = useItemsList();
   const { data: warehouses = [] } = useAllWarehouses();
+  // Transaksi internal hanya pakai sub warehouse (parentId != null) yang sudah di-filter via branch_access (accessible)
+  // Parent (parentId == null) hanya untuk pembelian/PO — jangan tampil di transaksi internal
+  const subWarehouses = useMemo(() => warehouses.filter((w: any) => w.parentId != null), [warehouses]);
   const { data: formats = [] } = useBarcodeFormats();
   const { data: batchFormats = [] } = useBatchFormats();
   const { data: itemGroups = [] } = useItemGroups();
@@ -924,7 +935,7 @@ export function MovementForm({
   const selectedType = types.find((t) => t.id === form.typeId);
   const kind = selectedType?.kind;
   const isReturnCustomer = selectedType?.code === "RETURN_CUSTOMER";
-  const returWarehouses = warehouses.filter((w) => w.code.includes("RET"));
+  const returWarehouses = subWarehouses.filter((w: any) => w.code.includes("RET"));
   const filteredItems = isReturnCustomer ? (items as any[]).filter((i: any) => i.isFinishGood) : items;
 
   const handleTypeChange = (typeId: string) => {
@@ -932,8 +943,8 @@ export function MovementForm({
     const nextType = types.find((t) => t.id === typeId);
     const nextKind = nextType?.kind;
     if (nextType?.code === "RETURN_CUSTOMER") {
-      // Return: receipt to retur warehouse, need customer
-      const returWh = warehouses.find((w) => w.code.includes("RET"))?.id ?? "";
+      // Return: receipt to retur warehouse (sub warehouse), need customer
+      const returWh = subWarehouses.find((w: any) => w.code.includes("RET"))?.id ?? "";
       if (returWh) setToDefault(returWh);
       setFromDefault("");
     } else if (nextKind === "RECEIPT") {
@@ -1068,7 +1079,7 @@ export function MovementForm({
                 disabled={readOnly}
               >
                 <option value=""></option>
-                {warehouses.map((w) => (
+                {subWarehouses.map((w: any) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
                   </option>
@@ -1083,7 +1094,7 @@ export function MovementForm({
                 disabled={readOnly}
               >
                 <option value=""></option>
-                {(isReturnCustomer ? returWarehouses.length ? returWarehouses : warehouses : warehouses).map((w) => (
+                {(isReturnCustomer ? returWarehouses.length ? returWarehouses : subWarehouses : subWarehouses).map((w: any) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
                   </option>
@@ -1291,7 +1302,7 @@ export function MovementForm({
                         <TableCell className="px-4">
                           <TableSearchSelect
                             value={r.fromWarehouseId}
-                            options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+                            options={subWarehouses.map((w: any) => ({ value: w.id, label: w.name }))}
                             placeholder=""
                             onChange={(v) => setRow(r.key, { fromWarehouseId: v })}
                             disabled={readOnly}
@@ -1304,7 +1315,7 @@ export function MovementForm({
                         <TableCell className="px-4">
                           <TableSearchSelect
                             value={r.toWarehouseId}
-                            options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+                            options={subWarehouses.map((w: any) => ({ value: w.id, label: w.name }))}
                             placeholder=""
                             onChange={(v) => setRow(r.key, { toWarehouseId: v })}
                             disabled={readOnly}

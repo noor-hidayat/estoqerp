@@ -124,7 +124,7 @@ export default function QcDetailPage() {
           {isDraft && !editing && <DocMenu onCancel={onCancel} onDelete={onDelete} />}
           {editing && <Button variant="ghost" size="sm" onClick={()=>setEditing(false)}><X size={14} strokeWidth={2}/>Discard</Button>}
           {editing && <Button variant="primary" size="sm" onClick={onSaveEdit}>Save</Button>}
-          {isCompleted && <Button variant="outline" size="sm" onClick={()=>navigate(`/app/receiving/${(receiving as any)?.documentNo ?? qc.receivingId}`)}>View Receiving</Button>}
+          {isCompleted && <Button variant="outline" size="sm" onClick={()=>navigate(`/app/receiving/${encodeURIComponent((receiving as any)?.documentNo ?? qc.receivingId)}`)}>View Receiving</Button>}
         </div>
       </div>
 

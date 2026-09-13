@@ -64,7 +64,8 @@ function PoTableSelect({
   const listRef = useRef<HTMLDivElement>(null);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+    // Di tabel PR: jangan tampilkan semua opsi saat kolom kosong diklik — hanya setelah ketik
+    return q ? options.filter((o) => o.label.toLowerCase().includes(q)) : [];
   }, [options, query]);
   useEffect(() => setHighlight(0), [filtered]);
   useEffect(() => {
@@ -105,15 +106,21 @@ function PoTableSelect({
         value={open ? query : (selected?.label ?? "")}
         placeholder={placeholder}
         onFocus={() => {
-          openList();
           setQuery("");
+          setOpen(false);
         }}
         onChange={(e) => {
-          setQuery(e.target.value);
-          if (!open) openList();
+          const v = e.target.value;
+          setQuery(v);
+          if (v.trim()) {
+            if (!open) openList();
+          } else {
+            setOpen(false);
+          }
         }}
         onKeyDown={(e) => {
           if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+            if (!query.trim()) return;
             e.preventDefault();
             openList();
             return;
@@ -205,6 +212,7 @@ export function OrderLineTable({
   baseCurrency,
   priceListId,
   supplierId,
+  variant,
 }: {
   value: OrderLineInput[];
   onChange: (next: OrderLineInput[]) => void;
@@ -215,6 +223,7 @@ export function OrderLineTable({
   baseCurrency?: string;
   priceListId?: string | null;
   supplierId?: string | null;
+  variant?: "default" | "purchase-request";
 }) {
   const { data: items = [] } = useItemsList();
   const { data: uoms = [] } = useUoms();
@@ -253,8 +262,10 @@ export function OrderLineTable({
 
   const cur = currency || baseCurrency || "IDR";
   const curSym = currencySymbol(cur);
-  const rateHeader = `Rate`;
+  const isPR = variant === "purchase-request";
+  const rateHeader = isPR ? `Valuation Rate` : `Rate`;
   const lastRateHeader = `Last Order Rate`;
+  const qtyHeader = isPR ? `Qty Request` : `Qty`;
 
   const calcAmount = (r: OrderLineInput) => {
     const qty = Number(r.qty || 0);
@@ -306,7 +317,7 @@ export function OrderLineTable({
     return (
       <div className="overflow-hidden rounded-lg border border-border">
         <div className="overflow-x-auto">
-          <Table className="min-w-[1120px] table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0">
+          <Table className={cn(isPR ? "min-w-[720px]" : "min-w-[1120px]", "table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0")}>
             <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="w-8 px-2 text-center">
@@ -314,17 +325,17 @@ export function OrderLineTable({
                 </TableHead>
               <TableHead className="w-10 px-3 text-center">No</TableHead>
               <TableHead className="px-3 min-w-[180px]">Item Code</TableHead>
-              <TableHead className="w-[70px] px-2 text-right">Qty</TableHead>
-              <TableHead className="w-[80px] px-2">UOM</TableHead>
+              <TableHead className="w-[110px] px-2 text-right">{qtyHeader}</TableHead>
+              <TableHead className="w-[90px] px-2">UOM</TableHead>
               <TableHead className="w-[175px] px-3 text-right">{rateHeader}</TableHead>
-              <TableHead className="w-[175px] px-3 text-right">{lastRateHeader}</TableHead>
-              <TableHead className="w-[185px] px-3 text-right">Amount</TableHead>
+              {!isPR && <TableHead className="w-[175px] px-3 text-right">{lastRateHeader}</TableHead>}
+              {!isPR && <TableHead className="w-[185px] px-3 text-right">Amount</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody className="[&_tr]:border-border/70">
             {effectiveValue.length === 0 ? (
               <TableRow className="border-border/70 hover:bg-transparent">
-                <TableCell colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
+                <TableCell colSpan={isPR ? 6 : 8} className="px-3 py-6 text-center text-muted-foreground">
                   No lines.
                 </TableCell>
               </TableRow>
@@ -350,18 +361,22 @@ export function OrderLineTable({
                         <span className="text-[13px] tabular-nums text-right">{r.unitPrice ? formatNumber(r.unitPrice) : "0"}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="p-0">
-                      <div className="flex items-center justify-between gap-2 px-3">
-                        <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
-                        <span className="text-[13px] tabular-nums text-right text-muted-foreground">{lastConverted ? formatNumber(lastConverted) : "0"}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="p-0">
-                      <div className="flex items-center justify-between gap-2 px-3">
-                        <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
-                        <span className="text-[13px] tabular-nums text-right font-medium">{formatNumber(amount)}</span>
-                      </div>
-                    </TableCell>
+                    {!isPR && (
+                      <TableCell className="p-0">
+                        <div className="flex items-center justify-between gap-2 px-3">
+                          <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
+                          <span className="text-[13px] tabular-nums text-right text-muted-foreground">{lastConverted ? formatNumber(lastConverted) : "0"}</span>
+                        </div>
+                      </TableCell>
+                    )}
+                    {!isPR && (
+                      <TableCell className="p-0">
+                        <div className="flex items-center justify-between gap-2 px-3">
+                          <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
+                          <span className="text-[13px] tabular-nums text-right font-medium">{formatNumber(amount)}</span>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })
@@ -376,7 +391,7 @@ export function OrderLineTable({
   return (
     <div className="overflow-hidden rounded-lg border border-border">
       <div className="overflow-x-auto">
-        <Table className="min-w-[1120px] table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0">
+        <Table className={cn(isPR ? "min-w-[720px]" : "min-w-[1120px]", "table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0")}>
           <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
             <TableRow className="border-border hover:bg-transparent">
               <TableHead className="w-8 px-2 text-center">
@@ -388,17 +403,17 @@ export function OrderLineTable({
               </TableHead>
               <TableHead className="w-10 px-3 text-center">No</TableHead>
               <TableHead className="min-w-[200px] px-3">Item Code</TableHead>
-              <TableHead className="w-[70px] px-2 text-right">Qty</TableHead>
-              <TableHead className="w-[80px] px-2">UOM</TableHead>
+              <TableHead className="w-[110px] px-2 text-right">{qtyHeader}</TableHead>
+              <TableHead className="w-[90px] px-2">UOM</TableHead>
               <TableHead className="w-[175px] px-3 text-right">{rateHeader}</TableHead>
-              <TableHead className="w-[175px] px-3 text-right">{lastRateHeader}</TableHead>
-              <TableHead className="w-[185px] px-3 text-right">Amount</TableHead>
+              {!isPR && <TableHead className="w-[175px] px-3 text-right">{lastRateHeader}</TableHead>}
+              {!isPR && <TableHead className="w-[185px] px-3 text-right">Amount</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody className="[&_tr]:border-border/70">
             {effectiveValue.length === 0 ? (
               <TableRow className="border-border/70 hover:bg-transparent">
-                <TableCell colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
+                <TableCell colSpan={isPR ? 6 : 8} className="px-3 py-6 text-center text-muted-foreground">
                   No lines yet — add a row below.
                 </TableCell>
               </TableRow>
@@ -431,7 +446,7 @@ export function OrderLineTable({
                       />
                     </TableCell>
                     <TableCell className="p-0 border-r border-border">
-                      <TableInput value={r.qty} onChange={(v) => setRow(idx, { qty: v })} columnTitle="Qty" isNumeric />
+                      <TableInput value={r.qty} onChange={(v) => setRow(idx, { qty: v })} columnTitle={qtyHeader} isNumeric />
                     </TableCell>
                     <TableCell className="px-2 tabular-nums">
                       <span className="text-xs text-muted-foreground">
@@ -447,18 +462,22 @@ export function OrderLineTable({
                     <TableCell className="p-0 border-r border-border">
                       <TableInput value={r.unitPrice} onChange={(v) => setRow(idx, { unitPrice: v })} columnTitle={rateHeader} isNumeric currency={curSym} />
                     </TableCell>
-                    <TableCell className="p-0">
-                      <div className="flex items-center justify-between gap-2 px-3">
-                        <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
-                        <span className="text-[13px] tabular-nums text-right text-muted-foreground">{last ? formatNumber(last) : "0"}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="p-0">
-                      <div className="flex items-center justify-between gap-2 px-3">
-                        <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
-                        <span className="text-[13px] tabular-nums text-right font-medium">{formatNumber(amount)}</span>
-                      </div>
-                    </TableCell>
+                    {!isPR && (
+                      <TableCell className="p-0">
+                        <div className="flex items-center justify-between gap-2 px-3">
+                          <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
+                          <span className="text-[13px] tabular-nums text-right text-muted-foreground">{last ? formatNumber(last) : "0"}</span>
+                        </div>
+                      </TableCell>
+                    )}
+                    {!isPR && (
+                      <TableCell className="p-0">
+                        <div className="flex items-center justify-between gap-2 px-3">
+                          <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
+                          <span className="text-[13px] tabular-nums text-right font-medium">{formatNumber(amount)}</span>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })

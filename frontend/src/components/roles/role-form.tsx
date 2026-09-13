@@ -80,7 +80,7 @@ const MENU_GROUPS: MenuGroup[] = [
     // Purchasing → Suppliers, Purchase Orders, Goods Receipts
     menus: [
       { key: "supply.suppliers", label: "Suppliers" },
-      { key: "supply.purchaseOrders", label: "Receiving" },
+      { key: "supply.receivings", label: "Receiving" },
       { key: "supply.goodsReceipts", label: "GRN" },
       { key: "supply.goodsReceipts", label: "Putaway" },
       { key: "supply.goodsReceipts", label: "Supplier Return" },
@@ -165,6 +165,9 @@ const MENU_GROUPS: MenuGroup[] = [
       { key: "master.batchFormats.new", label: "New Batch Format" },
       { key: "master.batchFormats.edit", label: "Edit Batch Format" },
       { key: "master.movementTypes", label: "Transaction Types" },
+      { key: "master.taxCategories", label: "Tax Categories" },
+      { key: "master.priceLists", label: "Price Lists" },
+      { key: "master.documentTypes", label: "Document Numbering" },
       { key: "inventory.branches", label: "Branches" },
       { key: "inventory.warehouses", label: "Warehouses" },
       { key: "inventory.locations", label: "Locations" },

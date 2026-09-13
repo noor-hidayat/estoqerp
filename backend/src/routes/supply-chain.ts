@@ -3,7 +3,7 @@ import { Router, type Request, type Response } from "express";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/pool";
 import * as s from "../db/schema";
-import { checkPermission } from "../middleware/rbac";
+import { checkAnyPermission, checkPermission } from "../middleware/rbac";
 import { nextDocumentNo } from "../lib/document-number";
 import {
   insertMovementWithDetails,
@@ -1153,7 +1153,7 @@ async function mapReceivingLines(lines: any[]) {
   return lines.map((l: any) => ({ ...l, id: l.publicId, _internalId: l.id, receivingId: undefined, itemId: itemMap.get(l.itemId) ?? l.itemId, uomId: l.uomId ? (uomMap.get(l.uomId) ?? l.uomId) : null, qtyAccepted: l.qtyAccepted != null ? String(l.qtyAccepted) : null, qtyRejected: l.qtyRejected != null ? String(l.qtyRejected) : null, rejectReason: l.rejectReason ?? null }));
 }
 supplyChainRouter.post("/receivings", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.receivings", "manage"))) return;
   try {
     const b = req.body ?? {};
     if (!b.purchaseOrderId || !b.warehouseId || !b.receiptDate) return res.status(400).json({ error: "purchaseOrderId, warehouseId, receiptDate wajib." });
@@ -1177,7 +1177,7 @@ supplyChainRouter.post("/receivings", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 supplyChainRouter.get("/receivings", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
+  if (!(await checkPermission(req, res, "supply.receivings", "view"))) return;
   try {
     const conds: any[] = [];
     if (req.query.status) conds.push(eq(s.receivings.status as any, String(req.query.status)));
@@ -1241,7 +1241,7 @@ supplyChainRouter.get("/receivings", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 supplyChainRouter.get("/receivings/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
+  if (!(await checkPermission(req, res, "supply.receivings", "view"))) return;
   try {
     const pid = String(req.params.id);
     let where: any = receivingWhere(pid);
@@ -1268,7 +1268,7 @@ supplyChainRouter.get("/receivings/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 putAndPatch("/receivings/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.receivings", "manage"))) return;
   try {
     const pid = String(req.params.id);
     let where: any = receivingWhere(pid);
@@ -1289,7 +1289,7 @@ putAndPatch("/receivings/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 supplyChainRouter.delete("/receivings/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.receivings", "manage"))) return;
   try {
     const pid = String(req.params.id);
     let where: any = receivingWhere(pid);
@@ -1300,7 +1300,7 @@ supplyChainRouter.delete("/receivings/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 supplyChainRouter.post("/receivings/:id/post", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.receivings", "manage"))) return;
   try {
     const pid = String(req.params.id);
     let where: any = receivingWhere(pid);
@@ -1340,7 +1340,7 @@ supplyChainRouter.post("/receivings/:id/post", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 supplyChainRouter.post("/receivings/:id/submit", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.receivings", "manage"))) return;
   try {
     const pid = String(req.params.id);
     let where: any = receivingWhere(pid);
@@ -1372,7 +1372,7 @@ supplyChainRouter.post("/receivings/:id/submit", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 supplyChainRouter.post("/receivings/:id/qc", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.receivings", "manage"))) return;
   try {
     const pid = String(req.params.id);
     let where: any = receivingWhere(pid);
@@ -1427,7 +1427,7 @@ supplyChainRouter.post("/receivings/:id/qc", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 supplyChainRouter.post("/receivings/:id/cancel", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.receivings", "manage"))) return;
   try {
     const pid = String(req.params.id);
     let where: any = receivingWhere(pid);

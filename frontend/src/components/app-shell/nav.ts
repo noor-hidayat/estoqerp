@@ -341,16 +341,16 @@ export const NAV: NavGroup[] = [
             label: "Tax Categories",
             href: "/app/setup/tax-categories",
             icon: "Percent",
-            menu: "master",
+            menu: "master.taxCategories",
           },
           {
             label: "Price Lists",
             href: "/app/setup/price-lists",
             icon: "Tag",
-            menu: "master",
+            menu: "master.priceLists",
             children: [
-              { label: "All Price Lists", href: "/app/setup/price-lists", icon: "Tag", menu: "master" },
-              { label: "Item Pricelist", href: "/app/setup/price-lists/items", icon: "History", menu: "master" },
+              { label: "All Price Lists", href: "/app/setup/price-lists", icon: "Tag", menu: "master.priceLists" },
+              { label: "Item Pricelist", href: "/app/setup/price-lists/items", icon: "History", menu: "master.priceLists" },
             ],
           },
           {
@@ -375,7 +375,7 @@ export const NAV: NavGroup[] = [
             label: "Document Numbering",
             href: "/app/setup/document-types",
             icon: "FileText",
-            menu: "master",
+            menu: "master.documentTypes",
           },
           {
             label: "Warehouses",
@@ -443,9 +443,9 @@ export const WAREHOUSE_NAV: NavGroup[] = [
         label: "Inbound",
         href: "/app/inbound",
         icon: "ArrowDownToLine",
-        menu: "supply.purchaseOrders",
+        menu: "supply.receivings",
         children: [
-          { label: "Receiving", href: "/app/receiving", icon: "Inbox", menu: "supply.purchaseOrders" },
+          { label: "Receiving", href: "/app/receiving", icon: "Inbox", menu: "supply.receivings" },
           { label: "GRN", href: "/app/goods-receipts", icon: "PackageCheck", menu: "supply.goodsReceipts" },
           { label: "Putaway", href: "/app/putaway", icon: "PackageSearch", menu: "supply.goodsReceipts" },
           { label: "Supplier Return", href: "/app/supplier-return", icon: "Undo2", menu: "supply.goodsReceipts" },

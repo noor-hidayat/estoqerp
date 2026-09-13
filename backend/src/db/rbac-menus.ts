@@ -8,6 +8,7 @@ export const MENU_CHILDREN: Record<string, string[]> = {
     "supply.suppliers",
     "supply.customers",
     "supply.purchaseOrders",
+    "supply.receivings",
     "supply.salesOrders",
     "supply.goodsReceipts",
     "supply.deliveries",
@@ -23,6 +24,9 @@ export const MENU_CHILDREN: Record<string, string[]> = {
     "master.batchFormats.new",
     "master.batchFormats.edit",
     "master.movementTypes",
+    "master.taxCategories",
+    "master.priceLists",
+    "master.documentTypes",
   ],
   inventory: [
     "inventory.stockBalance",

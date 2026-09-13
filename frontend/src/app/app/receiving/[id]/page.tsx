@@ -31,7 +31,7 @@ import { TableInput } from "@/components/ui/table-input";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatId, formatNumber } from "@/lib/utils";
 
-const MENU = "supply.purchaseOrders";
+const MENU = "supply.receivings";
 const LIST_HREF = "/app/receiving";
 
 function todayISO() {
@@ -504,7 +504,7 @@ export default function ReceivingDetailPage() {
                           <TableCell className="px-3 font-medium text-foreground">{q.documentNo ?? formatId(q.id)}</TableCell>
                           <TableCell className="px-3 text-muted-foreground">{q.inspectionDate?.slice(0, 10) ?? "—"}</TableCell>
                           <TableCell className="px-3"><DocStatusBadge status={q.status} /></TableCell>
-                          <TableCell className="px-3 text-right"><Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => navigate(`/app/qc/${q.documentNo ?? q.id}`)}>View</Button></TableCell>
+                          <TableCell className="px-3 text-right"><Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => navigate(`/app/qc/${encodeURIComponent(q.documentNo ?? q.id)}`)}>View</Button></TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

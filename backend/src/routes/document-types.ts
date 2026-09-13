@@ -37,7 +37,7 @@ async function resolveSeriesId(param: string): Promise<number | null> {
 // ---------------------------------------------------------------------------
 
 documentTypesRouter.get("/", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "view"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "view"))) return;
   try {
     const rows = await db.select().from(s.documentTypes).orderBy(s.documentTypes.name);
     res.json(rows.map((r) => ({ ...r, id: r.publicId, _internalId: r.id })));
@@ -45,7 +45,7 @@ documentTypesRouter.get("/", async (req, res, next) => {
 });
 
 documentTypesRouter.get("/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "view"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "view"))) return;
   try {
     const id = await resolveTypeId(req.params.id);
     if (!id) return res.status(404).json({ error: "Tipe dokumen tidak ditemukan." });
@@ -57,7 +57,7 @@ documentTypesRouter.get("/:id", async (req, res, next) => {
 });
 
 documentTypesRouter.post("/", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "manage"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "manage"))) return;
   try {
     const b = req.body ?? {};
     if (!b.name) return res.status(400).json({ error: "name wajib." });
@@ -75,7 +75,7 @@ documentTypesRouter.post("/", async (req, res, next) => {
 });
 
 documentTypesRouter.patch("/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "manage"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "manage"))) return;
   try {
     const id = await resolveTypeId(req.params.id);
     if (!id) return res.status(404).json({ error: "Tipe dokumen tidak ditemukan." });
@@ -100,7 +100,7 @@ documentTypesRouter.patch("/:id", async (req, res, next) => {
 });
 
 documentTypesRouter.delete("/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "manage"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "manage"))) return;
   try {
     const id = await resolveTypeId(req.params.id);
     if (!id) return res.status(404).json({ error: "Tipe dokumen tidak ditemukan." });
@@ -125,7 +125,7 @@ documentTypesRouter.delete("/:id", async (req, res, next) => {
 // ---------------------------------------------------------------------------
 
 documentSeriesRouter.get("/", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "view"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "view"))) return;
   try {
     const typeIdParam = req.query.documentTypeId as string | undefined;
     const typeCode = req.query.documentTypeCode as string | undefined;
@@ -159,7 +159,7 @@ documentSeriesRouter.get("/", async (req, res, next) => {
 });
 
 documentSeriesRouter.get("/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "view"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "view"))) return;
   try {
     const id = await resolveSeriesId(req.params.id);
     if (!id) return res.status(404).json({ error: "Series tidak ditemukan." });
@@ -185,7 +185,7 @@ documentSeriesRouter.get("/:id", async (req, res, next) => {
 });
 
 documentSeriesRouter.post("/", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "manage"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "manage"))) return;
   try {
     const b = req.body ?? {};
     if (!b.documentTypeId || !b.name || !b.prefix || !b.format) return res.status(400).json({ error: "documentTypeId, name, prefix, format wajib." });
@@ -215,7 +215,7 @@ documentSeriesRouter.post("/", async (req, res, next) => {
 });
 
 documentSeriesRouter.patch("/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "manage"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "manage"))) return;
   try {
     const id = await resolveSeriesId(req.params.id);
     if (!id) return res.status(404).json({ error: "Series tidak ditemukan." });
@@ -244,7 +244,7 @@ documentSeriesRouter.patch("/:id", async (req, res, next) => {
 });
 
 documentSeriesRouter.delete("/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "manage"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "manage"))) return;
   try {
     const id = await resolveSeriesId(req.params.id);
     if (!id) return res.status(404).json({ error: "Series tidak ditemukan." });
@@ -261,7 +261,7 @@ documentSeriesRouter.delete("/:id", async (req, res, next) => {
 });
 
 documentSeriesRouter.get("/:id/preview", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "view"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "view"))) return;
   try {
     const id = await resolveSeriesId(req.params.id);
     if (!id) return res.status(404).json({ error: "Series tidak ditemukan." });
@@ -277,7 +277,7 @@ documentSeriesRouter.get("/:id/preview", async (req, res, next) => {
 
 // Sequences view
 documentSeriesRouter.get("/sequences/list", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "master", "view"))) return;
+  if (!(await checkPermission(req, res, "master.documentTypes", "view"))) return;
   try {
     const rows = await db.select({
       id: s.documentSequences.id,

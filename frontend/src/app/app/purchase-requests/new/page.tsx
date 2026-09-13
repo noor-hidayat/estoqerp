@@ -309,7 +309,6 @@ export default function NewPurchaseRequestPage() {
     }
     try {
       const res = await create.mutateAsync({
-        supplierId: null,
         warehouseId: form.warehouseId || warehouses[0]?.id || null,
         requestDate: form.requestDate,
         expectedDate: null,
@@ -456,6 +455,7 @@ export default function NewPurchaseRequestPage() {
             currency={form.currency || baseCurrency}
             exchangeRate={form.exchangeRate}
             baseCurrency={baseCurrency}
+            variant="purchase-request"
           />
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <Input label="Total Quantity" value={formatNumber(totalQty)} disabled className="h-8 bg-zinc-100 text-sm" />

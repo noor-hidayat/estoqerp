@@ -110,7 +110,7 @@ export default function InboundReceivingPage() {
   ];
 
   return (
-    <RoleGuard roles={[]} menus={["supply.purchaseOrders"]}>
+    <RoleGuard roles={[]} menus={["supply.receivings"]}>
       <PageHeader
         title="Receiving"
         actions={
@@ -128,7 +128,7 @@ export default function InboundReceivingPage() {
         loading={isLoading}
         searchPlaceholder="Cari supplier / ID..."
         getSearchText={(r) => `${rcvNo(r)} ${supplierName(r)}`}
-        onRowClick={(r) => navigate(`/app/receiving/${r.documentNo ?? r.id}`)}
+        onRowClick={(r) => navigate(`/app/receiving/${encodeURIComponent(r.id)}`)}
         filters={
           <div className="flex gap-2">
             <Select

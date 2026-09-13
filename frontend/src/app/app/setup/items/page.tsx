@@ -13,6 +13,8 @@ import type { Item } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
+import { useSession } from "@/lib/session";
+import { can } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -27,6 +29,10 @@ import {
 
 export default function ItemsPage() {
   const navigate = useNavigate();
+  const { isSystem, permissions } = useSession();
+  const canCreate = can(isSystem, permissions, "master.items", "create");
+  const canUpdate = can(isSystem, permissions, "master.items", "update");
+  const canDelete = can(isSystem, permissions, "master.items", "delete");
   const [query, setQuery] = useState("");
   const [itemGroupFilter, setItemGroupFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -209,15 +215,24 @@ export default function ItemsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/app/setup/items/${item.id}`); }} className="gap-2">
-              <Pencil size={14} /> Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleToggleActive(item); }} className="gap-2">
-              <Power size={14} /> {(item as any).isActive === false ? "Activate" : "Deactivate"}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteOne(item.id); }} className="gap-2 text-destructive focus:text-destructive">
-              <Trash size={14} /> Delete
-            </DropdownMenuItem>
+            {canUpdate && (
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/app/setup/items/${item.id}`); }} className="gap-2">
+                <Pencil size={14} /> Edit
+              </DropdownMenuItem>
+            )}
+            {canUpdate && (
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleToggleActive(item); }} className="gap-2">
+                <Power size={14} /> {(item as any).isActive === false ? "Activate" : "Deactivate"}
+              </DropdownMenuItem>
+            )}
+            {canDelete && (
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteOne(item.id); }} className="gap-2 text-destructive focus:text-destructive">
+                <Trash size={14} /> Delete
+              </DropdownMenuItem>
+            )}
+            {!canUpdate && !canDelete && (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">No actions</div>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -231,14 +246,16 @@ export default function ItemsPage() {
       <PageHeader
         title="Items"
         actions={
-          <Button
-            size="sm"
-            className="h-7 px-2.5 text-xs"
-            onClick={() => navigate("/app/setup/items/new")}
-          >
-            <Plus size={14} strokeWidth={2} />
-            Add Item
-          </Button>
+          canCreate ? (
+            <Button
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              onClick={() => navigate("/app/setup/items/new")}
+            >
+              <Plus size={14} strokeWidth={2} />
+              Add Item
+            </Button>
+          ) : null
         }
       />
 
@@ -271,11 +288,11 @@ export default function ItemsPage() {
             ))}
           </Select>
         }
-        selectable
+        selectable={canDelete}
         selectedKeys={selected}
         onSelectionChange={setSelected}
         toolbarRight={
-          selected.size > 0 ? (
+          canDelete && selected.size > 0 ? (
             <Button
               variant="destructive"
               size="sm"

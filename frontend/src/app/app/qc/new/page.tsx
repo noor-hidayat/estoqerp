@@ -130,17 +130,17 @@ export default function NewQcInspectionPage() {
 
   const onSaveDraft = async () => {
     const docNo = await doCreate();
-    if (docNo) navigate(`/app/qc/${docNo}`, { replace: true });
+    if (docNo) navigate(`/app/qc/${encodeURIComponent(docNo)}`, { replace: true });
   };
   const onSaveSubmit = async () => {
     const docNo = await doCreate();
     if (!docNo) return;
     try {
       await submitQc.mutateAsync(docNo);
-      navigate(`/app/qc/${docNo}`, { replace: true });
+      navigate(`/app/qc/${encodeURIComponent(docNo)}`, { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal submit QC.");
-      navigate(`/app/qc/${docNo}`, { replace: true });
+      navigate(`/app/qc/${encodeURIComponent(docNo)}`, { replace: true });
     }
   };
 

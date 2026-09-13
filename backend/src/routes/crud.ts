@@ -4,7 +4,7 @@ import type { AnyPgColumn, AnyPgTable } from "drizzle-orm/pg-core";
 import { db } from "../db/pool";
 import * as schema from "../db/schema";
 import { parseBatchNumber, type BatchFormatLike } from "../lib/batch-parse";
-import { canAccessEntity, canViewOpnameContext, checkAnyPermission, checkPermission, isAdminUser } from "../middleware/rbac";
+import { canAccessEntity, canViewOpnameContext, checkAnyPermission, checkPermission, getRoleInternalId, hasPermission, isAdminUser } from "../middleware/rbac";
 
 // small helper to check uuid
 function isUuid(v: string): boolean {
@@ -353,19 +353,19 @@ const TABLE_MENU: Record<string, string | string[]> = {
   branchAccesses: "settings.roles",
   workspaceAccesses: "settings.roles",
   workspaces: "settings.roles",
-  branches: "inventory",
-  warehouses: "inventory",
-  locations: "inventory",
-  stockBalances: "inventory",
-  itemGroups: "master",
-  items: "master",
-  barcodeFormats: "master",
-  batchFormats: "master",
+  branches: "inventory.branches",
+  warehouses: "inventory.warehouses",
+  locations: "inventory.locations",
+  stockBalances: "inventory.stockBalance",
+  itemGroups: "master.itemGroups",
+  items: "master.items",
+  barcodeFormats: "master.barcodeFormats",
+  batchFormats: "master.batchFormats",
   userSettings: "opname.variance.column",
-  uom: "master",
-  taxCategories: "master",
-  priceLists: "master",
-  priceListLines: "master",
+  uom: "master.uom",
+  taxCategories: "master.taxCategories",
+  priceLists: "master.priceLists",
+  priceListLines: "master.priceLists",
   movementTypes: "master.movementTypes",
   stockMovements: "inventory.transactions",
   stockMovementDetails: "inventory.transactions",
@@ -389,7 +389,40 @@ function menuListOf(tableName: string): string[] {
   return Array.isArray(menu) ? menu : [menu];
 }
 const OPNAME_SUPPORT_READ = new Set(["locations","branches","warehouses","items","barcodeFormats","users"]);
+// UOM dan ItemGroups diperlukan untuk display ItemsPage, allow view untuk semua authenticated yang bisa view items
+const ITEM_AUX_VIEW_OPEN = new Set(["uom", "itemGroups"]);
+// Workspaces & roles needed for UI shell (workspace switcher, role labels) — allow view for any authenticated with any app access
+const SHELL_OPEN_VIEW = new Set(["workspaces", "roles", "userSettings"]);
 async function checkTablePermission(req: Request, res: Response, tableName: string, action: string): Promise<boolean> {
+  if (action === "view" && SHELL_OPEN_VIEW.has(tableName) && req.user) {
+    if (await isAdminUser(req.user.role)) return true;
+    // any authenticated with at least one app permission can view workspaces/roles for UI
+    if (await hasPermission(req.user.role, "dashboard", "view")) return true;
+    if (await hasPermission(req.user.role, "inventory", "view")) return true;
+    if (await hasPermission(req.user.role, "inventory.stockBalance", "view")) return true;
+    if (await hasPermission(req.user.role, "supply.purchaseRequests", "view")) return true;
+    if (await hasPermission(req.user.role, "supply.materialRequests", "view")) return true;
+    if (await hasPermission(req.user.role, "master.items", "view")) return true;
+    if (await canViewOpnameContext(req.user.role)) return true;
+    // fallback: any authenticated can view workspaces (needed for topbar)
+    if (tableName === "workspaces") return true;
+    // roles: allow if user has any workspace access (has branch_access)
+    if (tableName === "roles") {
+      const internalId = await getRoleInternalId(req.user.role);
+      if (internalId !== null) {
+        const [hasAccess] = await db.select({ id: schema.branchAccesses.id }).from(schema.branchAccesses).where(eq(schema.branchAccesses.roleId, internalId)).limit(1);
+        if (hasAccess) return true;
+        // also allow if has any permission at all
+        const perms = await db.select({ menu: schema.rolePermissions.menu }).from(schema.rolePermissions).where(eq(schema.rolePermissions.roleId, internalId)).limit(1);
+        if (perms.length > 0) return true;
+      }
+    }
+  }
+  if (action === "view" && ITEM_AUX_VIEW_OPEN.has(tableName) && req.user) {
+    if (await isAdminUser(req.user.role)) return true;
+    if (await hasPermission(req.user.role, "master.items", "view")) return true;
+    if (await hasPermission(req.user.role, "master", "view")) return true;
+  }
   if (action === "view" && OPNAME_SUPPORT_READ.has(tableName) && req.user && (await canViewOpnameContext(req.user.role))) {
     return true;
   }
@@ -504,43 +537,43 @@ async function applyEntityScope(req: Request, tableName: string) {
   const wNums = toNums(warehouseIds as any);
   const wsNums = toNums(workspaceIds as any);
   if (tableName === "branches") {
-    return bNums.length > 0 ? inArray(s.branches.id, bNums as any) : sql`FALSE`;
+    return bNums.length > 0 ? inArray(s.branches.id, bNums as any) : undefined;
   }
   if (tableName === "warehouses") {
     const conds: ReturnType<typeof sql>[] = [];
     if (wNums.length > 0) conds.push(inArray(s.warehouses.id, wNums as any));
     if (bNums.length > 0) conds.push(inArray(s.warehouses.branchId, bNums as any));
-    return conds.length > 0 ? or(...conds) : sql`FALSE`;
+    return conds.length > 0 ? or(...conds) : undefined;
   }
   if (tableName === "locations") {
     if (wNums.length > 0) return inArray(s.locations.warehouseId, wNums as any);
     if (bNums.length > 0) {
       return inArray(s.locations.warehouseId, db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, bNums as any))) as any;
     }
-    return sql`FALSE`;
+    return undefined;
   }
   if (tableName === "stockBalances") {
     if (wNums.length > 0) return inArray(s.stockBalances.warehouseId, wNums as any);
     if (bNums.length > 0) return inArray(s.stockBalances.warehouseId, db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, bNums as any))) as any;
-    return sql`FALSE`;
+    return undefined;
   }
   if (tableName === "stockLedger" || tableName === "stockBatches") {
     const whCol = tableName === "stockLedger" ? s.stockLedger.warehouseId : s.stockBatches.warehouseId;
     if (wNums.length > 0) return inArray(whCol, wNums as any);
     if (bNums.length > 0) return inArray(whCol, db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, bNums as any))) as any;
-    return sql`FALSE`;
+    return undefined;
   }
   if (tableName === "stockMovements" || tableName === "stockMovementDetails") {
     if (wNums.length > 0) {
       const mvIds = db.select({ id: s.stockMovements.id }).from(s.stockMovements).innerJoin(s.stockMovementDetails, eq(s.stockMovementDetails.movementId, s.stockMovements.id)).where(or(inArray(s.stockMovementDetails.fromWarehouseId, wNums as any), inArray(s.stockMovementDetails.toWarehouseId, wNums as any)));
       return tableName === "stockMovements" ? inArray(s.stockMovements.id, mvIds) : inArray(s.stockMovementDetails.movementId, mvIds);
     }
-    return sql`FALSE`;
+    return undefined;
   }
   if (tableName === "opnameWarehouses") {
     if (wNums.length > 0) return inArray(s.opnameWarehouses.warehouseId, wNums as any);
     if (bNums.length > 0) return inArray(s.opnameWarehouses.warehouseId, db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, bNums as any))) as any;
-    return sql`FALSE`;
+    return undefined;
   }
   if (tableName === "opnameScans") {
     const whConds: ReturnType<typeof sql>[] = [];
@@ -552,7 +585,7 @@ async function applyEntityScope(req: Request, tableName: string) {
   if (tableName === "opnameScanDetails") {
     if (wNums.length > 0) return inArray(s.opnameScanDetails.warehouseId, wNums as any);
     if (bNums.length > 0) return inArray(s.opnameScanDetails.warehouseId, db.select({ id: s.warehouses.id }).from(s.warehouses).where(inArray(s.warehouses.branchId, bNums as any))) as any;
-    return sql`FALSE`;
+    return undefined;
   }
   if (tableName === "workspaces") {
     return wsNums.length > 0 ? inArray(s.workspaces.id, wsNums as any) : sql`FALSE`;

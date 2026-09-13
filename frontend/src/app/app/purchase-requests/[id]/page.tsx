@@ -331,7 +331,6 @@ function PRBody({
     return !!st?.requiresSignature;
   }, [isPendingApproval, pr, workflowStates]);
   const [form, setForm] = useState({
-    supplierId: (pr as any).supplierId ?? "",
     warehouseId: pr.warehouseId,
     requestDate: pr.requestDate?.slice(0, 10) ?? todayISO(),
     expectedDate: pr.expectedDate?.slice(0, 10) ?? "",
@@ -816,6 +815,7 @@ function PRBody({
               exchangeRate={editable ? form.exchangeRate : (pr as any).exchangeRate}
               baseCurrency={baseCurrency}
               supplierId={editable ? form.supplierId : pr.supplierId}
+              variant="purchase-request"
             />
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               <Input label="Total Quantity" value={formatNumber(editable ? totalQty : viewTotalQty)} disabled className="h-8 bg-zinc-100 text-sm" />

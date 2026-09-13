@@ -1005,7 +1005,6 @@ export const purchaseRequests = pgTable(
     publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
     documentNo: text("document_no").unique(),
     seriesId: bigint("series_id", { mode: "number" }).references(() => documentSeries.id),
-    supplierId: bigint("supplier_id", { mode: "number" }).references(() => suppliers.id),
     warehouseId: bigint("warehouse_id", { mode: "number" })
       .notNull()
       .references(() => warehouses.id),
@@ -1037,7 +1036,6 @@ export const purchaseRequests = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("idx_purchase_requests_supplier").on(t.supplierId),
     index("idx_purchase_requests_wh").on(t.warehouseId),
     index("idx_purchase_requests_status").on(t.status),
     index("idx_purchase_requests_document_no").on(t.documentNo),
@@ -1086,6 +1084,8 @@ export const materialRequests = pgTable(
     notes: text("notes"),
     department: text("department"),
     costCenter: text("cost_center"),
+    currency: text("currency").notNull().default("IDR"),
+    exchangeRate: numeric("exchange_rate", { precision: 15, scale: 6 }).notNull().default("1"),
     needApproval: boolean("need_approval").notNull().default(false),
     currentApprovalLevel: integer("current_approval_level").notNull().default(0),
     approvalWorkflowId: bigint("approval_workflow_id", { mode: "number" }),
@@ -1095,6 +1095,10 @@ export const materialRequests = pgTable(
     approvedSignature: text("approved_signature"),
     approvedSignedAt: timestamp("approved_signed_at", { withTimezone: true }),
     approvedBy: bigint("approved_by", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
+    globalDiscountPercent: numeric("global_discount_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+    additionalCharges: jsonb("additional_charges").$type<{ type: string; amount: string }[]>().notNull().default([]),
+    taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+    taxCategoryId: bigint("tax_category_id", { mode: "number" }).references(() => taxCategories.id, { onDelete: "set null" }),
     createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
     branchId: bigint("branch_id", { mode: "number" }).references(() => branches.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1123,6 +1127,9 @@ export const materialRequestLines = pgTable(
       .notNull()
       .references(() => uom.id),
     qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
+    discount: numeric("discount", { precision: 15, scale: 2 }).notNull().default("0"),
+    batchNumber: text("batch_number"),
     note: text("note"),
     deliveryDate: date("delivery_date"),
   },

@@ -73,7 +73,7 @@ export default function GoodsReceiptsPage() {
           variant="ghost"
           size="sm"
           className="h-7 px-2.5 text-xs"
-          onClick={() => navigate(`/app/goods-receipts/${(r as any).documentNo ?? r.id}`)}
+          onClick={() => navigate(`/app/goods-receipts/${encodeURIComponent(r.id)}`)}
         >
           View
         </Button>
@@ -98,7 +98,7 @@ export default function GoodsReceiptsPage() {
         data={filtered}
         getRowId={(r) => r.id}
         loading={isLoading}
-        onRowClick={(r) => navigate(`/app/goods-receipts/${(r as any).documentNo ?? r.id}`)}
+        onRowClick={(r) => navigate(`/app/goods-receipts/${encodeURIComponent(r.id)}`)}
         searchPlaceholder="Search goods receipts..."
         getSearchText={(r) => `${(r as any).documentNo ?? formatId(r.id)} ${poNo(r.purchaseOrderId)} ${warehouseName(r.warehouseId)}`}
         filters={

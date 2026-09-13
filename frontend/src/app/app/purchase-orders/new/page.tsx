@@ -187,6 +187,8 @@ export default function NewPurchaseOrderPage() {
   const { user } = useSession();
   const { data: suppliers = [], isLoading: suppliersLoading } = useSuppliers();
   const { data: warehouses = [], isLoading: warehousesLoading } = useAllWarehouses();
+  // PO / pembelian hanya pakai parent warehouse (parentId == null)
+  const parentWarehouses = useMemo(() => warehouses.filter((w: any) => !w.parentId), [warehouses]);
   const { data: branches = [] } = useBranches();
   const { isLoading: uomsLoading } = useUoms();
   const { data: taxCategories = [] } = useTaxCategories();
@@ -272,10 +274,10 @@ export default function NewPurchaseOrderPage() {
     }
   }, [suppliers, form.supplierId]);
   useEffect(() => {
-    if (!form.warehouseId && warehouses.length > 0) {
-      setForm((f) => (f.warehouseId ? f : { ...f, warehouseId: warehouses[0].id }));
+    if (!form.warehouseId && parentWarehouses.length > 0) {
+      setForm((f) => (f.warehouseId ? f : { ...f, warehouseId: parentWarehouses[0].id }));
     }
-  }, [warehouses, form.warehouseId]);
+  }, [parentWarehouses, form.warehouseId]);
 
   const { data: rateData, isFetching: rateFetching } = useExchangeRate(
     form.currency && form.currency !== baseCurrency ? form.currency : undefined,
@@ -333,7 +335,7 @@ export default function NewPurchaseOrderPage() {
     try {
       const res = await create.mutateAsync({
         supplierId: form.supplierId || suppliers[0]?.id || null,
-        warehouseId: form.warehouseId || warehouses[0]?.id || null,
+        warehouseId: form.warehouseId || parentWarehouses[0]?.id || null,
         orderDate: form.orderDate,
         expectedDate: form.expectedDate || null,
         notes: form.notes.trim() || null,
@@ -608,14 +610,11 @@ export default function NewPurchaseOrderPage() {
                 className="h-8"
               >
                 <option value="">Select warehouse...</option>
-                {warehouses.map((w) => {
-                  const parent = (w as any).parentId ? warehouses.find((x) => x.id === (w as any).parentId) : null;
-                  return (
-                    <option key={w.id} value={w.id}>
-                      {(w as any).parentId ? `↳ ${w.name} (induk: ${parent?.name ?? "—"})` : w.name}
-                    </option>
-                  );
-                })}
+                {parentWarehouses.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
               </Select>
               {(() => {
                 const wh: any = warehouses.find((x) => x.id === form.warehouseId);

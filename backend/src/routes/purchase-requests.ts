@@ -80,8 +80,6 @@ purchaseRequestRouter.post("/purchase-requests", async (req, res, next) => {
     const b = req.body ?? {};
     if (!b.warehouseId || !b.requestDate) return res.status(400).json({ error: "warehouseId, requestDate wajib." });
     if (Array.isArray(b.lines) && b.lines.length > 0) { try { validateRequireUnitPrice(b.lines, "PR"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); } }
-    const supplierId = b.supplierId ? await resolveInternalId(s.suppliers, b.supplierId) : null;
-    if (b.supplierId && !supplierId) return res.status(400).json({ error: "supplierId tidak valid." });
     const warehouseId = await resolveInternalId(s.warehouses, b.warehouseId);
     const branchId = b.branchId ? await resolveInternalId(s.branches, b.branchId) : null;
     if (!warehouseId) return res.status(400).json({ error: "warehouseId tidak valid." });
@@ -146,7 +144,6 @@ purchaseRequestRouter.post("/purchase-requests", async (req, res, next) => {
       const [ins] = await tx.insert(s.purchaseRequests).values({
         documentNo: doc.documentNo,
         seriesId: doc.seriesId,
-        supplierId,
         warehouseId,
         requestDate: b.requestDate,
         expectedDate: b.expectedDate ?? null,
@@ -186,16 +183,11 @@ purchaseRequestRouter.get("/purchase-requests", async (req, res, next) => {
       const wid = await resolveInternalId(s.warehouses, String(req.query.warehouseId));
       if (wid) conds.push(eq(s.purchaseRequests.warehouseId, wid));
     }
-    if (req.query.supplierId) {
-      const sid = await resolveInternalId(s.suppliers, String(req.query.supplierId));
-      if (sid) conds.push(eq(s.purchaseRequests.supplierId, sid));
-    }
     const rows = await db.select({
       id: s.purchaseRequests.id,
       publicId: s.purchaseRequests.publicId,
       documentNo: s.purchaseRequests.documentNo,
       seriesId: s.purchaseRequests.seriesId,
-      supplierId: s.purchaseRequests.supplierId,
       warehouseId: s.purchaseRequests.warehouseId,
       requestDate: s.purchaseRequests.requestDate,
       expectedDate: s.purchaseRequests.expectedDate,
@@ -224,7 +216,6 @@ purchaseRequestRouter.get("/purchase-requests", async (req, res, next) => {
       _internalId: r.id,
       documentNo: r.documentNo,
       prNo: r.documentNo,
-      supplierId: r.supplierId,
       warehouseId: r.warehouseId,
       requestDate: r.requestDate,
       expectedDate: r.expectedDate,
@@ -247,15 +238,9 @@ purchaseRequestRouter.get("/purchase-requests", async (req, res, next) => {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     }));
-    const supplierIds = [...new Set(out.map((o) => o.supplierId).filter(Boolean))] as number[];
     const warehouseIds = [...new Set(out.map((o) => o.warehouseId).filter(Boolean))] as number[];
     const branchIds = [...new Set(out.map((o:any)=> o.branchId).filter(Boolean))] as number[];
     const taxCatIds = [...new Set(out.map((o:any)=> o.taxCategoryId).filter(Boolean))] as number[];
-    if (supplierIds.length) {
-      const sups = await db.select({ id: s.suppliers.id, publicId: s.suppliers.publicId }).from(s.suppliers).where(inArray(s.suppliers.id, supplierIds));
-      const map = new Map(sups.map((x) => [x.id, x.publicId]));
-      out.forEach((o: any) => { o.supplierId = map.get(o.supplierId) ?? (o.supplierId ? String(o.supplierId) : null); });
-    } else { out.forEach((o:any)=>{ if(o.supplierId) o.supplierId = String(o.supplierId); }); }
     if (warehouseIds.length) {
       const whs = await db.select({ id: s.warehouses.id, publicId: s.warehouses.publicId }).from(s.warehouses).where(inArray(s.warehouses.id, warehouseIds));
       const map = new Map(whs.map((x) => [x.id, x.publicId]));
@@ -301,7 +286,6 @@ purchaseRequestRouter.get("/purchase-requests/:id", async (req, res, next) => {
       uoms.forEach((u) => uomMap.set(u.id, u.publicId));
     }
     const mappedLines = lines.map((l: any) => ({ ...l, id: l.publicId, _internalId: l.id, purchaseRequestId: row.publicId, itemId: itemMap.get(l.itemId) ?? l.itemId, uomId: l.uomId ? (uomMap.get(l.uomId) ?? l.uomId) : null }));
-    const [supplier] = row.supplierId ? await db.select({ publicId: s.suppliers.publicId }).from(s.suppliers).where(eq(s.suppliers.id, row.supplierId)).limit(1) : [];
     const [warehouse] = row.warehouseId ? await db.select({ publicId: s.warehouses.publicId }).from(s.warehouses).where(eq(s.warehouses.id, row.warehouseId)).limit(1) : [];
     const [branch] = (row as any).branchId ? await db.select({ publicId: s.branches.publicId }).from(s.branches).where(eq(s.branches.id, (row as any).branchId)).limit(1) : [];
     let taxCategoryPublicId: string | null = null;
@@ -334,7 +318,6 @@ purchaseRequestRouter.get("/purchase-requests/:id", async (req, res, next) => {
       _internalId: row.id,
       documentNo: row.documentNo,
       prNo: row.documentNo,
-      supplierId: supplier?.publicId ?? (row.supplierId ? String(row.supplierId) : null),
       warehouseId: warehouse?.publicId ?? row.warehouseId,
       requestDate: row.requestDate,
       expectedDate: row.expectedDate,
@@ -382,7 +365,6 @@ putAndPatch("/purchase-requests/:id", async (req, res, next) => {
     const b = req.body ?? {};
     if (Array.isArray(b.lines) && b.lines.length > 0) { try { validateRequireUnitPrice(b.lines, "PR"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); } }
     const patch: Record<string, any> = {};
-    if (b.supplierId !== undefined) patch.supplierId = b.supplierId ? await resolveInternalId(s.suppliers, String(b.supplierId)) : null;
     if (b.warehouseId !== undefined) patch.warehouseId = await resolveInternalId(s.warehouses, String(b.warehouseId));
     if (b.requestDate !== undefined) patch.requestDate = b.requestDate;
     if (b.expectedDate !== undefined) patch.expectedDate = b.expectedDate ?? null;
@@ -561,8 +543,8 @@ purchaseRequestRouter.post("/purchase-requests/:id/create-po", async (req, res, 
     if (!pr) return res.status(404).json({ error: "Purchase Request tidak ditemukan." });
     if (pr.status !== "APPROVED" && pr.status !== "POSTED") return res.status(400).json({ error: "PR harus APPROVED/POSTED untuk dibuatkan PO." });
     const lines = await prLines(db, pr.id);
-    const supplierId = pr.supplierId ?? (req.body?.supplierId ? await resolveInternalId(s.suppliers, String(req.body.supplierId)) : null);
-    if (!supplierId) return res.status(400).json({ error: "supplierId wajib untuk PO (isi di PR atau body)." });
+    const supplierId = req.body?.supplierId ? await resolveInternalId(s.suppliers, String(req.body.supplierId)) : null;
+    if (!supplierId) return res.status(400).json({ error: "supplierId wajib untuk PO (isi di body)." });
     const { documentNo } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "PO", { branchId: pr.branchId ?? undefined, date: new Date() });
       const [po] = await tx.insert(s.purchaseOrders).values({

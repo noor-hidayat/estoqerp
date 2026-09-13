@@ -6,18 +6,16 @@ import { queryClient } from "@/lib/api/query-client";
 import App from "./App";
 import "./app/globals.css";
 
-// Register Service Worker for PWA
+// Register Service Worker for PWA - disabled in dev to avoid fetch 200 sw.js issues
+// Unregister existing SW to fix "fetch 200 initiator sw.js:57" and failed to fetch
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/sw.js", { updateViaCache: "none" })
-      .then((registration) => {
-        console.log("SW registered:", registration.scope);
-      })
-      .catch((err) => {
-        console.log("SW registration failed:", err);
-      });
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    for (const r of regs) r.unregister().then(() => console.log("SW unregistered:", r.scope));
   });
+  // Clear caches
+  if (window.caches) {
+    caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+  }
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

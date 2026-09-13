@@ -73,8 +73,8 @@ async function replaceMrLines(tx: any, prId: number, lines: any[]) {
   }
 }
 
-// POST /purchase-requests
-materialRequestRouter.post("/purchase-requests", async (req, res, next) => {
+// POST /material-requests
+materialRequestRouter.post("/material-requests", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.materialRequests", "manage"))) return;
   try {
     const b = req.body ?? {};
@@ -174,8 +174,8 @@ materialRequestRouter.post("/purchase-requests", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /purchase-requests
-materialRequestRouter.get("/purchase-requests", async (req, res, next) => {
+// GET /material-requests
+materialRequestRouter.get("/material-requests", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.materialRequests", "view"))) return;
   try {
     const conds: any[] = [];
@@ -271,8 +271,8 @@ materialRequestRouter.get("/purchase-requests", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /purchase-requests/:id
-materialRequestRouter.get("/purchase-requests/:id", async (req, res, next) => {
+// GET /material-requests/:id
+materialRequestRouter.get("/material-requests/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.materialRequests", "view"))) return;
   try {
     const pid = String(req.params.id);
@@ -361,7 +361,7 @@ materialRequestRouter.get("/purchase-requests/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-putAndPatch("/purchase-requests/:id", async (req, res, next) => {
+putAndPatch("/material-requests/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.materialRequests", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -417,7 +417,7 @@ putAndPatch("/purchase-requests/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-materialRequestRouter.delete("/purchase-requests/:id", async (req, res, next) => {
+materialRequestRouter.delete("/material-requests/:id", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.materialRequests", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -429,7 +429,7 @@ materialRequestRouter.delete("/purchase-requests/:id", async (req, res, next) =>
   } catch (e) { next(e); }
 });
 
-materialRequestRouter.post("/purchase-requests/:id/post", async (req, res, next) => {
+materialRequestRouter.post("/material-requests/:id/post", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.materialRequests", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -458,7 +458,7 @@ materialRequestRouter.post("/purchase-requests/:id/post", async (req, res, next)
   } catch (e) { next(e); }
 });
 
-materialRequestRouter.post("/purchase-requests/:id/cancel", async (req, res, next) => {
+materialRequestRouter.post("/material-requests/:id/cancel", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.materialRequests", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -471,7 +471,7 @@ materialRequestRouter.post("/purchase-requests/:id/cancel", async (req, res, nex
   } catch (e) { next(e); }
 });
 
-materialRequestRouter.post("/purchase-requests/:id/approve", async (req, res, next) => {
+materialRequestRouter.post("/material-requests/:id/approve", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.materialRequests", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -526,7 +526,7 @@ materialRequestRouter.post("/purchase-requests/:id/approve", async (req, res, ne
   } catch (e) { next(e); }
 });
 
-materialRequestRouter.post("/purchase-requests/:id/reject", async (req, res, next) => {
+materialRequestRouter.post("/material-requests/:id/reject", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.materialRequests", "manage"))) return;
   try {
     const pid = String(req.params.id);
@@ -541,7 +541,7 @@ materialRequestRouter.post("/purchase-requests/:id/reject", async (req, res, nex
 });
 
 // PR -> PO
-materialRequestRouter.post("/purchase-requests/:id/create-po", async (req, res, next) => {
+materialRequestRouter.post("/material-requests/:id/create-po", async (req, res, next) => {
   if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);

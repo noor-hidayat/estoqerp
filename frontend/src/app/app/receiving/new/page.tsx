@@ -134,7 +134,7 @@ export default function NewReceivingPage() {
 
   const onSave = async () => {
     const docNo = await doCreate();
-    if (docNo) navigate(`/app/receiving/${docNo}`, { replace: true });
+    if (docNo) navigate(`/app/receiving/${encodeURIComponent(docNo)}`, { replace: true });
   };
 
   useEffect(() => {
@@ -150,14 +150,14 @@ export default function NewReceivingPage() {
 
   if (posLoading || warehousesLoading) {
     return (
-      <RoleGuard roles={[]} menus={["supply.purchaseOrders"]}>
+      <RoleGuard roles={[]} menus={["supply.receivings"]}>
         <FormSkeleton sections={[["half", "half", "half"]]} />
       </RoleGuard>
     );
   }
 
   return (
-    <RoleGuard roles={[]} menus={["supply.purchaseOrders"]}>
+    <RoleGuard roles={[]} menus={["supply.receivings"]}>
       <FormPage
         title="New Receiving"
         actions={
