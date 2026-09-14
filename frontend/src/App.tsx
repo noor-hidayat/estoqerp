@@ -46,6 +46,9 @@ const EditItemGroupPage = lazy(() => import("@/app/app/setup/item-groups/[id]/pa
 const UomPage = lazy(() => import("@/app/app/setup/uom/page"));
 const NewUomPage = lazy(() => import("@/app/app/setup/uom/new/page"));
 const EditUomPage = lazy(() => import("@/app/app/setup/uom/[id]/page"));
+const DepartmentsPage = lazy(() => import("@/app/app/setup/departments/page"));
+const NewDepartmentPage = lazy(() => import("@/app/app/setup/departments/new/page"));
+const EditDepartmentPage = lazy(() => import("@/app/app/setup/departments/[id]/page"));
 const TransactionTypesPage = lazy(() => import("@/app/app/setup/transaction-types/page"));
 const NewTransactionTypePage = lazy(() => import("@/app/app/setup/transaction-types/new/page"));
 const EditTransactionTypePage = lazy(() => import("@/app/app/setup/transaction-types/[id]/page"));
@@ -196,6 +199,9 @@ export default function App() {
             <Route path="setup/uom" element={<LazyPage fallback={<TableSkeleton columns={3} filters={0} />}><UomPage /></LazyPage>} />
             <Route path="setup/uom/new" element={<LazyPage fallback={<FormSkeleton fields={2} />}><NewUomPage /></LazyPage>} />
             <Route path="setup/uom/:id" element={<LazyPage fallback={<FormSkeleton fields={2} />}><EditUomPage /></LazyPage>} />
+            <Route path="setup/departments" element={<LazyPage fallback={<TableSkeleton columns={3} filters={0} />}><DepartmentsPage /></LazyPage>} />
+            <Route path="setup/departments/new" element={<LazyPage fallback={<FormSkeleton fields={1} />}><NewDepartmentPage /></LazyPage>} />
+            <Route path="setup/departments/:id" element={<LazyPage fallback={<FormSkeleton fields={1} />}><EditDepartmentPage /></LazyPage>} />
             <Route path="setup/transaction-types" element={<LazyPage fallback={<TableSkeleton columns={5} filters={0} />}><TransactionTypesPage /></LazyPage>} />
             <Route path="setup/transaction-types/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewTransactionTypePage /></LazyPage>} />
             <Route path="setup/transaction-types/:id" element={<LazyPage fallback={<FormSkeleton fields={4} />}><EditTransactionTypePage /></LazyPage>} />

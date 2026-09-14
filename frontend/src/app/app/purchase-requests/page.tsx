@@ -74,7 +74,7 @@ export default function PurchaseRequestsPage() {
     },
     {
       id: "department",
-      header: "Request By",
+      header: "From Department",
       cell: (o) => <span className="text-xs text-muted-foreground">{(o as any).department ?? "—"}</span>,
       sortValue: (o) => String((o as any).department ?? ""),
     },

@@ -26,6 +26,7 @@ import { TimePicker } from "@/components/ui/time-picker";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { type OrderLineInput } from "@/components/supply/order-line-table";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TableInput } from "@/components/ui/table-input";
 import { useErrorToast } from "@/hooks/use-error-toast";
@@ -515,6 +516,9 @@ export default function ReceivingDetailPage() {
           )}
         </>
           )}
+        <FormSection title="Activity Log">
+          <ActivityTimeline documentType="RCV" documentId={gr.id} />
+        </FormSection>
       </FormPage>
     </RoleGuard>
   );

@@ -40,6 +40,7 @@ function RouteGuard({ children }: { children: ReactNode }) {
       if (path.startsWith("/app/setup/locations")) return "inventory.locations";
       if (path.startsWith("/app/setup/item-groups")) return "master.itemGroups";
       if (path.startsWith("/app/setup/uom")) return "master.uom";
+      if (path.startsWith("/app/setup/departments")) return "master.departments";
       if (path.startsWith("/app/setup/tax-categories")) return "master";
       if (path.startsWith("/app/setup/price-lists")) return "master";
       if (path.startsWith("/app/setup/barcode-formats")) return "master.barcodeFormats";

@@ -25,6 +25,7 @@ import {
   checkPermission,
   isAdminUser,
 } from "../middleware/rbac";
+import { logActivity, getActorInfo } from "../lib/activity-log";
 
 export const transactionsRouter = Router();
 export const stockLedgerRouter = Router();
@@ -1376,7 +1377,11 @@ transactionsRouter.post("/", async (req: Request, res: Response) => {
   try {
     await assertUniqueBarcodes(input.details, input.typeId);
     const id = await db.transaction((tx) => insertMovementWithDetails(tx, input, (req as any).user?.internalId ?? req.user!.id));
-    const [row] = await db.select({ documentNo: schema.stockMovements.documentNo }).from(schema.stockMovements).where(eq(schema.stockMovements.publicId, id)).limit(1);
+    const [row] = await db.select({ id: schema.stockMovements.id, documentNo: schema.stockMovements.documentNo, status: schema.stockMovements.status }).from(schema.stockMovements).where(eq(schema.stockMovements.publicId, id)).limit(1);
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "SMV", documentId: row?.id ?? 0, action: "create", fromStatus: null, toStatus: row?.status ?? input.status ?? "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo: row?.documentNo ?? null, publicId: id } });
+    } catch {}
     res.status(201).json({ id, documentNo: row?.documentNo ?? null });
   } catch (e) {
     console.error("POST /transactions", e);
@@ -1512,6 +1517,10 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
         );
       }
     });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "SMV", documentId: existing.id, action: "update", fromStatus: existing.status, toStatus: input.status ?? existing.status, actorUserId: internalId, actorRole: role });
+    } catch {}
     res.json({ ok: true });
   } catch (e) {
     console.error("PATCH /transactions", e);
@@ -1597,6 +1606,10 @@ transactionsRouter.post("/:id/post", async (req: Request, res: Response) => {
         .set({ status: "POSTED", updatedAt: new Date() })
         .where(eq(schema.stockMovements.id, movement.id));
     });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "SMV", documentId: movement.id, action: "post", fromStatus: "DRAFT", toStatus: "POSTED", actorUserId: internalId, actorRole: role });
+    } catch {}
     res.json({ ok: true });
   } catch (e) {
     console.error("POST /transactions/:id/post", e);
@@ -1742,6 +1755,10 @@ transactionsRouter.post("/:id/unpost", async (req: Request, res: Response) => {
         .set({ status: "CANCELED", updatedAt: new Date() })
         .where(eq(schema.stockMovements.id, movement.id));
     });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "SMV", documentId: movement.id, action: "cancel", fromStatus: "POSTED", toStatus: "CANCELED", actorUserId: internalId, actorRole: role });
+    } catch {}
     res.json({ ok: true });
   } catch (e) {
     console.error("POST /transactions/:id/unpost", e);
@@ -1775,6 +1792,10 @@ transactionsRouter.post("/:id/amend", async (req: Request, res: Response) => {
       .update(schema.stockMovements)
       .set({ status: "DRAFT", updatedAt: new Date() })
       .where(eq(schema.stockMovements.id, movement.id));
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "SMV", documentId: movement.id, action: "amend", fromStatus: "CANCELED", toStatus: "DRAFT", actorUserId: internalId, actorRole: role });
+    } catch {}
     res.json({ ok: true });
   } catch (e) {
     console.error("POST /transactions/:id/amend", e);
@@ -1804,6 +1825,10 @@ transactionsRouter.delete("/:id", async (req: Request, res: Response) => {
     return;
   }
   try {
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "SMV", documentId: movement.id, action: "cancel", fromStatus: movement.status, toStatus: "CANCELED", actorUserId: internalId, actorRole: role });
+    } catch {}
     await db.delete(schema.stockMovements).where(eq(schema.stockMovements.id, movement.id));
     res.json({ ok: true });
   } catch (e) {

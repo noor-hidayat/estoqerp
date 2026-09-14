@@ -5,6 +5,7 @@ import { db } from "../db/pool";
 import * as s from "../db/schema";
 import { checkPermission } from "../middleware/rbac";
 import { nextDocumentNo } from "../lib/document-number";
+import { logActivity, getActorInfo } from "../lib/activity-log";
 
 export const purchaseRequestRouter = Router();
 const putAndPatch = (path: string, ...handlers: any[]) => {
@@ -139,7 +140,7 @@ purchaseRequestRouter.post("/purchase-requests", async (req, res, next) => {
         preparedBy = actorInternalIdForPrep;
       }
     }
-    const { documentNo, seriesId: resolvedSeriesId } = await db.transaction(async (tx) => {
+    const { documentNo, seriesId: resolvedSeriesId, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "PR", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.requestDate ? new Date(b.requestDate) : new Date() });
       const [ins] = await tx.insert(s.purchaseRequests).values({
         documentNo: doc.documentNo,
@@ -150,7 +151,8 @@ purchaseRequestRouter.post("/purchase-requests", async (req, res, next) => {
         urgency: b.urgency ? String(b.urgency).toUpperCase() : "MEDIUM",
         status: "DRAFT",
         notes: b.notes ?? null,
-        department: b.department ?? null,
+        department: b.department ? String(b.department).trim() || null : null,
+        toDepartment: (b as any).toDepartment ? String((b as any).toDepartment).trim() || null : null,
         costCenter: b.costCenter ?? null,
         currency: b.currency ? String(b.currency).toUpperCase() : "IDR",
         exchangeRate: b.exchangeRate != null ? String(b.exchangeRate) : "1",
@@ -169,6 +171,10 @@ purchaseRequestRouter.post("/purchase-requests", async (req, res, next) => {
       return { documentNo: doc.documentNo, seriesId: doc.seriesId, id: ins.id, publicId: ins.publicId };
     });
     const [created] = await db.select({ publicId: s.purchaseRequests.publicId, documentNo: s.purchaseRequests.documentNo }).from(s.purchaseRequests).where(eq(s.purchaseRequests.documentNo, documentNo)).limit(1);
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "PR", documentId: newId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo } });
+    } catch {}
     res.status(201).json({ id: created.publicId, documentNo: created.documentNo, seriesId: resolvedSeriesId });
   } catch (e) { next(e); }
 });
@@ -195,6 +201,7 @@ purchaseRequestRouter.get("/purchase-requests", async (req, res, next) => {
       status: s.purchaseRequests.status,
       notes: s.purchaseRequests.notes,
       department: (s as any).purchaseRequests.department,
+      toDepartment: (s as any).purchaseRequests.toDepartment,
       costCenter: (s as any).purchaseRequests.costCenter,
       currency: (s as any).purchaseRequests.currency,
       exchangeRate: (s as any).purchaseRequests.exchangeRate,
@@ -223,6 +230,7 @@ purchaseRequestRouter.get("/purchase-requests", async (req, res, next) => {
       status: r.status,
       notes: r.notes,
       department: (r as any).department ?? null,
+      toDepartment: (r as any).toDepartment ?? null,
       costCenter: (r as any).costCenter ?? null,
       currency: (r as any).currency ?? "IDR",
       exchangeRate: (r as any).exchangeRate ?? "1",
@@ -325,6 +333,7 @@ purchaseRequestRouter.get("/purchase-requests/:id", async (req, res, next) => {
       status: row.status,
       notes: row.notes,
       department: (row as any).department ?? null,
+      toDepartment: (row as any).toDepartment ?? null,
       costCenter: (row as any).costCenter ?? null,
       currency: (row as any).currency ?? "IDR",
       exchangeRate: (row as any).exchangeRate ?? "1",
@@ -371,6 +380,7 @@ putAndPatch("/purchase-requests/:id", async (req, res, next) => {
     if (b.urgency !== undefined) patch.urgency = b.urgency ? String(b.urgency).toUpperCase() : "MEDIUM";
     if (b.notes !== undefined) patch.notes = b.notes ?? null;
     if (b.department !== undefined) patch.department = b.department ? String(b.department).trim() : null;
+    if ((b as any).toDepartment !== undefined) patch.toDepartment = (b as any).toDepartment ? String((b as any).toDepartment).trim() : null;
     if (b.costCenter !== undefined) patch.costCenter = b.costCenter ? String(b.costCenter).trim() : null;
     if (b.branchId !== undefined) patch.branchId = b.branchId ? await resolveInternalId(s.branches, String(b.branchId)) : null;
     if (b.needApproval !== undefined) patch.needApproval = !!b.needApproval;
@@ -406,6 +416,10 @@ putAndPatch("/purchase-requests/:id", async (req, res, next) => {
     patch.updatedAt = new Date();
     await db.update(s.purchaseRequests).set(patch).where(eq(s.purchaseRequests.id, cur.id));
     if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replacePrLines(tx, cur.id, b.lines); });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "PR", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+    } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -431,22 +445,27 @@ purchaseRequestRouter.post("/purchase-requests/:id/post", async (req, res, next)
     if (!cur) return res.status(404).json({ error: "Purchase Request tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya PR berstatus DRAFT yang dapat diposting." });
     const needApproval = !!(cur as any).needApproval;
+    const { internalId: postActorId, role: postRole } = await getActorInfo(req);
     if (!needApproval) {
       await db.update(s.purchaseRequests).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.purchaseRequests.id, cur.id));
+      try { await logActivity({ documentType: "PR", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "POSTED", actorUserId: postActorId, actorRole: postRole }); } catch {}
       return res.json({ ok: true });
     }
     const [wf] = await db.select({ id: s.workflows.id }).from(s.workflows).where(and(eq(s.workflows.documentType, "PR"), eq(s.workflows.isDefault, true), eq(s.workflows.isActive, true))).limit(1);
     if (!wf) {
       await db.update(s.purchaseRequests).set({ status: "APPROVED", updatedAt: new Date() }).where(eq(s.purchaseRequests.id, cur.id));
+      try { await logActivity({ documentType: "PR", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "APPROVED", actorUserId: postActorId, actorRole: postRole }); } catch {}
       return res.json({ ok: true });
     }
     const intermediate = await db.select().from(s.workflowStates).where(and(eq(s.workflowStates.workflowId, wf.id), eq((s.workflowStates as any).type, "intermediate"))).then((rows:any)=> rows.sort((a:any,b:any)=> a.orderNo - b.orderNo));
     const levels = intermediate.length > 0 ? intermediate : await db.select().from(s.workflowStates).where(eq(s.workflowStates.workflowId, wf.id)).then((rows:any)=> rows.sort((a:any,b:any)=> a.orderNo - b.orderNo));
     if (levels.length === 0) {
       await db.update(s.purchaseRequests).set({ status: "APPROVED", approvalWorkflowId: wf.id, updatedAt: new Date() }).where(eq(s.purchaseRequests.id, cur.id));
+      try { await logActivity({ documentType: "PR", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "APPROVED", actorUserId: postActorId, actorRole: postRole, metadata: { workflowId: wf.id } }); } catch {}
       return res.json({ ok: true });
     }
     await db.update(s.purchaseRequests).set({ status: "PENDING_APPROVAL", currentApprovalLevel: 1, approvalWorkflowId: wf.id, updatedAt: new Date() }).where(eq(s.purchaseRequests.id, cur.id));
+    try { await logActivity({ documentType: "PR", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "PENDING_APPROVAL", actorUserId: postActorId, actorRole: postRole, metadata: { workflowId: wf.id, level: 1 } }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -460,6 +479,7 @@ purchaseRequestRouter.post("/purchase-requests/:id/cancel", async (req, res, nex
     if (!cur) return res.status(404).json({ error: "Purchase Request tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "PR sudah dibatalkan." });
     await db.update(s.purchaseRequests).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.purchaseRequests.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "PR", documentId: cur.id, action: "cancel", fromStatus: cur.status, toStatus: "CANCELED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -492,6 +512,7 @@ purchaseRequestRouter.post("/purchase-requests/:id/approve", async (req, res, ne
     if (!wf) {
       const [sig] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
       await db.update(s.purchaseRequests).set({ status: "APPROVED", approvedSignature: sig?.signatureData ?? null, approvedSignedAt: sig ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.purchaseRequests.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "PR", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role }); } catch {}
       return res.json({ ok: true });
     }
     const intermediate = await db.select().from(s.workflowStates).where(and(eq(s.workflowStates.workflowId, wf.id), eq((s.workflowStates as any).type, "intermediate"))).then((rows:any)=> rows.sort((a:any,b:any)=> a.orderNo - b.orderNo));
@@ -507,13 +528,16 @@ purchaseRequestRouter.post("/purchase-requests/:id/approve", async (req, res, ne
     if (total === 0) {
       const [sig] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
       await db.update(s.purchaseRequests).set({ status: "APPROVED", currentApprovalLevel: 0, approvedSignature: sig?.signatureData ?? null, approvedSignedAt: sig ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.purchaseRequests.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "PR", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, total } }); } catch {}
       return res.json({ ok: true });
     }
     const [sigRow] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
     if (current >= total) {
       await db.update(s.purchaseRequests).set({ status: "APPROVED", currentApprovalLevel: total, approvedSignature: sigRow?.signatureData ?? null, approvedSignedAt: sigRow ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.purchaseRequests.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "PR", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, total } }); } catch {}
     } else {
       await db.update(s.purchaseRequests).set({ status: "PENDING_APPROVAL", currentApprovalLevel: current + 1, updatedAt: new Date() }).where(eq(s.purchaseRequests.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "PR", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "PENDING_APPROVAL", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, nextLevel: current + 1, total } }); } catch {}
     }
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -529,6 +553,7 @@ purchaseRequestRouter.post("/purchase-requests/:id/reject", async (req, res, nex
     if (!(cur as any).needApproval) return res.status(400).json({ error: "PR ini tidak membutuhkan approval." });
     if ((cur as any).status !== "PENDING_APPROVAL") return res.status(400).json({ error: "Hanya PR dengan status Pending Approval yang bisa di-reject." });
     await db.update(s.purchaseRequests).set({ status: "REJECTED", updatedAt: new Date() }).where(eq(s.purchaseRequests.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "PR", documentId: cur.id, action: "reject", fromStatus: "PENDING_APPROVAL", toStatus: "REJECTED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -584,6 +609,7 @@ purchaseRequestRouter.post("/purchase-requests/:id/create-po", async (req, res, 
       return { documentNo: doc.documentNo, id: po.id, publicId: po.publicId };
     });
     const [created] = await db.select({ publicId: s.purchaseOrders.publicId }).from(s.purchaseOrders).where(eq(s.purchaseOrders.documentNo, documentNo)).limit(1);
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "PR", documentId: pr.id, action: "convert", fromStatus: pr.status, toStatus: pr.status, actorUserId: internalId, actorRole: role, metadata: { targetType: "PO", targetDocumentNo: documentNo, targetPublicId: created.publicId } }); } catch {}
     res.status(201).json({ id: created.publicId, documentNo });
   } catch (e) { next(e); }
 });

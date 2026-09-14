@@ -5,6 +5,7 @@ import { db } from "../db/pool";
 import * as s from "../db/schema";
 import { checkPermission } from "../middleware/rbac";
 import { nextDocumentNo } from "../lib/document-number";
+import { logActivity, getActorInfo } from "../lib/activity-log";
 
 export const materialRequestRouter = Router();
 const putAndPatch = (path: string, ...handlers: any[]) => {
@@ -140,7 +141,7 @@ materialRequestRouter.post("/material-requests", async (req, res, next) => {
         preparedBy = actorInternalIdForPrep;
       }
     }
-    const { documentNo, seriesId: resolvedSeriesId } = await db.transaction(async (tx) => {
+    const { documentNo, seriesId: resolvedSeriesId, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "MR", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.requestDate ? new Date(b.requestDate) : new Date() });
       const [ins] = await tx.insert(s.materialRequests).values({
         documentNo: doc.documentNo,
@@ -170,6 +171,10 @@ materialRequestRouter.post("/material-requests", async (req, res, next) => {
       return { documentNo: doc.documentNo, seriesId: doc.seriesId, id: ins.id, publicId: ins.publicId };
     });
     const [created] = await db.select({ publicId: s.materialRequests.publicId, documentNo: s.materialRequests.documentNo }).from(s.materialRequests).where(eq(s.materialRequests.documentNo, documentNo)).limit(1);
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "MR", documentId: newId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo } });
+    } catch {}
     res.status(201).json({ id: created.publicId, documentNo: created.documentNo, seriesId: resolvedSeriesId });
   } catch (e) { next(e); }
 });
@@ -413,6 +418,10 @@ putAndPatch("/material-requests/:id", async (req, res, next) => {
     patch.updatedAt = new Date();
     await db.update(s.materialRequests).set(patch).where(eq(s.materialRequests.id, cur.id));
     if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceMrLines(tx, cur.id, b.lines); });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "MR", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+    } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -438,22 +447,27 @@ materialRequestRouter.post("/material-requests/:id/post", async (req, res, next)
     if (!cur) return res.status(404).json({ error: "Material Request tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya PR berstatus DRAFT yang dapat diposting." });
     const needApproval = !!(cur as any).needApproval;
+    const { internalId: postActorId, role: postRole } = await getActorInfo(req);
     if (!needApproval) {
       await db.update(s.materialRequests).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.materialRequests.id, cur.id));
+      try { await logActivity({ documentType: "MR", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "POSTED", actorUserId: postActorId, actorRole: postRole }); } catch {}
       return res.json({ ok: true });
     }
     const [wf] = await db.select({ id: s.workflows.id }).from(s.workflows).where(and(eq(s.workflows.documentType, "MR"), eq(s.workflows.isDefault, true), eq(s.workflows.isActive, true))).limit(1);
     if (!wf) {
       await db.update(s.materialRequests).set({ status: "APPROVED", updatedAt: new Date() }).where(eq(s.materialRequests.id, cur.id));
+      try { await logActivity({ documentType: "MR", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "APPROVED", actorUserId: postActorId, actorRole: postRole }); } catch {}
       return res.json({ ok: true });
     }
     const intermediate = await db.select().from(s.workflowStates).where(and(eq(s.workflowStates.workflowId, wf.id), eq((s.workflowStates as any).type, "intermediate"))).then((rows:any)=> rows.sort((a:any,b:any)=> a.orderNo - b.orderNo));
     const levels = intermediate.length > 0 ? intermediate : await db.select().from(s.workflowStates).where(eq(s.workflowStates.workflowId, wf.id)).then((rows:any)=> rows.sort((a:any,b:any)=> a.orderNo - b.orderNo));
     if (levels.length === 0) {
       await db.update(s.materialRequests).set({ status: "APPROVED", approvalWorkflowId: wf.id, updatedAt: new Date() }).where(eq(s.materialRequests.id, cur.id));
+      try { await logActivity({ documentType: "MR", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "APPROVED", actorUserId: postActorId, actorRole: postRole, metadata: { workflowId: wf.id } }); } catch {}
       return res.json({ ok: true });
     }
     await db.update(s.materialRequests).set({ status: "PENDING_APPROVAL", currentApprovalLevel: 1, approvalWorkflowId: wf.id, updatedAt: new Date() }).where(eq(s.materialRequests.id, cur.id));
+    try { await logActivity({ documentType: "MR", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "PENDING_APPROVAL", actorUserId: postActorId, actorRole: postRole, metadata: { workflowId: wf.id, level: 1 } }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -467,6 +481,7 @@ materialRequestRouter.post("/material-requests/:id/cancel", async (req, res, nex
     if (!cur) return res.status(404).json({ error: "Material Request tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "PR sudah dibatalkan." });
     await db.update(s.materialRequests).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.materialRequests.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "MR", documentId: cur.id, action: "cancel", fromStatus: cur.status, toStatus: "CANCELED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -499,6 +514,7 @@ materialRequestRouter.post("/material-requests/:id/approve", async (req, res, ne
     if (!wf) {
       const [sig] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
       await db.update(s.materialRequests).set({ status: "APPROVED", approvedSignature: sig?.signatureData ?? null, approvedSignedAt: sig ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.materialRequests.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "MR", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role }); } catch {}
       return res.json({ ok: true });
     }
     const intermediate = await db.select().from(s.workflowStates).where(and(eq(s.workflowStates.workflowId, wf.id), eq((s.workflowStates as any).type, "intermediate"))).then((rows:any)=> rows.sort((a:any,b:any)=> a.orderNo - b.orderNo));
@@ -514,13 +530,16 @@ materialRequestRouter.post("/material-requests/:id/approve", async (req, res, ne
     if (total === 0) {
       const [sig] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
       await db.update(s.materialRequests).set({ status: "APPROVED", currentApprovalLevel: 0, approvedSignature: sig?.signatureData ?? null, approvedSignedAt: sig ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.materialRequests.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "MR", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, total } }); } catch {}
       return res.json({ ok: true });
     }
     const [sigRow] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
     if (current >= total) {
       await db.update(s.materialRequests).set({ status: "APPROVED", currentApprovalLevel: total, approvedSignature: sigRow?.signatureData ?? null, approvedSignedAt: sigRow ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.materialRequests.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "MR", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, total } }); } catch {}
     } else {
       await db.update(s.materialRequests).set({ status: "PENDING_APPROVAL", currentApprovalLevel: current + 1, updatedAt: new Date() }).where(eq(s.materialRequests.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "MR", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "PENDING_APPROVAL", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, nextLevel: current + 1, total } }); } catch {}
     }
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -536,6 +555,7 @@ materialRequestRouter.post("/material-requests/:id/reject", async (req, res, nex
     if (!(cur as any).needApproval) return res.status(400).json({ error: "PR ini tidak membutuhkan approval." });
     if ((cur as any).status !== "PENDING_APPROVAL") return res.status(400).json({ error: "Hanya PR dengan status Pending Approval yang bisa di-reject." });
     await db.update(s.materialRequests).set({ status: "REJECTED", updatedAt: new Date() }).where(eq(s.materialRequests.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "MR", documentId: cur.id, action: "reject", fromStatus: "PENDING_APPROVAL", toStatus: "REJECTED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -591,6 +611,7 @@ materialRequestRouter.post("/material-requests/:id/create-po", async (req, res, 
       return { documentNo: doc.documentNo, id: po.id, publicId: po.publicId };
     });
     const [created] = await db.select({ publicId: s.purchaseOrders.publicId }).from(s.purchaseOrders).where(eq(s.purchaseOrders.documentNo, documentNo)).limit(1);
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "MR", documentId: pr.id, action: "convert", fromStatus: pr.status, toStatus: pr.status, actorUserId: internalId, actorRole: role, metadata: { targetType: "PO", targetDocumentNo: documentNo, targetPublicId: created.publicId } }); } catch {}
     res.status(201).json({ id: created.publicId, documentNo });
   } catch (e) { next(e); }
 });

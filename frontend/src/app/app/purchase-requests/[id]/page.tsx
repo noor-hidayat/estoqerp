@@ -43,6 +43,7 @@ import { Badge } from "@/components/ui/badge";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FormPage, FormSection } from "@/components/ui/form-page";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableInput } from "@/components/ui/table-input";
@@ -331,12 +332,14 @@ function PRBody({
     return !!st?.requiresSignature;
   }, [isPendingApproval, pr, workflowStates]);
   const [form, setForm] = useState({
+    supplierId: (pr as any).supplierId ?? "",
     warehouseId: pr.warehouseId,
     requestDate: pr.requestDate?.slice(0, 10) ?? todayISO(),
     expectedDate: pr.expectedDate?.slice(0, 10) ?? "",
     urgency: String((pr as any).urgency ?? "MEDIUM"),
     notes: pr.notes ?? "",
     department: (pr as any).department ?? "",
+    toDepartment: (pr as any).toDepartment ?? "",
     costCenter: (pr as any).costCenter ?? "",
     branchId: (pr as any).branchId ?? "",
     currency: (pr as any).currency ?? (company as any)?.baseCurrency ?? "IDR",
@@ -405,6 +408,7 @@ function PRBody({
       urgency: String((pr as any).urgency ?? "MEDIUM"),
       notes: pr.notes ?? "",
       department: (pr as any).department ?? "",
+      toDepartment: (pr as any).toDepartment ?? "",
       costCenter: (pr as any).costCenter ?? "",
       branchId: (pr as any).branchId ?? "",
       currency: (pr as any).currency ?? baseCurrency ?? "IDR",
@@ -438,6 +442,7 @@ function PRBody({
       urgency: String((pr as any).urgency ?? "MEDIUM"),
       notes: pr.notes ?? "",
       department: (pr as any).department ?? "",
+      toDepartment: (pr as any).toDepartment ?? "",
       costCenter: (pr as any).costCenter ?? "",
       branchId: (pr as any).branchId ?? "",
       currency: (pr as any).currency ?? "IDR",
@@ -490,6 +495,7 @@ function PRBody({
           urgency: form.urgency || "MEDIUM",
           notes: form.notes.trim() || null,
           department: form.department.trim() || null,
+          toDepartment: form.toDepartment.trim() || null,
           costCenter: form.costCenter.trim() || null,
           branchId: form.branchId || null,
           currency: form.currency || baseCurrency,
@@ -761,19 +767,36 @@ function PRBody({
             <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
               {editable ? (
                 <Input
-                  label="Request By"
+                  label="From Department"
                   placeholder="e.g. Budi - Purchasing"
                   value={form.department}
                   onChange={(e) => setForm({ ...form, department: e.target.value })}
                 />
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium leading-none">Request By</label>
+                  <label className="text-sm font-medium leading-none">From Department</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
                     {(pr as any).department ?? "—"}
                   </div>
                 </div>
               )}
+              {editable ? (
+                <Input
+                  label="To Department"
+                  placeholder="e.g. Warehouse - Central"
+                  value={form.toDepartment}
+                  onChange={(e) => setForm({ ...form, toDepartment: e.target.value })}
+                />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium leading-none">To Department</label>
+                  <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
+                    {(pr as any).toDepartment ?? "—"}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
               {editable ? (
                 <Select
                   label="Urgency"
@@ -822,6 +845,10 @@ function PRBody({
               <div className="hidden sm:block" aria-hidden="true" />
               <Input label="Total (IDR)" value={`Rp ${formatNumber(editable ? totalAmountIDR : viewTotalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
             </div>
+          </FormSection>
+
+          <FormSection title="Activity Log">
+            <ActivityTimeline documentType="PR" documentId={pr.id} />
           </FormSection>
         </FormPage>
       </div>

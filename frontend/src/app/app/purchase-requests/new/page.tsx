@@ -201,6 +201,7 @@ export default function NewPurchaseRequestPage() {
     urgency: "MEDIUM" as string,
     notes: "",
     department: "",
+    toDepartment: "",
     costCenter: "",
     branchId: "",
     currency: "",
@@ -284,6 +285,7 @@ export default function NewPurchaseRequestPage() {
       urgency: "MEDIUM",
       notes: "",
       department: "",
+      toDepartment: "",
       costCenter: "",
       branchId: "",
       currency: (company as any)?.baseCurrency ?? "IDR",
@@ -315,6 +317,7 @@ export default function NewPurchaseRequestPage() {
         urgency: form.urgency || "MEDIUM",
         notes: form.notes.trim() || null,
         department: form.department.trim() || null,
+        toDepartment: form.toDepartment.trim() || null,
         costCenter: form.costCenter.trim() || null,
         branchId: form.branchId || null,
         currency: form.currency || baseCurrency,
@@ -422,11 +425,19 @@ export default function NewPurchaseRequestPage() {
           </div>
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
             <Input
-              label="Request By"
+              label="From Department"
               placeholder="e.g. Budi - Purchasing"
               value={form.department}
               onChange={(e) => setForm({ ...form, department: e.target.value })}
             />
+            <Input
+              label="To Department"
+              placeholder="e.g. Warehouse - Central"
+              value={form.toDepartment}
+              onChange={(e) => setForm({ ...form, toDepartment: e.target.value })}
+            />
+          </div>
+          <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
             <Select
               label="Urgency"
               value={form.urgency}

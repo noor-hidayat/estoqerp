@@ -52,13 +52,13 @@ export default function MaterialRequestsPage() {
       sortValue: (o) => o.requestDate,
     },    {
       id: "department",
-      header: "Request By",
+      header: "From Department",
       cell: (o) => <span className="text-xs text-muted-foreground">{(o as any).department ?? "—"}</span>,
       sortValue: (o) => String((o as any).department ?? ""),
     },
     {
       id: "branch",
-      header: "Request To",
+      header: "To Department",
       cell: (o) => <span className="text-xs text-muted-foreground">{branchName((o as any).branchId)}</span>,
       sortValue: (o) => branchName((o as any).branchId),
     },

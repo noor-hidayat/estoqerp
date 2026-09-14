@@ -44,6 +44,7 @@ import { Badge } from "@/components/ui/badge";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableInput } from "@/components/ui/table-input";
@@ -1292,6 +1293,10 @@ function POBody({
           </div>
         </FormSection>
       )}
+
+      <FormSection title="Activity Log">
+        <ActivityTimeline documentType="PO" documentId={po.id} />
+      </FormSection>
     </FormPage>
       </div>
       {/* Print view - dokumen resmi A4, hanya PO (tanpa header aplikasi, tanpa URL/jam browser) */}

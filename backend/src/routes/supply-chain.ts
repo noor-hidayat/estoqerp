@@ -5,6 +5,7 @@ import { db } from "../db/pool";
 import * as s from "../db/schema";
 import { checkAnyPermission, checkPermission } from "../middleware/rbac";
 import { nextDocumentNo } from "../lib/document-number";
+import { logActivity, getActorInfo } from "../lib/activity-log";
 import {
   insertMovementWithDetails,
   type DetailInput,
@@ -201,7 +202,7 @@ supplyChainRouter.post("/purchase-orders", async (req, res, next) => {
       }
     }
     // generate documentNo at DRAFT
-    const { documentNo, seriesId: resolvedSeriesId } = await db.transaction(async (tx) => {
+    const { documentNo, seriesId: resolvedSeriesId, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "PO", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.orderDate ? new Date(b.orderDate) : new Date() });
       const [ins] = await tx.insert(s.purchaseOrders).values({
         documentNo: doc.documentNo,
@@ -236,6 +237,10 @@ supplyChainRouter.post("/purchase-orders", async (req, res, next) => {
     });
     // fetch created publicId
     const [created] = await db.select({ publicId: s.purchaseOrders.publicId, documentNo: s.purchaseOrders.documentNo }).from(s.purchaseOrders).where(eq(s.purchaseOrders.documentNo, documentNo)).limit(1);
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "PO", documentId: newId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo } });
+    } catch {}
     res.status(201).json({ id: created.publicId, documentNo: created.documentNo, seriesId: resolvedSeriesId });
   } catch (e) { next(e); }
 });
@@ -625,6 +630,10 @@ putAndPatch("/purchase-orders/:id", async (req, res, next) => {
     patch.updatedAt = new Date();
     await db.update(s.purchaseOrders).set(patch).where(eq(s.purchaseOrders.id, cur.id));
     if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replacePoLines(tx, cur.id, b.lines); });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "PO", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+    } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -666,8 +675,10 @@ supplyChainRouter.post("/purchase-orders/:id/post", async (req, res, next) => {
       }
     }
     const needApproval = !!(cur as any).needApproval;
+    const { internalId: postActorId, role: postRole } = await getActorInfo(req);
     if (!needApproval) {
       await db.update(s.purchaseOrders).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      try { await logActivity({ documentType: "PO", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "POSTED", actorUserId: postActorId, actorRole: postRole }); } catch {}
       return res.json({ ok: true });
     }
     // needApproval true -> masuk alur approval
@@ -675,6 +686,7 @@ supplyChainRouter.post("/purchase-orders/:id/post", async (req, res, next) => {
     if (!wf) {
       // tidak ada workflow default -> langsung APPROVED
       await db.update(s.purchaseOrders).set({ status: "APPROVED", currentApprovalLevel: 0, approvalWorkflowId: null, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      try { await logActivity({ documentType: "PO", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "APPROVED", actorUserId: postActorId, actorRole: postRole }); } catch {}
       return res.json({ ok: true });
     }
     const states = await db.select({ id: s.workflowStates.id, orderNo: s.workflowStates.orderNo }).from(s.workflowStates).where(eq(s.workflowStates.workflowId, wf.id)).orderBy(s.workflowStates.orderNo);
@@ -684,9 +696,11 @@ supplyChainRouter.post("/purchase-orders/:id/post", async (req, res, next) => {
     const levels = intermediate.length > 0 ? intermediate : states;
     if (levels.length === 0) {
       await db.update(s.purchaseOrders).set({ status: "APPROVED", currentApprovalLevel: 0, approvalWorkflowId: wf.id, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      try { await logActivity({ documentType: "PO", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "APPROVED", actorUserId: postActorId, actorRole: postRole, metadata: { workflowId: wf.id } }); } catch {}
       return res.json({ ok: true });
     }
     await db.update(s.purchaseOrders).set({ status: "PENDING_APPROVAL", currentApprovalLevel: 1, approvalWorkflowId: wf.id, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+    try { await logActivity({ documentType: "PO", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "PENDING_APPROVAL", actorUserId: postActorId, actorRole: postRole, metadata: { workflowId: wf.id, level: 1 } }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -700,6 +714,7 @@ supplyChainRouter.post("/purchase-orders/:id/cancel", async (req, res, next) => 
     if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "PO sudah dibatalkan." });
     await db.update(s.purchaseOrders).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "PO", documentId: cur.id, action: "cancel", fromStatus: cur.status, toStatus: "CANCELED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -732,6 +747,7 @@ supplyChainRouter.post("/purchase-orders/:id/approve", async (req, res, next) =>
     if (!wf) {
       const [sig] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
       await db.update(s.purchaseOrders).set({ status: "APPROVED", approvedSignature: sig?.signatureData ?? null, approvedSignedAt: sig ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "PO", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role }); } catch {}
       return res.json({ ok: true });
     }
     const intermediate = await db.select().from(s.workflowStates).where(and(eq(s.workflowStates.workflowId, wf.id), eq((s.workflowStates as any).type, "intermediate"))).then((rows:any)=> rows.sort((a:any,b:any)=> a.orderNo - b.orderNo));
@@ -747,13 +763,16 @@ supplyChainRouter.post("/purchase-orders/:id/approve", async (req, res, next) =>
     if (total === 0) {
       const [sig] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
       await db.update(s.purchaseOrders).set({ status: "APPROVED", currentApprovalLevel: 0, approvedSignature: sig?.signatureData ?? null, approvedSignedAt: sig ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "PO", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, total } }); } catch {}
       return res.json({ ok: true });
     }
     const [sigRow] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
     if (current >= total) {
       await db.update(s.purchaseOrders).set({ status: "APPROVED", currentApprovalLevel: total, approvedSignature: sigRow?.signatureData ?? null, approvedSignedAt: sigRow ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "PO", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, total } }); } catch {}
     } else {
       await db.update(s.purchaseOrders).set({ status: "PENDING_APPROVAL", currentApprovalLevel: current + 1, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "PO", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "PENDING_APPROVAL", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, nextLevel: current + 1, total } }); } catch {}
     }
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -769,6 +788,7 @@ supplyChainRouter.post("/purchase-orders/:id/reject", async (req, res, next) => 
     if (!(cur as any).needApproval) return res.status(400).json({ error: "PO ini tidak membutuhkan approval." });
     if ((cur as any).status !== "PENDING_APPROVAL") return res.status(400).json({ error: "Hanya PO dengan status Pending Approval yang bisa di-reject." });
     await db.update(s.purchaseOrders).set({ status: "REJECTED", updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "PO", documentId: cur.id, action: "reject", fromStatus: "PENDING_APPROVAL", toStatus: "REJECTED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -812,6 +832,7 @@ supplyChainRouter.post("/purchase-orders/:id/create-receipt", async (req, res, n
       return { documentNo: doc.documentNo, seriesId: doc.seriesId, id: gr.id, publicId: gr.publicId };
     });
     const [created] = await db.select({ publicId: s.goodsReceipts.publicId }).from(s.goodsReceipts).where(eq(s.goodsReceipts.documentNo, documentNo)).limit(1);
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "PO", documentId: po.id, action: "convert", fromStatus: po.status, toStatus: po.status, actorUserId: internalId, actorRole: role, metadata: { targetType: "GR", targetDocumentNo: documentNo, targetPublicId: created.publicId } }); } catch {}
     res.status(201).json({ id: created.publicId, documentNo });
   } catch (e) { next(e); }
 });
@@ -842,13 +863,17 @@ supplyChainRouter.post("/sales-orders", async (req, res, next) => {
     const seriesRaw = b.seriesId ?? b.seriesCode ?? null;
     let seriesId: number | null = null;
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
-    const { documentNo } = await db.transaction(async (tx) => {
+    const { documentNo, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "SO", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.orderDate ? new Date(b.orderDate) : new Date() });
       const [ins] = await tx.insert(s.salesOrders).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, customerId, warehouseId, orderDate: b.orderDate, expectedDate: b.expectedDate ?? null, status: "DRAFT", notes: b.notes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId }).returning();
       if (Array.isArray(b.lines)) await replaceSoLines(tx, ins.id, b.lines);
       return { documentNo: doc.documentNo, id: ins.id };
     });
     const [created] = await db.select({ publicId: s.salesOrders.publicId }).from(s.salesOrders).where(eq(s.salesOrders.documentNo, documentNo)).limit(1);
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "SO", documentId: newId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo } });
+    } catch {}
     res.status(201).json({ id: created.publicId, documentNo });
   } catch (e) { next(e); }
 });
@@ -912,6 +937,10 @@ putAndPatch("/sales-orders/:id", async (req, res, next) => {
     patch.updatedAt = new Date();
     await db.update(s.salesOrders).set(patch).where(eq(s.salesOrders.id, cur.id));
     if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceSoLines(tx, cur.id, b.lines); });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "SO", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+    } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -941,6 +970,7 @@ supplyChainRouter.post("/sales-orders/:id/post", async (req, res, next) => {
     const input: MovementInput = { typeId, movementDate: so.orderDate, status: "POSTED", referenceType: "SALES_ORDER", referenceId: String(so.id), description: `Sales Order ${so.documentNo}`, details };
     await db.transaction(async (tx) => { await insertMovementWithDetails(tx as any, input, String((req as any).user?.internalId ?? (req as any).user?.id ?? "system")); });
     await db.update(s.salesOrders).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.salesOrders.id, so.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "SO", documentId: so.id, action: "post", fromStatus: "DRAFT", toStatus: "POSTED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -961,6 +991,7 @@ supplyChainRouter.post("/sales-orders/:id/cancel", async (req, res, next) => {
       await db.transaction(async (tx) => { await insertMovementWithDetails(tx as any, input, String((req as any).user?.internalId ?? (req as any).user?.id ?? "system")); });
     }
     await db.update(s.salesOrders).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.salesOrders.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "SO", documentId: cur.id, action: "cancel", fromStatus: cur.status, toStatus: "CANCELED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1002,13 +1033,17 @@ supplyChainRouter.post("/goods-receipts", async (req, res, next) => {
     const seriesRaw = b.seriesId ?? b.seriesCode ?? null;
     let seriesId: number | null = null;
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
-    const { documentNo } = await db.transaction(async (tx) => {
+    const { documentNo, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "GR", { seriesId: seriesId ?? undefined, branchId: po.branchId ?? undefined, date: b.receiptDate ? new Date(b.receiptDate) : new Date() });
       const [gr] = await tx.insert(s.goodsReceipts).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, purchaseOrderId: poId, supplierId: po.supplierId, warehouseId, receiptDate: b.receiptDate, status: "DRAFT", notes: b.notes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId: po.branchId }).returning();
       if (Array.isArray(b.lines)) await replaceGrLines(tx, gr.id, b.lines);
       return { documentNo: doc.documentNo, id: gr.id };
     });
     const [created] = await db.select({ publicId: s.goodsReceipts.publicId }).from(s.goodsReceipts).where(eq(s.goodsReceipts.documentNo, documentNo)).limit(1);
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "GR", documentId: newId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo } });
+    } catch {}
     res.status(201).json({ id: created.publicId, documentNo });
   } catch (e) { next(e); }
 });
@@ -1058,6 +1093,10 @@ putAndPatch("/goods-receipts/:id", async (req, res, next) => {
     patch.updatedAt = new Date();
     await db.update(s.goodsReceipts).set(patch).where(eq(s.goodsReceipts.id, cur.id));
     if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceGrLines(tx, cur.id, b.lines); });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "GR", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+    } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1097,6 +1136,7 @@ supplyChainRouter.post("/goods-receipts/:id/post", async (req, res, next) => {
     const input: MovementInput = { typeId, movementDate: gr.receiptDate, status: "POSTED", referenceType: "GOODS_RECEIPT", referenceId: String(gr.id), description: `Penerimaan ${gr.documentNo}`, details };
     await db.transaction(async (tx) => { await insertMovementWithDetails(tx as any, input, String((req as any).user?.internalId ?? (req as any).user?.id ?? "system")); });
     await db.update(s.goodsReceipts).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.goodsReceipts.id, gr.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "GR", documentId: gr.id, action: "post", fromStatus: "DRAFT", toStatus: "POSTED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1117,6 +1157,7 @@ supplyChainRouter.post("/goods-receipts/:id/cancel", async (req, res, next) => {
       await db.transaction(async (tx) => { await insertMovementWithDetails(tx as any, input, String((req as any).user?.internalId ?? (req as any).user?.id ?? "system")); });
     }
     await db.update(s.goodsReceipts).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.goodsReceipts.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "GR", documentId: cur.id, action: "cancel", fromStatus: cur.status, toStatus: "CANCELED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1166,13 +1207,17 @@ supplyChainRouter.post("/receivings", async (req, res, next) => {
     const seriesRaw = b.seriesId ?? b.seriesCode ?? null;
     let seriesId: number | null = null;
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
-    const { documentNo } = await db.transaction(async (tx) => {
+    const { documentNo, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "RCV", { seriesId: seriesId ?? undefined, branchId: po.branchId ?? undefined, date: b.receiptDate ? new Date(b.receiptDate) : new Date() });
       const [rcv] = await tx.insert(s.receivings).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, purchaseOrderId: poId, supplierId: po.supplierId, warehouseId, receiptDate: b.receiptDate, status: "DRAFT", notes: b.notes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId: po.branchId }).returning();
       if (Array.isArray(b.lines)) await replaceReceivingLines(tx, rcv.id, b.lines);
       return { documentNo: doc.documentNo, id: rcv.id };
     });
     const [created] = await db.select({ publicId: s.receivings.publicId }).from(s.receivings).where(eq(s.receivings.documentNo, documentNo)).limit(1);
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "RCV", documentId: newId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo } });
+    } catch {}
     res.status(201).json({ id: created.publicId, documentNo });
   } catch (e) { next(e); }
 });
@@ -1285,6 +1330,10 @@ putAndPatch("/receivings/:id", async (req, res, next) => {
     patch.updatedAt = new Date();
     await db.update(s.receivings).set(patch).where(eq(s.receivings.id, cur.id));
     if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceReceivingLines(tx, cur.id, b.lines); });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "RCV", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+    } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1317,6 +1366,7 @@ supplyChainRouter.post("/receivings/:id/post", async (req, res, next) => {
         }
         await tx.update(s.receivings).set({ status: "COMPLETED", qcInspectedAt: new Date(), qcInspectedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
       });
+      try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "RCV", documentId: rcv.id, action: "post", fromStatus: "PENDING_QC", toStatus: "COMPLETED", actorUserId: internalId, actorRole: role }); } catch {}
       return res.json({ ok: true });
     }
     // DRAFT → PENDING_QC atau langsung COMPLETED jika PO tidak butuh QC
@@ -1333,9 +1383,11 @@ supplyChainRouter.post("/receivings/:id/post", async (req, res, next) => {
         }
         await tx.update(s.receivings).set({ status: "COMPLETED", qcInspectedAt: new Date(), qcInspectedBy: (req as any).user?.internalId ?? null, submittedAt: new Date(), submittedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
       });
+      try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "RCV", documentId: rcv.id, action: "post", fromStatus: "DRAFT", toStatus: "COMPLETED", actorUserId: internalId, actorRole: role, metadata: { qcSkipped: true } }); } catch {}
       return res.json({ ok: true, qcSkipped: true });
     }
     await db.update(s.receivings).set({ status: "PENDING_QC", submittedAt: new Date(), submittedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "RCV", documentId: rcv.id, action: "post", fromStatus: "DRAFT", toStatus: "PENDING_QC", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1365,9 +1417,11 @@ supplyChainRouter.post("/receivings/:id/submit", async (req, res, next) => {
         }
         await tx.update(s.receivings).set({ status: "COMPLETED", qcInspectedAt: new Date(), qcInspectedBy: (req as any).user?.internalId ?? null, submittedAt: new Date(), submittedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
       });
+      try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "RCV", documentId: rcv.id, action: "submit", fromStatus: "DRAFT", toStatus: "COMPLETED", actorUserId: internalId, actorRole: role, metadata: { qcSkipped: true } }); } catch {}
       return res.json({ ok: true, qcSkipped: true });
     }
     await db.update(s.receivings).set({ status: "PENDING_QC", submittedAt: new Date(), submittedBy: (req as any).user?.internalId ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "RCV", documentId: rcv.id, action: "submit", fromStatus: "DRAFT", toStatus: "PENDING_QC", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1423,6 +1477,7 @@ supplyChainRouter.post("/receivings/:id/qc", async (req, res, next) => {
       }
       await tx.update(s.receivings).set({ status: "COMPLETED", qcInspectedAt: new Date(), qcInspectedBy: (req as any).user?.internalId ?? null, qcNotes: qcNotes || null, updatedAt: new Date() }).where(eq(s.receivings.id, rcv.id));
     });
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "RCV", documentId: rcv.id, action: "post", fromStatus: "PENDING_QC", toStatus: "COMPLETED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1436,6 +1491,7 @@ supplyChainRouter.post("/receivings/:id/cancel", async (req, res, next) => {
     if (cur.status === "CANCELED") return res.status(400).json({ error: "Receiving sudah dibatalkan." });
     if (cur.status === "COMPLETED" || cur.status === "POSTED") return res.status(400).json({ error: "Receiving COMPLETED tidak bisa dibatalkan." });
     await db.update(s.receivings).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.receivings.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "RCV", documentId: cur.id, action: "cancel", fromStatus: cur.status, toStatus: "CANCELED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1570,7 +1626,7 @@ supplyChainRouter.post("/qc-inspections", async (req, res, next) => {
     const seriesRaw = b.seriesId ?? b.seriesCode ?? null;
     let seriesId: number | null = null;
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
-    const { documentNo } = await db.transaction(async (tx) => {
+    const { documentNo, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "QC", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.inspectionDate ? new Date(b.inspectionDate) : new Date() });
       const [qc] = await tx.insert(s.qcInspections).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, receivingId, purchaseOrderId, supplierId, warehouseId, inspectionDate: b.inspectionDate, status: "DRAFT", notes: b.notes ?? null, qcNotes: b.qcNotes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId }).returning();
       // lines: jika tidak dikirim, auto dari receivingLines dengan qtyRejected=0
@@ -1597,6 +1653,10 @@ supplyChainRouter.post("/qc-inspections", async (req, res, next) => {
       return { documentNo: doc.documentNo, id: qc.id };
     });
     const [created] = await db.select({ publicId: s.qcInspections.publicId }).from(s.qcInspections).where(eq(s.qcInspections.documentNo, documentNo)).limit(1);
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "QC", documentId: newId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo } });
+    } catch {}
     res.status(201).json({ id: created.publicId, documentNo });
   } catch (e) { next(e); }
 });
@@ -1699,6 +1759,10 @@ putAndPatch("/qc-inspections/:id", async (req, res, next) => {
     patch.updatedAt = new Date();
     await db.update(s.qcInspections).set(patch).where(eq(s.qcInspections.id, cur.id));
     if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceQcLines(tx, cur.id, b.lines); });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "QC", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+    } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1741,6 +1805,8 @@ supplyChainRouter.post("/qc-inspections/:id/submit", async (req, res, next) => {
       // if all qc lines have been inspected, mark receiving completed
       await tx.update(s.receivings).set({ status: "COMPLETED", qcInspectedAt: new Date(), qcInspectedBy: (req as any).user?.internalId ?? null, qcNotes: qc.qcNotes ?? null, updatedAt: new Date() }).where(eq(s.receivings.id, qc.receivingId));
     });
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "QC", documentId: qc.id, action: "submit", fromStatus: "DRAFT", toStatus: "COMPLETED", actorUserId: internalId, actorRole: role }); } catch {}
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "RCV", documentId: qc.receivingId, action: "post", fromStatus: "PENDING_QC", toStatus: "COMPLETED", actorUserId: internalId, actorRole: role, metadata: { qcInspectionId: qc.id, qcDocumentNo: qc.documentNo } }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1754,6 +1820,7 @@ supplyChainRouter.post("/qc-inspections/:id/cancel", async (req, res, next) => {
     if (!cur) return res.status(404).json({ error: "QC Inspection tidak ditemukan." });
     if (cur.status === "CANCELED") return res.status(400).json({ error: "Sudah dibatalkan." });
     await db.update(s.qcInspections).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.qcInspections.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "QC", documentId: cur.id, action: "cancel", fromStatus: cur.status, toStatus: "CANCELED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1843,13 +1910,17 @@ supplyChainRouter.post("/deliveries", async (req, res, next) => {
     const seriesRaw = b.seriesId ?? b.seriesCode ?? null;
     let seriesId: number | null = null;
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
-    const { documentNo } = await db.transaction(async (tx) => {
+    const { documentNo, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "DLV", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.deliveryDate ? new Date(b.deliveryDate) : new Date() });
       const [ins] = await tx.insert(s.deliveries).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, salesOrderId, customerId, warehouseId, deliveryDate: b.deliveryDate, status: "DRAFT", notes: b.notes ?? b.remarks ?? null, createdBy: (req as any).user?.internalId ?? null, branchId }).returning();
       if (Array.isArray(b.lines)) await replaceDeliveryLines(tx, ins.id, b.lines);
       return { documentNo: doc.documentNo, id: ins.id };
     });
     const [created] = await db.select({ publicId: s.deliveries.publicId }).from(s.deliveries).where(eq(s.deliveries.documentNo, documentNo)).limit(1);
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "DLV", documentId: newId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo } });
+    } catch {}
     res.status(201).json({ id: created.publicId, documentNo });
   } catch (e) { next(e); }
 });
@@ -1903,6 +1974,10 @@ putAndPatch("/deliveries/:id", async (req, res, next) => {
     patch.updatedAt = new Date();
     await db.update(s.deliveries).set(patch).where(eq(s.deliveries.id, cur.id));
     if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceDeliveryLines(tx, cur.id, b.lines); });
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "DLV", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+    } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1933,6 +2008,7 @@ supplyChainRouter.post("/deliveries/:id/post", async (req, res, next) => {
     const input: MovementInput = { typeId, movementDate: dlv.deliveryDate, status: "POSTED", referenceType: "DELIVERY", referenceId: String(dlv.id), description: `Delivery ${dlv.documentNo}`, details };
     await db.transaction(async (tx) => { await insertMovementWithDetails(tx as any, input, String((req as any).user?.internalId ?? (req as any).user?.id ?? "system")); });
     await db.update(s.deliveries).set({ status: "POSTED", updatedAt: new Date() }).where(eq(s.deliveries.id, dlv.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "DLV", documentId: dlv.id, action: "post", fromStatus: "DRAFT", toStatus: "POSTED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1953,6 +2029,7 @@ supplyChainRouter.post("/deliveries/:id/cancel", async (req, res, next) => {
       await db.transaction(async (tx) => { await insertMovementWithDetails(tx as any, input, String((req as any).user?.internalId ?? (req as any).user?.id ?? "system")); });
     }
     await db.update(s.deliveries).set({ status: "CANCELED", updatedAt: new Date() }).where(eq(s.deliveries.id, cur.id));
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "DLV", documentId: cur.id, action: "cancel", fromStatus: cur.status, toStatus: "CANCELED", actorUserId: internalId, actorRole: role }); } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -1973,6 +2050,7 @@ supplyChainRouter.post("/sales-orders/:id/create-delivery", async (req, res, nex
       return { documentNo: doc.documentNo, id: dlv.id };
     });
     const [created] = await db.select({ publicId: s.deliveries.publicId }).from(s.deliveries).where(eq(s.deliveries.documentNo, documentNo)).limit(1);
+    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "SO", documentId: so.id, action: "convert", fromStatus: so.status, toStatus: so.status, actorUserId: internalId, actorRole: role, metadata: { targetType: "DLV", targetDocumentNo: documentNo, targetPublicId: created.publicId } }); } catch {}
     res.status(201).json({ id: created.publicId, documentNo });
   } catch (e) { next(e); }
 });

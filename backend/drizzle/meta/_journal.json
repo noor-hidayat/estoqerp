@@ -498,6 +498,34 @@
       "when": 1789217412171,
       "tag": "0072_loud_marvel_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1789352912915,
+      "tag": "0073_noisy_ted_forrester",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1789353338784,
+      "tag": "0074_massive_vindicator",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1789353585274,
+      "tag": "0075_typical_beast",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1789355382807,
+      "tag": "0076_famous_colleen_wing",
+      "breakpoints": true
     }
   ]
 }

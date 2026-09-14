@@ -81,7 +81,6 @@ const MENU_GROUPS: MenuGroup[] = [
     menus: [
       { key: "supply.suppliers", label: "Suppliers" },
       { key: "supply.receivings", label: "Receiving" },
-      { key: "supply.goodsReceipts", label: "GRN" },
       { key: "supply.goodsReceipts", label: "Putaway" },
       { key: "supply.goodsReceipts", label: "Supplier Return" },
     ],
@@ -158,6 +157,7 @@ const MENU_GROUPS: MenuGroup[] = [
       { key: "master.items", label: "Item List" },
       { key: "master.itemGroups", label: "Item Groups" },
       { key: "master.uom", label: "UOM" },
+      { key: "master.departments", label: "Departments" },
       { key: "master.barcodeFormats", label: "Barcode Formats" },
       { key: "master.barcodeFormats.new", label: "New Barcode Format" },
       { key: "master.barcodeFormats.edit", label: "Edit Barcode Format" },

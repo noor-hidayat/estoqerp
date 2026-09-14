@@ -317,6 +317,21 @@ export function useUom(id?: string) {
   return useResourceOne<Uom>("uom", id);
 }
 
+export function useDepartments() {
+  return useQuery({
+    queryKey: ["departments"],
+    queryFn: () => api.get<import("@/types").Department[]>("/departments"),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useDepartment(id?: string) {
+  return useResourceOne<import("@/types").Department>("departments", id);
+}
+
 export function useTaxCategories() {
   return useQuery({
     queryKey: ["taxCategories"],

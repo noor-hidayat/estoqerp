@@ -10,6 +10,8 @@ import {
 import { MenuGate } from "@/components/ui/role-guard";
 import { MovementForm } from "@/components/transactions/movement-form";
 import { DocStatusBadge } from "@/components/supply/doc-status";
+import { FormSection } from "@/components/ui/form-page";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 const MENU = "inventory.transactions";
 
@@ -72,6 +74,12 @@ export default function TransactionDetailPage() {
             : undefined
         }
       />
+
+      <div className="mt-6">
+        <FormSection title="Activity Log">
+          <ActivityTimeline documentType="SMV" documentId={movement.id} />
+        </FormSection>
+      </div>
     </MenuGate>
   );
 }

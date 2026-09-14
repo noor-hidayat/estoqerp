@@ -11,6 +11,8 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { FormSection } from "@/components/ui/form-page";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatId, formatNumber } from "@/lib/utils";
 import { useItemsList } from "@/lib/api/query";
@@ -274,6 +276,10 @@ export default function QcDetailPage() {
             </div>
           </div>
         )}
+
+        <FormSection title="Activity Log">
+          <ActivityTimeline documentType="QC" documentId={qc.id} />
+        </FormSection>
       </div>
     </RoleGuard>
   );

@@ -24,6 +24,7 @@ import { companySettingsRouter } from "./routes/company-settings";
 import { exchangeRouter } from "./routes/exchange";
 import { workflowsRouter } from "./routes/workflows";
 import { userSignaturesRouter } from "./routes/user-signatures";
+import { activityLogsRouter } from "./routes/activity-logs";
 
 const app = express();
 
@@ -60,6 +61,7 @@ app.use("/api", purchaseRequestRouter);
 app.use("/api", materialRequestRouter);
 app.use("/api", workflowsRouter);
 app.use("/api", userSignaturesRouter);
+app.use("/api", activityLogsRouter);
 app.use("/api", crudRouter);
 
 app.use((_req, res) => {

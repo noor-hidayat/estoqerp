@@ -357,6 +357,15 @@ export interface Uom {
   updatedAt: string;
 }
 
+export interface Department {
+  id: string;
+  code: string;
+  name: string;
+  isActive?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type MovementStatus = "DRAFT" | "POSTED" | "CANCELED";
 
 export interface StockMovement {
@@ -626,6 +635,7 @@ export interface PurchaseRequest {
   urgency?: "LOW" | "MEDIUM" | "HIGH" | string | null;
   notes?: string | null;
   department?: string | null;
+  toDepartment?: string | null;
   costCenter?: string | null;
   currency?: string | null;
   exchangeRate?: string | number | null;

@@ -212,18 +212,6 @@ export const NAV: NavGroup[] = [
     title: "Supply Chain",
     items: [
       {
-        label: "Suppliers",
-        href: "/app/suppliers",
-        icon: "Truck",
-        menu: "supply.suppliers",
-      },
-      {
-        label: "Customers",
-        href: "/app/customers",
-        icon: "Users",
-        menu: "supply.customers",
-      },
-      {
         label: "Request",
         href: "/app/purchase-requests",
         icon: "FileText",
@@ -244,12 +232,6 @@ export const NAV: NavGroup[] = [
         href: "/app/sales-orders",
         icon: "Receipt",
         menu: "supply.salesOrders",
-      },
-      {
-        label: "Goods Receipts",
-        href: "/app/goods-receipts",
-        icon: "PackageCheck",
-        menu: "supply.goodsReceipts",
       },
       {
         label: "Deliveries",
@@ -338,6 +320,12 @@ export const NAV: NavGroup[] = [
             menu: "master.uom",
           },
           {
+            label: "Departments",
+            href: "/app/setup/departments",
+            icon: "Buildings",
+            menu: "master.departments",
+          },
+          {
             label: "Tax Categories",
             href: "/app/setup/tax-categories",
             icon: "Percent",
@@ -395,6 +383,18 @@ export const NAV: NavGroup[] = [
             icon: "Buildings",
             menu: "inventory.branches",
           },
+          {
+            label: "Suppliers",
+            href: "/app/suppliers",
+            icon: "Truck",
+            menu: "supply.suppliers",
+          },
+          {
+            label: "Customers",
+            href: "/app/customers",
+            icon: "Users",
+            menu: "supply.customers",
+          },
         ],
       },
     ],
@@ -446,7 +446,6 @@ export const WAREHOUSE_NAV: NavGroup[] = [
         menu: "supply.receivings",
         children: [
           { label: "Receiving", href: "/app/receiving", icon: "Inbox", menu: "supply.receivings" },
-          { label: "GRN", href: "/app/goods-receipts", icon: "PackageCheck", menu: "supply.goodsReceipts" },
           { label: "Putaway", href: "/app/putaway", icon: "PackageSearch", menu: "supply.goodsReceipts" },
           { label: "Supplier Return", href: "/app/supplier-return", icon: "Undo2", menu: "supply.goodsReceipts" },
         ],
@@ -559,12 +558,6 @@ export const PURCHASING_NAV: NavGroup[] = [
     title: "Menu",
     items: [
       {
-        label: "Suppliers",
-        href: "/app/suppliers",
-        icon: "Truck",
-        menu: "supply.suppliers",
-      },
-      {
         label: "Request",
         href: "/app/purchase-requests",
         icon: "FileText",
@@ -579,12 +572,6 @@ export const PURCHASING_NAV: NavGroup[] = [
         href: "/app/purchase-orders",
         icon: "ShoppingCart",
         menu: "supply.purchaseOrders",
-      },
-      {
-        label: "Goods Receipts",
-        href: "/app/goods-receipts",
-        icon: "PackageCheck",
-        menu: "supply.goodsReceipts",
       },
     ],
   },
@@ -613,12 +600,6 @@ export const MARKETING_NAV: NavGroup[] = [
           { label: "Purchase Request", href: "/app/purchase-requests", icon: "FileText", menu: "supply.purchaseRequests" },
           { label: "Material Request", href: "/app/material-requests", icon: "FileText", menu: "supply.materialRequests" },
         ],
-      },
-      {
-        label: "Customers",
-        href: "/app/customers",
-        icon: "Users",
-        menu: "supply.customers",
       },
       {
         label: "Sales Orders",

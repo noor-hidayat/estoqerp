@@ -41,6 +41,7 @@ import { Badge } from "@/components/ui/badge";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FormPage, FormSection } from "@/components/ui/form-page";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableInput } from "@/components/ui/table-input";
@@ -704,14 +705,14 @@ function PRBody({
             <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
               {editable ? (
                 <Input
-                  label="Request By"
+                  label="From Department"
                   placeholder="e.g. Budi - Warehouse"
                   value={form.department}
                   onChange={(e) => setForm({ ...form, department: e.target.value })}
                 />
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium leading-none">Request By</label>
+                  <label className="text-sm font-medium leading-none">From Department</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
                     {(pr as any).department ?? "—"}
                   </div>
@@ -719,7 +720,7 @@ function PRBody({
               )}
               {editable ? (
                 <Select
-                  label="Request To"
+                  label="To Department"
                   value={form.branchId}
                   onChange={(e) => setForm({ ...form, branchId: e.target.value })}
                   className="h-8"
@@ -733,7 +734,7 @@ function PRBody({
                 </Select>
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium leading-none">Request To</label>
+                  <label className="text-sm font-medium leading-none">To Department</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
                     {branches.find((b) => b.id === (pr as any).branchId)?.name ?? "—"}
                   </div>
@@ -790,6 +791,10 @@ function PRBody({
               <div className="hidden sm:block" aria-hidden="true" />
               <Input label="Total (IDR)" value={`Rp ${formatNumber(editable ? totalAmountIDR : viewTotalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
             </div>
+          </FormSection>
+
+          <FormSection title="Activity Log">
+            <ActivityTimeline documentType="MR" documentId={pr.id} />
           </FormSection>
         </FormPage>
       </div>

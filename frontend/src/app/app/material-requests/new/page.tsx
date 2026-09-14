@@ -417,13 +417,13 @@ export default function NewMaterialRequestPage() {
           </div>
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
             <Input
-              label="Request By"
+              label="From Department"
               placeholder="e.g. Budi - Warehouse"
               value={form.department}
               onChange={(e) => setForm({ ...form, department: e.target.value })}
             />
             <Select
-              label="Request To"
+              label="To Department"
               value={form.branchId}
               onChange={(e) => setForm({ ...form, branchId: e.target.value })}
               className="h-8"

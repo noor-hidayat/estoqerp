@@ -371,6 +371,16 @@ export const uom = pgTable("uom", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const departments = pgTable("departments", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+  publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const taxCategories = pgTable(
   "tax_categories",
   {
@@ -939,7 +949,6 @@ export const purchaseOrders = pgTable(
     notes: text("notes"),
     department: text("department"),
     costCenter: text("cost_center"),
-    paymentTerms: text("payment_terms"),
     currency: text("currency").notNull().default("IDR"),
     exchangeRate: numeric("exchange_rate", { precision: 15, scale: 6 }).notNull().default("1"),
     allowEditOrderDate: boolean("allow_edit_order_date").notNull().default(false),
@@ -1005,6 +1014,7 @@ export const purchaseRequests = pgTable(
     publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
     documentNo: text("document_no").unique(),
     seriesId: bigint("series_id", { mode: "number" }).references(() => documentSeries.id),
+    supplierId: bigint("supplier_id", { mode: "number" }).references(() => suppliers.id),
     warehouseId: bigint("warehouse_id", { mode: "number" })
       .notNull()
       .references(() => warehouses.id),
@@ -1014,6 +1024,7 @@ export const purchaseRequests = pgTable(
     status: text("status", { enum: docStatuses }).notNull().default("DRAFT"),
     notes: text("notes"),
     department: text("department"),
+    toDepartment: text("to_department"),
     costCenter: text("cost_center"),
     currency: text("currency").notNull().default("IDR"),
     exchangeRate: numeric("exchange_rate", { precision: 15, scale: 6 }).notNull().default("1"),
@@ -1036,6 +1047,7 @@ export const purchaseRequests = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    index("idx_purchase_requests_supplier").on(t.supplierId),
     index("idx_purchase_requests_wh").on(t.warehouseId),
     index("idx_purchase_requests_status").on(t.status),
     index("idx_purchase_requests_document_no").on(t.documentNo),
@@ -1555,4 +1567,26 @@ export const workflowLogs = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("idx_workflow_logs_instance").on(t.instanceId)]
+);
+
+export const documentActivities = pgTable(
+  "document_activities",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    documentType: text("document_type").notNull(),
+    documentId: bigint("document_id", { mode: "number" }).notNull(),
+    actorUserId: bigint("actor_user_id", { mode: "number" }).references(() => users.id, { onDelete: "set null" }),
+    actorRole: text("actor_role"),
+    action: text("action").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status"),
+    comment: text("comment"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_document_activities_doc").on(t.documentType, t.documentId),
+    index("idx_document_activities_created").on(t.createdAt),
+  ]
 );
