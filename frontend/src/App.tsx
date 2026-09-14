@@ -90,6 +90,9 @@ const CustomersPage = lazy(() => import("@/app/app/customers/page"));
 const PurchaseRequestsPage = lazy(() => import("@/app/app/purchase-requests/page"));
 const NewPurchaseRequestPage = lazy(() => import("@/app/app/purchase-requests/new/page"));
 const PurchaseRequestDetailPage = lazy(() => import("@/app/app/purchase-requests/[id]/page"));
+const RfqListPage = lazy(() => import("@/app/app/rfq/page"));
+const NewRfqPage = lazy(() => import("@/app/app/rfq/new/page"));
+const RfqDetailPage = lazy(() => import("@/app/app/rfq/[id]/page"));
 const MaterialRequestsPage = lazy(() => import("@/app/app/material-requests/page"));
 const NewMaterialRequestPage = lazy(() => import("@/app/app/material-requests/new/page"));
 const MaterialRequestDetailPage = lazy(() => import("@/app/app/material-requests/[id]/page"));
@@ -246,6 +249,9 @@ export default function App() {
             <Route path="purchase-requests" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><PurchaseRequestsPage /></LazyPage>} />
             <Route path="purchase-requests/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewPurchaseRequestPage /></LazyPage>} />
             <Route path="purchase-requests/:id" element={<LazyPage fallback={<DetailSkeleton />}><PurchaseRequestDetailPage /></LazyPage>} />
+            <Route path="rfq" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><RfqListPage /></LazyPage>} />
+            <Route path="rfq/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewRfqPage /></LazyPage>} />
+            <Route path="rfq/:id" element={<LazyPage fallback={<DetailSkeleton />}><RfqDetailPage /></LazyPage>} />
             <Route path="material-requests" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><MaterialRequestsPage /></LazyPage>} />
             <Route path="material-requests/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewMaterialRequestPage /></LazyPage>} />
             <Route path="material-requests/:id" element={<LazyPage fallback={<DetailSkeleton />}><MaterialRequestDetailPage /></LazyPage>} />

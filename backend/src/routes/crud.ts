@@ -5,6 +5,8 @@ import { db } from "../db/pool";
 import * as schema from "../db/schema";
 import { parseBatchNumber, type BatchFormatLike } from "../lib/batch-parse";
 import { canAccessEntity, canViewOpnameContext, checkAnyPermission, checkPermission, getRoleInternalId, hasPermission, isAdminUser } from "../middleware/rbac";
+import { logActivity, getActorInfo } from "../lib/activity-log";
+import { computeDiff, DIFF_DENYLIST } from "../lib/diff";
 
 // small helper to check uuid
 function isUuid(v: string): boolean {
@@ -180,6 +182,42 @@ const CRUD_TABLES: Record<string, AnyPgTable> = {
   opnameScanDetails: schema.opnameScanDetails,
   suppliers: schema.suppliers,
   customers: schema.customers,
+};
+
+// DocumentType mapping for generic CRUD activity log (master setup)
+const CRUD_DOC_TYPE: Record<string, string> = {
+  users: "USER",
+  roles: "ROLE",
+  rolePermissions: "ROLE_PERMISSION",
+  branchAccesses: "BRANCH_ACCESS",
+  workspaceAccesses: "WORKSPACE_ACCESS",
+  workspaces: "WORKSPACE",
+  branches: "BRANCH",
+  warehouses: "WAREHOUSE",
+  locations: "LOCATION",
+  itemGroups: "ITEM_GROUP",
+  items: "ITEM",
+  stockBalances: "STOCK_BALANCE",
+  barcodeFormats: "BARCODE_FORMAT",
+  batchFormats: "BATCH_FORMAT",
+  userSettings: "USER_SETTING",
+  uom: "UOM",
+  departments: "DEPARTMENT",
+  taxCategories: "TAX_CATEGORY",
+  priceLists: "PRICE_LIST",
+  priceListLines: "PRICE_LIST_LINE",
+  movementTypes: "MOVEMENT_TYPE",
+  stockMovements: "SMV",
+  stockMovementDetails: "SMV_LINE",
+  stockLedger: "STOCK_LEDGER",
+  batches: "BATCH",
+  stockBatches: "STOCK_BATCH",
+  stockBarcodes: "STOCK_BARCODE",
+  opnameWarehouses: "OPW",
+  opnameScans: "OP_SCAN",
+  opnameScanDetails: "OP_SCAN_DETAIL",
+  suppliers: "SUPPLIER",
+  customers: "CUSTOMER",
 };
 
 export const crudRouter = Router();
@@ -1390,7 +1428,7 @@ crudRouter.post("/:table", async (req, res) => {
         values.supplierId = null;
       }
       values.updatedAt = new Date();
-      if (!values.createdBy && req.user) values.createdBy = (req.user as any).internalId ?? null;
+      if (!values.createdBy && req.user) { const _ai = await getActorInfo(req); values.createdBy = _ai.internalId ?? null; }
       const [dup] = await db.select({ id: (schema as any).priceLists.id }).from((schema as any).priceLists).where(sql`lower(${(schema as any).priceLists.code}) = lower(${values.code})`).limit(1);
       if (dup) return res.status(409).json({ error: "Kode price list sudah digunakan." });
     }
@@ -1472,6 +1510,20 @@ crudRouter.post("/:table", async (req, res) => {
       throw e;
     }
     const row = rows[0] ?? values;
+    // Activity log: create (master setup + dokumen generic)
+    try {
+      const docType = CRUD_DOC_TYPE[tableName] ?? tableName.toUpperCase();
+      const docId = (row as any).id != null ? Number((row as any).id) : null;
+      if (docId != null && Number.isFinite(docId)) {
+        const { internalId, role } = await getActorInfo(req);
+        const meta: Record<string, unknown> = { keys: Object.keys(values) };
+        // include code/name if present for easier timeline
+        if ((row as any).code) meta.code = (row as any).code;
+        if ((row as any).name) meta.name = (row as any).name;
+        if ((row as any).documentNo) meta.documentNo = (row as any).documentNo;
+        await logActivity({ documentType: docType, documentId: docId, action: "create", fromStatus: null, toStatus: null, actorUserId: internalId, actorRole: role, metadata: meta });
+      }
+    } catch {}
     if (tableName === "opnameScans") {
       const opnameId = (values as any).opnameId;
       if (opnameId) await db.update(schema.opnameProjects).set({ status: "IN_PROGRESS", updatedAt: new Date() }).where(eq(schema.opnameProjects.id, opnameId));
@@ -1513,6 +1565,12 @@ crudRouter.patch("/:table/:id", async (req, res) => {
     else if (/^\d+$/.test(paramId)) whereCond = eq(idCol, Number(paramId) as any);
     else if (publicIdCol) whereCond = eq(publicIdCol, paramId);
     else whereCond = eq(idCol, paramId as any);
+    // Fetch old row for diff (before update) — used for activity log
+    let oldRow: Record<string, unknown> | null = null;
+    try {
+      const [r] = await db.select().from(table).where(whereCond).limit(1);
+      if (r) oldRow = r as unknown as Record<string, unknown>;
+    } catch {}
     if (tableName === "items" && typeof values.code === "string") {
       values.code = values.code.trim();
       const whereDup = isUuid(paramId) ? sql`${schema.items.publicId} != ${paramId}` : sql`${schema.items.id} != ${Number(paramId)}`;
@@ -1638,6 +1696,31 @@ crudRouter.patch("/:table/:id", async (req, res) => {
     }
     const [row] = await db.update(table).set(values).where(whereCond).returning();
     if (!row) { res.status(404).json({ error: "Data tidak ditemukan." }); return; }
+    // Activity log: update with from->to diff
+    try {
+      const docType = CRUD_DOC_TYPE[tableName] ?? tableName.toUpperCase();
+      const docId = (row as any).id != null ? Number((row as any).id) : oldRow ? Number((oldRow as any).id) : null;
+      if (docId != null && Number.isFinite(docId) && oldRow) {
+        const changes = computeDiff(oldRow as any, values as any, { denylist: DIFF_DENYLIST });
+        const hasChanges = Object.keys(changes).length > 0;
+        if (hasChanges || Object.keys(values).length > 0) {
+          const { internalId, role } = await getActorInfo(req);
+          await logActivity({
+            documentType: docType,
+            documentId: docId,
+            action: "update",
+            fromStatus: null,
+            toStatus: null,
+            actorUserId: internalId,
+            actorRole: role,
+            metadata: hasChanges ? { changes, patchKeys: Object.keys(values) } : { patchKeys: Object.keys(values) },
+          });
+        }
+      } else if (docId != null && Number.isFinite(docId) ) {
+        const { internalId, role } = await getActorInfo(req);
+        await logActivity({ documentType: docType, documentId: docId, action: "update", fromStatus: null, toStatus: null, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(values) } });
+      }
+    } catch {}
     res.json(sanitizeRow(table, row as Record<string, unknown>));
   } catch (e) { res.status(500).json({ error: messageOf(e) }); }
 });
@@ -1701,6 +1784,18 @@ crudRouter.delete("/:table/:id", async (req, res) => {
     else whereCond = eq(idCol, paramId as any);
     const [row] = await db.delete(table).where(whereCond).returning();
     if (!row) { res.status(404).json({ error: "Data tidak ditemukan." }); return; }
+    try {
+      const docType = CRUD_DOC_TYPE[tableName] ?? tableName.toUpperCase();
+      const docId = (row as any).id != null ? Number((row as any).id) : null;
+      if (docId != null && Number.isFinite(docId)) {
+        const { internalId, role } = await getActorInfo(req);
+        const meta: Record<string, unknown> = {};
+        if ((row as any).code) meta.code = (row as any).code;
+        if ((row as any).name) meta.name = (row as any).name;
+        if ((row as any).documentNo) meta.documentNo = (row as any).documentNo;
+        await logActivity({ documentType: docType, documentId: docId, action: "delete", fromStatus: null, toStatus: null, actorUserId: internalId, actorRole: role, metadata: meta });
+      }
+    } catch {}
     res.json(sanitizeRow(table, row as Record<string, unknown>));
   } catch (e) {
     if (isForeignKeyViolation(e)) { res.status(409).json({ error: DELETE_BLOCK_MESSAGES[tableName] ?? "Data masih dipakai oleh data lain — tidak dapat dihapus." }); return; }

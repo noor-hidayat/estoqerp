@@ -20,6 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 export default function EditWarehousePage() {
   const { id } = useParams<{ id: string }>();
@@ -306,6 +307,9 @@ export default function EditWarehousePage() {
               />
             </div>
           </FormGrid>
+        </FormSection>
+        <FormSection title="Aktivitas">
+          <ActivityTimeline documentType="WAREHOUSE" documentId={id!} />
         </FormSection>
       </FormPage>
     </RoleGuard>

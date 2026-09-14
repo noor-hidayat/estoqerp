@@ -6,6 +6,8 @@ import * as s from "../db/schema";
 import { checkAnyPermission, checkPermission } from "../middleware/rbac";
 import { nextDocumentNo } from "../lib/document-number";
 import { logActivity, getActorInfo } from "../lib/activity-log";
+import { computeDiff, diffLines, DIFF_DENYLIST } from "../lib/diff";
+import { snapshotApprovalLevelsForDoc } from "../lib/workflow-approval";
 import {
   insertMovementWithDetails,
   type DetailInput,
@@ -215,7 +217,6 @@ supplyChainRouter.post("/purchase-orders", async (req, res, next) => {
         notes: b.notes ?? null,
         department: b.department ?? null,
         costCenter: b.costCenter ?? null,
-        paymentTerms: b.paymentTerms ?? null,
         currency: b.currency ? String(b.currency).toUpperCase() : "IDR",
         exchangeRate: b.exchangeRate != null ? String(b.exchangeRate) : "1",
         allowEditOrderDate: b.allowEditOrderDate ?? false,
@@ -229,7 +230,7 @@ supplyChainRouter.post("/purchase-orders", async (req, res, next) => {
         taxRate: resolvedTaxRate ?? (b.taxRate != null ? String(b.taxRate) : "0"),
         taxCategoryId,
         priceListId,
-        createdBy: (req as any).user?.internalId ?? null,
+        createdBy: (await getActorInfo(req)).internalId ?? null,
         branchId,
       }).returning();
       if (Array.isArray(b.lines)) await replacePoLines(tx, ins.id, b.lines);
@@ -271,7 +272,6 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
       notes: s.purchaseOrders.notes,
       department: (s as any).purchaseOrders.department,
       costCenter: (s as any).purchaseOrders.costCenter,
-      paymentTerms: (s as any).purchaseOrders.paymentTerms,
       currency: (s as any).purchaseOrders.currency,
       exchangeRate: (s as any).purchaseOrders.exchangeRate,
       allowEditOrderDate: s.purchaseOrders.allowEditOrderDate,
@@ -304,7 +304,6 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
       notes: r.notes,
       department: (r as any).department ?? null,
       costCenter: (r as any).costCenter ?? null,
-      paymentTerms: (r as any).paymentTerms ?? null,
       currency: (r as any).currency ?? "IDR",
       exchangeRate: (r as any).exchangeRate ?? "1",
       allowEditOrderDate: (r as any).allowEditOrderDate ?? false,
@@ -366,6 +365,15 @@ supplyChainRouter.get("/purchase-orders", async (req, res, next) => {
       });
     } else {
       out.forEach((o:any)=> { if (o.priceListId) o.priceListId = String(o.priceListId); });
+    }
+    // enrich createdBy -> createdByName
+    const createdByIds = [...new Set(out.map((o:any)=> o.createdBy).filter(Boolean))] as number[];
+    if (createdByIds.length) {
+      const users = await db.select({ id: s.users.id, name: s.users.name }).from(s.users).where(inArray(s.users.id, createdByIds));
+      const map = new Map(users.map((u:any)=> [u.id, u.name]));
+      out.forEach((o:any)=> { o.createdByName = map.get(o.createdBy) ?? null; });
+    } else {
+      out.forEach((o:any)=> { o.createdByName = null; });
     }
     const wfIds = [...new Set(out.map((o:any)=> o.approvalWorkflowId).filter(Boolean))] as number[];
     if (wfIds.length) {
@@ -510,7 +518,6 @@ supplyChainRouter.get("/purchase-orders/:id", async (req, res, next) => {
       notes: row.notes,
       department: (row as any).department ?? null,
       costCenter: (row as any).costCenter ?? null,
-      paymentTerms: (row as any).paymentTerms ?? null,
       currency: (row as any).currency ?? "IDR",
       exchangeRate: (row as any).exchangeRate ?? "1",
       allowEditOrderDate: (row as any).allowEditOrderDate ?? false,
@@ -554,6 +561,10 @@ putAndPatch("/purchase-orders/:id", async (req, res, next) => {
     const [cur] = await db.select({ id: s.purchaseOrders.id, status: s.purchaseOrders.status }).from(s.purchaseOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya PO berstatus DRAFT yang dapat diubah." });
+    // fetch full old row + old lines for diff (per baris)
+    const [oldRowFull] = await db.select().from(s.purchaseOrders).where(where).limit(1);
+    let oldLines: any[] = [];
+    try { if (Array.isArray((req.body as any)?.lines)) oldLines = await db.select().from(s.purchaseOrderLines).where(eq(s.purchaseOrderLines.purchaseOrderId, cur.id)); } catch {}
     const b = req.body ?? {};
     if (Array.isArray(b.lines) && b.lines.length > 0) { try { validateRequireUnitPrice(b.lines, "PO"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); } }
     const patch: Record<string, any> = {};
@@ -565,7 +576,6 @@ putAndPatch("/purchase-orders/:id", async (req, res, next) => {
     if (b.department !== undefined) patch.department = b.department ? String(b.department).trim() : null;
     if (b.costCenter !== undefined) patch.costCenter = b.costCenter ? String(b.costCenter).trim() : null;
     if (b.branchId !== undefined) patch.branchId = b.branchId ? await resolveInternalId(s.branches, String(b.branchId)) : null;
-    if (b.paymentTerms !== undefined) patch.paymentTerms = b.paymentTerms ? String(b.paymentTerms).trim() : null;
     if (b.currency !== undefined) {
       const cur = String(b.currency).trim().toUpperCase();
       if (!["IDR","USD","EUR","SGD","JPY","CNY","MYR","THB","AUD"].includes(cur)) {
@@ -629,10 +639,25 @@ putAndPatch("/purchase-orders/:id", async (req, res, next) => {
     }
     patch.updatedAt = new Date();
     await db.update(s.purchaseOrders).set(patch).where(eq(s.purchaseOrders.id, cur.id));
-    if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replacePoLines(tx, cur.id, b.lines); });
+    let linesDiff: any = null;
+    if (Array.isArray(b.lines)) {
+      await db.transaction(async (tx) => { await replacePoLines(tx, cur.id, b.lines); });
+      try {
+        const newLinesResolved = await Promise.all((b.lines as any[]).map(async (l: any) => {
+          const itemId = l.itemId ? await resolveInternalId(s.items, String(l.itemId)) : l.itemId;
+          const uomId = l.uomId ? await resolveInternalId(s.uom, String(l.uomId)) : l.uomId;
+          return { ...l, itemId: itemId ?? l.itemId, uomId: uomId ?? l.uomId };
+        }));
+        linesDiff = diffLines(oldLines as any, newLinesResolved as any);
+      } catch {}
+    }
     try {
       const { internalId, role } = await getActorInfo(req);
-      await logActivity({ documentType: "PO", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+      const changes = computeDiff(oldRowFull as any, patch as any, { denylist: DIFF_DENYLIST });
+      const meta: Record<string, unknown> = { patchKeys: Object.keys(patch) };
+      if (Object.keys(changes).length) meta.changes = changes;
+      if (linesDiff && (linesDiff.added.length || linesDiff.removed.length || linesDiff.modified.length)) meta.linesDiff = linesDiff;
+      await logActivity({ documentType: "PO", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: meta });
     } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -700,7 +725,10 @@ supplyChainRouter.post("/purchase-orders/:id/post", async (req, res, next) => {
       return res.json({ ok: true });
     }
     await db.update(s.purchaseOrders).set({ status: "PENDING_APPROVAL", currentApprovalLevel: 1, approvalWorkflowId: wf.id, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
-    try { await logActivity({ documentType: "PO", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "PENDING_APPROVAL", actorUserId: postActorId, actorRole: postRole, metadata: { workflowId: wf.id, level: 1 } }); } catch {}
+    try {
+      const approvalLevels = await snapshotApprovalLevelsForDoc({ documentType: "PO", workflowId: wf.id, currentLevel: 1, status: "PENDING_APPROVAL" });
+      await logActivity({ documentType: "PO", documentId: cur.id, action: "post", fromStatus: "DRAFT", toStatus: "PENDING_APPROVAL", actorUserId: postActorId, actorRole: postRole, metadata: { workflowId: wf.id, level: 1, total: levels.length, approvalLevels } });
+    } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -769,10 +797,18 @@ supplyChainRouter.post("/purchase-orders/:id/approve", async (req, res, next) =>
     const [sigRow] = actorInternalId ? await db.select({ signatureData: s.userSignatures.signatureData }).from(s.userSignatures).where(eq(s.userSignatures.userId, actorInternalId)).limit(1) : [null as any];
     if (current >= total) {
       await db.update(s.purchaseOrders).set({ status: "APPROVED", currentApprovalLevel: total, approvedSignature: sigRow?.signatureData ?? null, approvedSignedAt: sigRow ? new Date() : null, approvedBy: actorInternalId, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
-      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "PO", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, total } }); } catch {}
+      try {
+        const { role } = await getActorInfo(req);
+        const approvalLevels = await snapshotApprovalLevelsForDoc({ documentType: "PO", workflowId: wf.id, currentLevel: total, status: "APPROVED" });
+        await logActivity({ documentType: "PO", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "APPROVED", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, total, approvalLevels } });
+      } catch {}
     } else {
       await db.update(s.purchaseOrders).set({ status: "PENDING_APPROVAL", currentApprovalLevel: current + 1, updatedAt: new Date() }).where(eq(s.purchaseOrders.id, cur.id));
-      try { const { role } = await getActorInfo(req); await logActivity({ documentType: "PO", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "PENDING_APPROVAL", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, nextLevel: current + 1, total } }); } catch {}
+      try {
+        const { role } = await getActorInfo(req);
+        const approvalLevels = await snapshotApprovalLevelsForDoc({ documentType: "PO", workflowId: wf.id, currentLevel: current + 1, status: "PENDING_APPROVAL" });
+        await logActivity({ documentType: "PO", documentId: cur.id, action: "approve", fromStatus: "PENDING_APPROVAL", toStatus: "PENDING_APPROVAL", actorUserId: actorInternalId, actorRole: role, metadata: { level: current, nextLevel: current + 1, total, approvalLevels } });
+      } catch {}
     }
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -815,7 +851,7 @@ supplyChainRouter.post("/purchase-orders/:id/create-receipt", async (req, res, n
         receiptDate: (req.body?.receiptDate as string) || new Date().toISOString().slice(0, 10),
         status: "DRAFT",
         notes: req.body?.notes ?? null,
-        createdBy: (req as any).user?.internalId ?? null,
+        createdBy: (await getActorInfo(req)).internalId ?? null,
         branchId: po.branchId,
       }).returning();
       for (const l of lines) {
@@ -865,7 +901,7 @@ supplyChainRouter.post("/sales-orders", async (req, res, next) => {
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
     const { documentNo, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "SO", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.orderDate ? new Date(b.orderDate) : new Date() });
-      const [ins] = await tx.insert(s.salesOrders).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, customerId, warehouseId, orderDate: b.orderDate, expectedDate: b.expectedDate ?? null, status: "DRAFT", notes: b.notes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId }).returning();
+      const [ins] = await tx.insert(s.salesOrders).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, customerId, warehouseId, orderDate: b.orderDate, expectedDate: b.expectedDate ?? null, status: "DRAFT", notes: b.notes ?? null, createdBy: (await getActorInfo(req)).internalId ?? null, branchId }).returning();
       if (Array.isArray(b.lines)) await replaceSoLines(tx, ins.id, b.lines);
       return { documentNo: doc.documentNo, id: ins.id };
     });
@@ -927,6 +963,9 @@ putAndPatch("/sales-orders/:id", async (req, res, next) => {
     const [cur] = await db.select({ id: s.salesOrders.id, status: s.salesOrders.status }).from(s.salesOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Sales Order tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya SO berstatus DRAFT yang dapat diubah." });
+    const [oldRowFull] = await db.select().from(s.salesOrders).where(where).limit(1);
+    let oldLines: any[] = [];
+    try { if (Array.isArray((req.body as any)?.lines)) oldLines = await db.select().from(s.salesOrderLines).where(eq(s.salesOrderLines.salesOrderId, cur.id)); } catch {}
     const b = req.body ?? {};
     const patch: Record<string, any> = {};
     if (b.customerId !== undefined) patch.customerId = await resolveInternalId(s.customers, String(b.customerId));
@@ -936,10 +975,25 @@ putAndPatch("/sales-orders/:id", async (req, res, next) => {
     if (b.notes !== undefined) patch.notes = b.notes ?? null;
     patch.updatedAt = new Date();
     await db.update(s.salesOrders).set(patch).where(eq(s.salesOrders.id, cur.id));
-    if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceSoLines(tx, cur.id, b.lines); });
+    let linesDiff: any = null;
+    if (Array.isArray(b.lines)) {
+      await db.transaction(async (tx) => { await replaceSoLines(tx, cur.id, b.lines); });
+      try {
+        const newLinesResolved = await Promise.all((b.lines as any[]).map(async (l: any) => {
+          const itemId = l.itemId ? await resolveInternalId(s.items, String(l.itemId)) : l.itemId;
+          const uomId = l.uomId ? await resolveInternalId(s.uom, String(l.uomId)) : l.uomId;
+          return { ...l, itemId: itemId ?? l.itemId, uomId: uomId ?? l.uomId };
+        }));
+        linesDiff = diffLines(oldLines as any, newLinesResolved as any);
+      } catch {}
+    }
     try {
       const { internalId, role } = await getActorInfo(req);
-      await logActivity({ documentType: "SO", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+      const changes = computeDiff(oldRowFull as any, patch as any, { denylist: DIFF_DENYLIST });
+      const meta: Record<string, unknown> = { patchKeys: Object.keys(patch) };
+      if (Object.keys(changes).length) meta.changes = changes;
+      if (linesDiff && (linesDiff.added.length || linesDiff.removed.length || linesDiff.modified.length)) meta.linesDiff = linesDiff;
+      await logActivity({ documentType: "SO", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: meta });
     } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -1035,7 +1089,7 @@ supplyChainRouter.post("/goods-receipts", async (req, res, next) => {
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
     const { documentNo, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "GR", { seriesId: seriesId ?? undefined, branchId: po.branchId ?? undefined, date: b.receiptDate ? new Date(b.receiptDate) : new Date() });
-      const [gr] = await tx.insert(s.goodsReceipts).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, purchaseOrderId: poId, supplierId: po.supplierId, warehouseId, receiptDate: b.receiptDate, status: "DRAFT", notes: b.notes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId: po.branchId }).returning();
+      const [gr] = await tx.insert(s.goodsReceipts).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, purchaseOrderId: poId, supplierId: po.supplierId, warehouseId, receiptDate: b.receiptDate, status: "DRAFT", notes: b.notes ?? null, createdBy: (await getActorInfo(req)).internalId ?? null, branchId: po.branchId }).returning();
       if (Array.isArray(b.lines)) await replaceGrLines(tx, gr.id, b.lines);
       return { documentNo: doc.documentNo, id: gr.id };
     });
@@ -1083,6 +1137,9 @@ putAndPatch("/goods-receipts/:id", async (req, res, next) => {
     const [cur] = await db.select({ id: s.goodsReceipts.id, status: s.goodsReceipts.status }).from(s.goodsReceipts).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Goods Receipt tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya GR berstatus DRAFT yang dapat diubah." });
+    const [oldRowFull] = await db.select().from(s.goodsReceipts).where(where).limit(1);
+    let oldLines: any[] = [];
+    try { if (Array.isArray((req.body as any)?.lines)) oldLines = await db.select().from(s.goodsReceiptLines).where(eq(s.goodsReceiptLines.goodsReceiptId, cur.id)); } catch {}
     const b = req.body ?? {};
     if (Array.isArray(b.lines) && b.lines.length > 0) { try { validateRequireUnitPrice(b.lines, "GR"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); } }
     const patch: Record<string, any> = {};
@@ -1092,10 +1149,25 @@ putAndPatch("/goods-receipts/:id", async (req, res, next) => {
     if (b.purchaseOrderId !== undefined) patch.purchaseOrderId = await resolveInternalId(s.purchaseOrders, String(b.purchaseOrderId));
     patch.updatedAt = new Date();
     await db.update(s.goodsReceipts).set(patch).where(eq(s.goodsReceipts.id, cur.id));
-    if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceGrLines(tx, cur.id, b.lines); });
+    let linesDiff: any = null;
+    if (Array.isArray(b.lines)) {
+      await db.transaction(async (tx) => { await replaceGrLines(tx, cur.id, b.lines); });
+      try {
+        const newLinesResolved = await Promise.all((b.lines as any[]).map(async (l: any) => {
+          const itemId = l.itemId ? await resolveInternalId(s.items, String(l.itemId)) : l.itemId;
+          const uomId = l.uomId ? await resolveInternalId(s.uom, String(l.uomId)) : l.uomId;
+          return { ...l, itemId: itemId ?? l.itemId, uomId: uomId ?? l.uomId };
+        }));
+        linesDiff = diffLines(oldLines as any, newLinesResolved as any);
+      } catch {}
+    }
     try {
       const { internalId, role } = await getActorInfo(req);
-      await logActivity({ documentType: "GR", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+      const changes = computeDiff(oldRowFull as any, patch as any, { denylist: DIFF_DENYLIST });
+      const meta: Record<string, unknown> = { patchKeys: Object.keys(patch) };
+      if (Object.keys(changes).length) meta.changes = changes;
+      if (linesDiff && (linesDiff.added.length || linesDiff.removed.length || linesDiff.modified.length)) meta.linesDiff = linesDiff;
+      await logActivity({ documentType: "GR", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: meta });
     } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -1209,7 +1281,7 @@ supplyChainRouter.post("/receivings", async (req, res, next) => {
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
     const { documentNo, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "RCV", { seriesId: seriesId ?? undefined, branchId: po.branchId ?? undefined, date: b.receiptDate ? new Date(b.receiptDate) : new Date() });
-      const [rcv] = await tx.insert(s.receivings).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, purchaseOrderId: poId, supplierId: po.supplierId, warehouseId, receiptDate: b.receiptDate, status: "DRAFT", notes: b.notes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId: po.branchId }).returning();
+      const [rcv] = await tx.insert(s.receivings).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, purchaseOrderId: poId, supplierId: po.supplierId, warehouseId, receiptDate: b.receiptDate, status: "DRAFT", notes: b.notes ?? null, createdBy: (await getActorInfo(req)).internalId ?? null, branchId: po.branchId }).returning();
       if (Array.isArray(b.lines)) await replaceReceivingLines(tx, rcv.id, b.lines);
       return { documentNo: doc.documentNo, id: rcv.id };
     });
@@ -1320,6 +1392,9 @@ putAndPatch("/receivings/:id", async (req, res, next) => {
     const [cur] = await db.select({ id: s.receivings.id, status: s.receivings.status }).from(s.receivings).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Receiving tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya receiving berstatus DRAFT yang dapat diubah." });
+    const [oldRowFull] = await db.select().from(s.receivings).where(where).limit(1);
+    let oldLines: any[] = [];
+    try { if (Array.isArray((req.body as any)?.lines)) oldLines = await db.select().from(s.receivingLines).where(eq(s.receivingLines.receivingId, cur.id)); } catch {}
     const b = req.body ?? {};
     if (Array.isArray(b.lines) && b.lines.length > 0) { try { validateRequireUnitPrice(b.lines, "RCV"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); } }
     const patch: Record<string, any> = {};
@@ -1329,10 +1404,25 @@ putAndPatch("/receivings/:id", async (req, res, next) => {
     if (b.purchaseOrderId !== undefined) patch.purchaseOrderId = await resolveInternalId(s.purchaseOrders, String(b.purchaseOrderId));
     patch.updatedAt = new Date();
     await db.update(s.receivings).set(patch).where(eq(s.receivings.id, cur.id));
-    if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceReceivingLines(tx, cur.id, b.lines); });
+    let linesDiff: any = null;
+    if (Array.isArray(b.lines)) {
+      await db.transaction(async (tx) => { await replaceReceivingLines(tx, cur.id, b.lines); });
+      try {
+        const newLinesResolved = await Promise.all((b.lines as any[]).map(async (l: any) => {
+          const itemId = l.itemId ? await resolveInternalId(s.items, String(l.itemId)) : l.itemId;
+          const uomId = l.uomId ? await resolveInternalId(s.uom, String(l.uomId)) : l.uomId;
+          return { ...l, itemId: itemId ?? l.itemId, uomId: uomId ?? l.uomId };
+        }));
+        linesDiff = diffLines(oldLines as any, newLinesResolved as any);
+      } catch {}
+    }
     try {
       const { internalId, role } = await getActorInfo(req);
-      await logActivity({ documentType: "RCV", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+      const changes = computeDiff(oldRowFull as any, patch as any, { denylist: DIFF_DENYLIST });
+      const meta: Record<string, unknown> = { patchKeys: Object.keys(patch) };
+      if (Object.keys(changes).length) meta.changes = changes;
+      if (linesDiff && (linesDiff.added.length || linesDiff.removed.length || linesDiff.modified.length)) meta.linesDiff = linesDiff;
+      await logActivity({ documentType: "RCV", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: meta });
     } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -1628,7 +1718,7 @@ supplyChainRouter.post("/qc-inspections", async (req, res, next) => {
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
     const { documentNo, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "QC", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.inspectionDate ? new Date(b.inspectionDate) : new Date() });
-      const [qc] = await tx.insert(s.qcInspections).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, receivingId, purchaseOrderId, supplierId, warehouseId, inspectionDate: b.inspectionDate, status: "DRAFT", notes: b.notes ?? null, qcNotes: b.qcNotes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId }).returning();
+      const [qc] = await tx.insert(s.qcInspections).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, receivingId, purchaseOrderId, supplierId, warehouseId, inspectionDate: b.inspectionDate, status: "DRAFT", notes: b.notes ?? null, qcNotes: b.qcNotes ?? null, createdBy: (await getActorInfo(req)).internalId ?? null, branchId }).returning();
       // lines: jika tidak dikirim, auto dari receivingLines dengan qtyRejected=0
       let lines = b.lines;
       if (!Array.isArray(lines) || lines.length === 0) {
@@ -1751,6 +1841,9 @@ putAndPatch("/qc-inspections/:id", async (req, res, next) => {
     const [cur] = await db.select({ id: s.qcInspections.id, status: s.qcInspections.status }).from(s.qcInspections).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "QC Inspection tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya DRAFT yang bisa diubah." });
+    const [oldRowFull] = await db.select().from(s.qcInspections).where(where).limit(1);
+    let oldLines: any[] = [];
+    try { if (Array.isArray((req.body as any)?.lines)) oldLines = await db.select().from(s.qcInspectionLines).where(eq(s.qcInspectionLines.qcInspectionId, cur.id)); } catch {}
     const b = req.body ?? {};
     const patch: Record<string, any> = {};
     if (b.inspectionDate !== undefined) patch.inspectionDate = b.inspectionDate;
@@ -1758,10 +1851,25 @@ putAndPatch("/qc-inspections/:id", async (req, res, next) => {
     if (b.qcNotes !== undefined) patch.qcNotes = b.qcNotes ?? null;
     patch.updatedAt = new Date();
     await db.update(s.qcInspections).set(patch).where(eq(s.qcInspections.id, cur.id));
-    if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceQcLines(tx, cur.id, b.lines); });
+    let linesDiff: any = null;
+    if (Array.isArray(b.lines)) {
+      await db.transaction(async (tx) => { await replaceQcLines(tx, cur.id, b.lines); });
+      try {
+        const newLinesResolved = await Promise.all((b.lines as any[]).map(async (l: any) => {
+          const itemId = l.itemId ? await resolveInternalId(s.items, String(l.itemId)) : l.itemId;
+          const uomId = l.uomId ? await resolveInternalId(s.uom, String(l.uomId)) : l.uomId;
+          return { ...l, itemId: itemId ?? l.itemId, uomId: uomId ?? l.uomId };
+        }));
+        linesDiff = diffLines(oldLines as any, newLinesResolved as any);
+      } catch {}
+    }
     try {
       const { internalId, role } = await getActorInfo(req);
-      await logActivity({ documentType: "QC", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+      const changes = computeDiff(oldRowFull as any, patch as any, { denylist: DIFF_DENYLIST });
+      const meta: Record<string, unknown> = { patchKeys: Object.keys(patch) };
+      if (Object.keys(changes).length) meta.changes = changes;
+      if (linesDiff && (linesDiff.added.length || linesDiff.removed.length || linesDiff.modified.length)) meta.linesDiff = linesDiff;
+      await logActivity({ documentType: "QC", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: meta });
     } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -1912,7 +2020,7 @@ supplyChainRouter.post("/deliveries", async (req, res, next) => {
     if (seriesRaw) seriesId = await resolveInternalId(s.documentSeries, String(seriesRaw));
     const { documentNo, id: newId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "DLV", { seriesId: seriesId ?? undefined, branchId: branchId ?? undefined, date: b.deliveryDate ? new Date(b.deliveryDate) : new Date() });
-      const [ins] = await tx.insert(s.deliveries).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, salesOrderId, customerId, warehouseId, deliveryDate: b.deliveryDate, status: "DRAFT", notes: b.notes ?? b.remarks ?? null, createdBy: (req as any).user?.internalId ?? null, branchId }).returning();
+      const [ins] = await tx.insert(s.deliveries).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, salesOrderId, customerId, warehouseId, deliveryDate: b.deliveryDate, status: "DRAFT", notes: b.notes ?? b.remarks ?? null, createdBy: (await getActorInfo(req)).internalId ?? null, branchId }).returning();
       if (Array.isArray(b.lines)) await replaceDeliveryLines(tx, ins.id, b.lines);
       return { documentNo: doc.documentNo, id: ins.id };
     });
@@ -1964,6 +2072,9 @@ putAndPatch("/deliveries/:id", async (req, res, next) => {
     const [cur] = await db.select({ id: s.deliveries.id, status: s.deliveries.status }).from(s.deliveries).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Delivery tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya delivery DRAFT yang dapat diubah." });
+    const [oldRowFull] = await db.select().from(s.deliveries).where(where).limit(1);
+    let oldLines: any[] = [];
+    try { if (Array.isArray((req.body as any)?.lines)) oldLines = await db.select().from(s.deliveryLines).where(eq(s.deliveryLines.deliveryId, cur.id)); } catch {}
     const b = req.body ?? {};
     const patch: Record<string, any> = {};
     if (b.warehouseId !== undefined) patch.warehouseId = await resolveInternalId(s.warehouses, String(b.warehouseId));
@@ -1973,10 +2084,25 @@ putAndPatch("/deliveries/:id", async (req, res, next) => {
     if (b.customerId !== undefined) patch.customerId = b.customerId ? await resolveInternalId(s.customers, String(b.customerId)) : null;
     patch.updatedAt = new Date();
     await db.update(s.deliveries).set(patch).where(eq(s.deliveries.id, cur.id));
-    if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceDeliveryLines(tx, cur.id, b.lines); });
+    let linesDiff: any = null;
+    if (Array.isArray(b.lines)) {
+      await db.transaction(async (tx) => { await replaceDeliveryLines(tx, cur.id, b.lines); });
+      try {
+        const newLinesResolved = await Promise.all((b.lines as any[]).map(async (l: any) => {
+          const itemId = l.itemId ? await resolveInternalId(s.items, String(l.itemId)) : l.itemId;
+          const uomId = l.uomId ? await resolveInternalId(s.uom, String(l.uomId)) : l.uomId;
+          return { ...l, itemId: itemId ?? l.itemId, uomId: uomId ?? l.uomId };
+        }));
+        linesDiff = diffLines(oldLines as any, newLinesResolved as any);
+      } catch {}
+    }
     try {
       const { internalId, role } = await getActorInfo(req);
-      await logActivity({ documentType: "DLV", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+      const changes = computeDiff(oldRowFull as any, patch as any, { denylist: DIFF_DENYLIST });
+      const meta: Record<string, unknown> = { patchKeys: Object.keys(patch) };
+      if (Object.keys(changes).length) meta.changes = changes;
+      if (linesDiff && (linesDiff.added.length || linesDiff.removed.length || linesDiff.modified.length)) meta.linesDiff = linesDiff;
+      await logActivity({ documentType: "DLV", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: meta });
     } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -2043,7 +2169,7 @@ supplyChainRouter.post("/sales-orders/:id/create-delivery", async (req, res, nex
     const lines = await soLines(db, so.id);
     const { documentNo } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "DLV", { branchId: so.branchId ?? undefined, date: req.body?.deliveryDate ? new Date(req.body.deliveryDate) : new Date() });
-      const [dlv] = await tx.insert(s.deliveries).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, salesOrderId: so.id, customerId: so.customerId, warehouseId: so.warehouseId, deliveryDate: (req.body?.deliveryDate as string) || new Date().toISOString().slice(0, 10), status: "DRAFT", notes: req.body?.notes ?? null, createdBy: (req as any).user?.internalId ?? null, branchId: so.branchId }).returning();
+      const [dlv] = await tx.insert(s.deliveries).values({ documentNo: doc.documentNo, seriesId: doc.seriesId, salesOrderId: so.id, customerId: so.customerId, warehouseId: so.warehouseId, deliveryDate: (req.body?.deliveryDate as string) || new Date().toISOString().slice(0, 10), status: "DRAFT", notes: req.body?.notes ?? null, createdBy: (await getActorInfo(req)).internalId ?? null, branchId: so.branchId }).returning();
       for (const l of lines) {
         await tx.insert(s.deliveryLines).values({ deliveryId: dlv.id, itemId: l.itemId, uomId: l.uomId, qty: l.qty, unitPrice: l.unitPrice, batchNumber: l.batchNumber, note: l.note });
       }

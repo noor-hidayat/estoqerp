@@ -100,6 +100,7 @@ export async function nextDocumentNo(
     SMV: "Stock Movement",
     SOC: "Stock Opname Count",
     OPJ: "Opname Project",
+    RFQ: "Request for Quotation",
   };
   const typeName = TYPE_CODE_TO_NAME[typeCode] ?? typeCode;
 

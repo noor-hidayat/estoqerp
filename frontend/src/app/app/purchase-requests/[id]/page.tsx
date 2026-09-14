@@ -223,7 +223,6 @@ export default function PurchaseRequestDetailPage() {
   const createPO = useCreatePOFromPR();
   const [editing, setEditing] = useState(false);
 
-  const supplierName = (sid?: string | null) => (sid ? (suppliers.find((s) => s.id === sid)?.name ?? "—") : "—");
   const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "—";
 
   if (isLoading) {
@@ -247,7 +246,6 @@ export default function PurchaseRequestDetailPage() {
         pr={pr}
         editing={editing}
         setEditing={setEditing}
-        supplierName={supplierName}
         warehouseName={warehouseName}
         suppliers={suppliers}
         warehouses={warehouses}
@@ -267,7 +265,6 @@ function PRBody({
   pr,
   editing,
   setEditing,
-  supplierName,
   warehouseName,
   suppliers,
   warehouses,
@@ -282,7 +279,6 @@ function PRBody({
   pr: PurchaseRequest;
   editing: boolean;
   setEditing: (v: boolean) => void;
-  supplierName: (id?: string | null) => string;
   warehouseName: (id?: string) => string;
   suppliers: { id: string; name: string }[];
   warehouses: { id: string; name: string }[];
@@ -332,7 +328,6 @@ function PRBody({
     return !!st?.requiresSignature;
   }, [isPendingApproval, pr, workflowStates]);
   const [form, setForm] = useState({
-    supplierId: (pr as any).supplierId ?? "",
     warehouseId: pr.warehouseId,
     requestDate: pr.requestDate?.slice(0, 10) ?? todayISO(),
     expectedDate: pr.expectedDate?.slice(0, 10) ?? "",
@@ -401,7 +396,6 @@ function PRBody({
 
   useEffect(() => {
     setForm({
-      supplierId: (pr as any).supplierId ?? "",
       warehouseId: pr.warehouseId,
       requestDate: pr.requestDate?.slice(0, 10) ?? todayISO(),
       expectedDate: pr.expectedDate?.slice(0, 10) ?? "",
@@ -435,7 +429,6 @@ function PRBody({
 
   const initialSnapshot = useMemo(() => {
     const f = {
-      supplierId: (pr as any).supplierId ?? "",
       warehouseId: pr.warehouseId,
       requestDate: pr.requestDate?.slice(0, 10) ?? "",
       expectedDate: pr.expectedDate?.slice(0, 10) ?? "",
@@ -625,17 +618,32 @@ function PRBody({
       setErr(e instanceof Error ? e.message : "Failed to delete.");
     }
   };
+  const [showSupplierDialog, setShowSupplierDialog] = useState(false);
+  const [selectedSupplierForPO, setSelectedSupplierForPO] = useState("");
+
   const onCreatePO = async () => {
-    if (!confirm("Create Purchase Order from this PR?")) return;
+    if (!selectedSupplierForPO) {
+      setShowSupplierDialog(true);
+      return;
+    }
     try {
-      const res = await createPO.mutateAsync(pr.id);
+      const res = await (createPO as any).mutateAsync({ id: pr.id, supplierId: selectedSupplierForPO });
+      setShowSupplierDialog(false);
+      setSelectedSupplierForPO("");
       navigate(`/app/purchase-orders/${res.id}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to create PO.");
     }
   };
 
-  const supplier = suppliers.find((s) => s.id === pr.supplierId);
+  const handleConfirmCreatePO = async () => {
+    if (!selectedSupplierForPO) {
+      setErr("Pilih supplier untuk PO.");
+      return;
+    }
+    await onCreatePO();
+  };
+
   const warehouse = warehouses.find((w) => w.id === pr.warehouseId);
   return (
     <>
@@ -671,6 +679,12 @@ function PRBody({
                       onClick={onCreatePO}
                     >
                       <PackageCheck size={14} /> Purchase Order
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="gap-2"
+                      onClick={() => navigate(`/app/rfq/new?prId=${pr.id}`)}
+                    >
+                      <FileText size={14} /> Request for Quotation
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -837,7 +851,6 @@ function PRBody({
               currency={editable ? form.currency : (pr as any).currency}
               exchangeRate={editable ? form.exchangeRate : (pr as any).exchangeRate}
               baseCurrency={baseCurrency}
-              supplierId={editable ? form.supplierId : pr.supplierId}
               variant="purchase-request"
             />
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -852,6 +865,38 @@ function PRBody({
           </FormSection>
         </FormPage>
       </div>
+
+      {showSupplierDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg dark:bg-zinc-900">
+            <h3 className="text-sm font-semibold">Pilih Supplier untuk PO</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Pilih supplier untuk membuat Purchase Order dari PR ini.</p>
+            <div className="mt-4">
+              <Select
+                label="Supplier"
+                value={selectedSupplierForPO}
+                onChange={(e) => setSelectedSupplierForPO(e.target.value)}
+                className="h-8"
+              >
+                <option value="">Pilih supplier...</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowSupplierDialog(false)}>
+                Batal
+              </Button>
+              <Button size="sm" onClick={handleConfirmCreatePO} disabled={!selectedSupplierForPO || createPO.isPending}>
+                {createPO.isPending ? "Membuat..." : "Buat PO"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Print view for PR */}
       <style>{`@media print { @page { size: A4; margin: 0; } html, body { height: auto !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } body * { visibility: hidden; } .print-doc, .print-doc * { visibility: visible; } .print-doc { position: absolute; left: 0; top: 0; width: 100%; height: auto; } header, nav, aside { display: none !important; } table { page-break-inside: auto; } tr { page-break-inside: avoid; page-break-after: auto; } }`}</style>
       <div className="hidden print:block print-doc bg-white text-black print:absolute print:inset-0 print:p-0">
@@ -890,13 +935,7 @@ function PRBody({
               <div className="flex"><span className="w-24 text-zinc-600">Currency</span><span className="text-black">{(pr as any).currency ?? baseCurrency ?? "IDR"}</span></div>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-6 border-t border-zinc-200 pt-4 text-[11px]">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-black">SUPPLIER</div>
-              <div className="mt-2 font-medium text-black">{supplier?.name ?? supplierName(pr.supplierId)}</div>
-              <div className="mt-1 leading-snug text-zinc-600">{(supplier as any)?.address ?? "-"}</div>
-              <div className="mt-2 space-y-0.5 text-zinc-600"><div>PIC : {(supplier as any)?.contactPerson ?? "-"}</div><div>Telp : {(supplier as any)?.phone ?? "-"}</div><div>Email : {(supplier as any)?.email ?? "-"}</div></div>
-            </div>
+          <div className="mt-4 border-t border-zinc-200 pt-4 text-[11px]">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wide text-black">SHIP TO</div>
               <div className="mt-2 font-medium text-black">{warehouse?.name ?? warehouseName(pr.warehouseId)}</div>

@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { toast } from "sonner";
 import { MoreHorizontal, Pencil, Trash2, Plus } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { formatNumber } from "@/lib/utils";
 
 export default function EditPriceListPage() {
@@ -457,6 +458,9 @@ export default function EditPriceListPage() {
               </Dialog>
             </TabsContent>
           </Tabs>
+              <FormSection title="Aktivitas">
+          <ActivityTimeline documentType="PRICE_LIST" documentId={id!} />
+        </FormSection>
       </FormPage>
     </RoleGuard>
   );

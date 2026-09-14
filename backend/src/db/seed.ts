@@ -73,6 +73,7 @@ async function ensureDocumentTypes() {
     { name: "Stock Movement", prefix: "SMV", description: "Mutasi Stok" },
     { name: "Stock Opname Count", prefix: "SOC", description: "Hitung Stok Opname" },
     { name: "Opname Project", prefix: "OPJ", description: "Project Opname" },
+    { name: "Request for Quotation", prefix: "RFQ", description: "Permintaan Penawaran Harga" },
   ];
   for (const t of types) {
     const [inserted] = await db.insert(documentTypes).values({ name: t.name, description: t.description, isActive: true }).returning();
@@ -142,6 +143,29 @@ async function ensureReceivingDocType() {
       isActive: true,
     });
     console.log(`Default Receiving series (RCV) created`);
+  }
+}
+
+async function ensureRfqDocType() {
+  let [type] = await db.select().from(documentTypes).where(eq(documentTypes.name, "Request for Quotation")).limit(1);
+  if (!type) {
+    [type] = await db.insert(documentTypes).values({ name: "Request for Quotation", description: "Permintaan Penawaran Harga", isActive: true }).returning();
+    console.log(`Document type Request for Quotation created`);
+  }
+  let [seriesRfq] = await db.select().from(documentSeries).where(eq(documentSeries.documentTypeId, type.id)).limit(1);
+  if (!seriesRfq) {
+    await db.insert(documentSeries).values({
+      documentTypeId: type.id,
+      name: "Default Request for Quotation",
+      prefix: "RFQ",
+      format: "{PREFIX}-{YYMM}-{SEQ:4}",
+      padding: 4,
+      resetPolicy: "MONTHLY",
+      isDefault: true,
+      branchSpecific: false,
+      isActive: true,
+    });
+    console.log(`Default RFQ series (RFQ) created`);
   }
 }
 
@@ -245,6 +269,7 @@ async function main() {
   await ensureDocumentTypes();
   await ensureReceivingDocType();
   await ensurePurchaseRequestDocType();
+  await ensureRfqDocType();
   // Note: dummy data intentionally not seeded per request (data dummy di hapus)
   // If you need to wipe old dummy data, uncomment truncate section below
   // await db.execute(sql`TRUNCATE ... CASCADE`)

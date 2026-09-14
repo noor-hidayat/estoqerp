@@ -18,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 export default function EditBranchPage() {
   const { id } = useParams<{ id: string }>();
@@ -180,6 +181,9 @@ export default function EditBranchPage() {
               <Switch checked={!!form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: !!v })} disabled={!editing} />
             </div>
           </FormGrid>
+        </FormSection>
+              <FormSection title="Aktivitas">
+          <ActivityTimeline documentType="BRANCH" documentId={id!} />
         </FormSection>
       </FormPage>
     </RoleGuard>

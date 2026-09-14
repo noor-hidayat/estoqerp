@@ -7,6 +7,8 @@ import { db } from "../db/pool";
 import * as schema from "../db/schema";
 import { nextRowId } from "../lib/id";
 import { checkPermission, canAccessEntity, isAdminUser } from "../middleware/rbac";
+import { logActivity, getActorInfo } from "../lib/activity-log";
+import { computeDiff, diffLines, DIFF_DENYLIST } from "../lib/diff";
 import type { Request, Response } from "express";
 
 const router = Router();
@@ -109,7 +111,7 @@ router.post("/", async (req: Request, res: Response) => {
         deadline,
         cutOffDate: body.cutOffDate as string,
         cutOffTime: body.cutOffTime as string,
-        createdBy: ((req as any).user?.internalId ?? null),
+        createdBy: (await getActorInfo(req)).internalId ?? null,
         description: body.description ?? null,
       }).returning();
 
@@ -127,6 +129,14 @@ router.post("/", async (req: Request, res: Response) => {
       return projInserted.publicId;
     });
 
+    // log create
+    try {
+      const [projRow] = await db.select({ id: schema.opnameProjects.id }).from(schema.opnameProjects).where(eq(schema.opnameProjects.publicId, projectId)).limit(1);
+      if (projRow) {
+        const { internalId, role } = await getActorInfo(req);
+        await logActivity({ documentType: "OPJ", documentId: projRow.id, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo: body.name } });
+      }
+    } catch {}
     res.status(201).json({ id: projectId });
   } catch (e) {
     console.error("POST opname-projects", e);
@@ -632,6 +642,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   const id = String(req.params.id);
   const patchInternal = await resolveOpnameId(id);
+  // fetch old for diff
+  let oldRow: any = null;
+  try { const [r] = await db.select().from(schema.opnameProjects).where(eq(schema.opnameProjects.id, patchInternal as any)).limit(1); oldRow = r; } catch {}
   if (!patchInternal) { res.status(404).json({ error: "Project tidak ditemukan." }); return; }
   const [existing] = await db
     .select({ id: schema.opnameProjects.id })
@@ -645,6 +658,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
   }
 
   try {
+    let patchForLog = { ...patch };
     await db.transaction(async (tx) => {
       await tx
         .update(schema.opnameProjects)
@@ -660,6 +674,14 @@ router.patch("/:id", async (req: Request, res: Response) => {
           .where(eq(schema.opnameWarehouses.opnameId, patchInternal));
       }
     });
+    // log update with diff
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      const changes = computeDiff(oldRow as any, patchForLog as any, { denylist: DIFF_DENYLIST });
+      const meta: Record<string, unknown> = { patchKeys: Object.keys(patchForLog) };
+      if (Object.keys(changes).length) meta.changes = changes;
+      await logActivity({ documentType: "OPJ", documentId: patchInternal as any, action: "update", fromStatus: oldRow?.status ?? null, toStatus: (patchForLog as any).status ?? oldRow?.status ?? null, actorUserId: internalId, actorRole: role, metadata: meta });
+    } catch {}
     res.json({ ok: true });
   } catch (e) {
     console.error("PATCH opname-projects", e);
@@ -686,9 +708,13 @@ router.delete("/:id", async (req: Request, res: Response) => {
     return;
   }
 
+  const delInternal = await resolveOpnameId(projectId);
+  // fetch row for metadata before delete
+  let delRow: any = null;
+  try { const [r] = await db.select().from(schema.opnameProjects).where(eq(schema.opnameProjects.id, delInternal as any)).limit(1); delRow = r; } catch {}
   try {
     // opname_warehouses / opname_scans / opname_scan_details ter-cascade via FK.
-    await db.delete(schema.opnameProjects).where(eq(schema.opnameProjects.id, projInternal2));
+    await db.delete(schema.opnameProjects).where(eq(schema.opnameProjects.id, delInternal as any));
     res.json({ ok: true });
   } catch (e) {
     console.error("DELETE opname-projects", e);

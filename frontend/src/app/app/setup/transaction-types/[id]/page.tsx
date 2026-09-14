@@ -18,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 const KINDS = [
   { value: "RECEIPT", label: "Receipt (barang masuk)" },
@@ -205,6 +206,9 @@ export default function EditTransactionTypePage() {
               disabled={!editing}
             />
           </FormGrid>
+        </FormSection>
+              <FormSection title="Aktivitas">
+          <ActivityTimeline documentType="MOVEMENT_TYPE" documentId={id!} />
         </FormSection>
       </FormPage>
     </RoleGuard>

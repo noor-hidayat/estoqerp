@@ -492,7 +492,11 @@ export function useCancelPurchaseRequest() {
 export function useCreatePOFromPR() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ id: string; documentNo: string }>(`/purchase-requests/${id}/create-po`, {}),
+    mutationFn: (arg: string | { id: string; supplierId: string }) => {
+      const id = typeof arg === "string" ? arg : arg.id;
+      const supplierId = typeof arg === "string" ? undefined : arg.supplierId;
+      return api.post<{ id: string; documentNo: string }>(`/purchase-requests/${id}/create-po`, supplierId ? { supplierId } : {});
+    },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-orders"] }); },
   });
 }
@@ -679,6 +683,101 @@ export function useCreateReceiptFromPo() {
       qc.invalidateQueries({ queryKey: ["goods-receipts"] });
     },
   });
+}
+
+// ---- Supply Chain: RFQ ----
+export function useRfqs(params?: Record<string, unknown>) {
+  return useResourceList<import("@/types").Rfq>("rfqs", params);
+}
+export function useRfq(id?: string) {
+  return useResourceOne<import("@/types").Rfq>("rfqs", id);
+}
+export function useCreateRfq() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => api.post<{ id: string; documentNo: string }>("/rfqs", body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["purchase-requests"] }); },
+  });
+}
+export function useUpdateRfq() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/rfqs/${id}`, patch),
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", id] }); },
+  });
+}
+export function useRemoveRfq() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/rfqs/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); },
+  });
+}
+export function useSendRfq() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/rfqs/${id}/send`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", id] }); },
+  });
+}
+export function useCancelRfq() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/rfqs/${id}/cancel`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", id] }); },
+  });
+}
+export function useCloseRfq() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/rfqs/${id}/close`, {}),
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", id] }); },
+  });
+}
+export function useCreateQuotation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ rfqId, body }: { rfqId: string; body: unknown }) => api.post(`/rfqs/${rfqId}/quotations`, body),
+    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", vars.rfqId] }); },
+  });
+}
+export function useUpdateQuotation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/supplier-quotations/${id}`, patch),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); },
+  });
+}
+export function useSubmitQuotation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/supplier-quotations/${id}/submit`, {}),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); },
+  });
+}
+export function useRfqCompare(id?: string) {
+  return useQuery({
+    queryKey: ["rfqs", id, "compare"],
+    queryFn: () => api.get<any>(`/rfqs/${id}/compare`),
+    enabled: !!id,
+  });
+}
+export function useAwardRfq() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, supplierId }: { id: string; supplierId: string }) => api.post(`/rfqs/${id}/award`, { supplierId }),
+    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", vars.id] }); },
+  });
+}
+export function useCreatePoFromRfq() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<{ id: string; documentNo: string }>(`/rfqs/${id}/create-po`, {}),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["purchase-orders"] }); },
+  });
+}
+export function useSupplierQuotation(id?: string) {
+  return useResourceOne<import("@/types").SupplierQuotation>("supplier-quotations", id);
 }
 
 // ---- Supply Chain: Sales Orders ----

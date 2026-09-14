@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, ShoppingCart } from "lucide-react";
-import { usePurchaseRequests, useSuppliers, useAllWarehouses, useBranches } from "@/lib/api/query";
+import { usePurchaseRequests, useAllWarehouses, useBranches } from "@/lib/api/query";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,9 @@ export default function PurchaseRequestsPage() {
   const [warehouseFilter, setWarehouseFilter] = useState("all");
 
   const { data: requests = [], isLoading } = usePurchaseRequests();
-  const { data: suppliers = [] } = useSuppliers();
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: branches = [] } = useBranches();
 
-  const supplierName = (id: string | null | undefined) =>
-    id ? (suppliers.find((s) => s.id === id)?.name ?? "—") : "—";
   const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "—";
   const branchName = (id: string | null | undefined) => (id ? (branches.find((b) => b.id === id)?.name ?? "—") : "—");
 
@@ -48,12 +45,6 @@ export default function PurchaseRequestsPage() {
       header: "Warehouse",
       cell: (o) => <span className="text-muted-foreground">{warehouseName(o.warehouseId)}</span>,
       sortValue: (o) => warehouseName(o.warehouseId),
-    },
-    {
-      id: "supplier",
-      header: "Supplier",
-      cell: (o) => <span className="font-medium text-foreground">{supplierName(o.supplierId)}</span>,
-      sortValue: (o) => supplierName(o.supplierId),
     },
     {
       id: "requestDate",
@@ -127,7 +118,7 @@ export default function PurchaseRequestsPage() {
         onRowClick={(o) => navigate(`/app/purchase-requests/${o.id}`)}
         searchPlaceholder="Search purchase requests..."
         getSearchText={(o) =>
-          `${o.documentNo ?? (o as any).prNo ?? formatId(o.id)} ${supplierName(o.supplierId)} ${warehouseName(o.warehouseId)} ${(o as any).department ?? ""} ${branchName((o as any).branchId)}`
+          `${o.documentNo ?? (o as any).prNo ?? formatId(o.id)} ${warehouseName(o.warehouseId)} ${(o as any).department ?? ""} ${branchName((o as any).branchId)}`
         }
         filters={
           <div className="flex gap-2">

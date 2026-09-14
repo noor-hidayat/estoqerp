@@ -18,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 export default function EditItemGroupPage() {
   const { id } = useParams<{ id: string }>();
@@ -172,6 +173,9 @@ export default function EditItemGroupPage() {
               <Switch checked={!!form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: !!v })} disabled={!editing} />
             </div>
           </FormGrid>
+        </FormSection>
+              <FormSection title="Aktivitas">
+          <ActivityTimeline documentType="ITEM_GROUP" documentId={id!} />
         </FormSection>
       </FormPage>
     </RoleGuard>

@@ -526,6 +526,20 @@
       "when": 1789355382807,
       "tag": "0076_famous_colleen_wing",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1789388675762,
+      "tag": "0077_magenta_tempest",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1789400687900,
+      "tag": "0078_solid_ikaris",
+      "breakpoints": true
     }
   ]
 }

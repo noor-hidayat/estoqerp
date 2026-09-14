@@ -1014,7 +1014,6 @@ export const purchaseRequests = pgTable(
     publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
     documentNo: text("document_no").unique(),
     seriesId: bigint("series_id", { mode: "number" }).references(() => documentSeries.id),
-    supplierId: bigint("supplier_id", { mode: "number" }).references(() => suppliers.id),
     warehouseId: bigint("warehouse_id", { mode: "number" })
       .notNull()
       .references(() => warehouses.id),
@@ -1047,7 +1046,6 @@ export const purchaseRequests = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("idx_purchase_requests_supplier").on(t.supplierId),
     index("idx_purchase_requests_wh").on(t.warehouseId),
     index("idx_purchase_requests_status").on(t.status),
     index("idx_purchase_requests_document_no").on(t.documentNo),
@@ -1589,4 +1587,146 @@ export const documentActivities = pgTable(
     index("idx_document_activities_doc").on(t.documentType, t.documentId),
     index("idx_document_activities_created").on(t.createdAt),
   ]
+);
+
+// ---------------------------------------------------------------------------
+// RFQ (Request for Quotation) — PR → RFQ → Quotation → Compare → PO
+// RFQ tanpa harga, harga ada di supplier_quotations
+// ---------------------------------------------------------------------------
+
+export const rfqStatuses = ["DRAFT", "SENT", "QUOTED", "AWARDED", "CLOSED", "CANCELED"] as const;
+export type RfqStatus = (typeof rfqStatuses)[number];
+
+export const quotationStatuses = ["DRAFT", "SUBMITTED", "REJECTED", "AWARDED"] as const;
+export type QuotationStatus = (typeof quotationStatuses)[number];
+
+export const rfqs = pgTable(
+  "rfqs",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    documentNo: text("document_no").unique(),
+    seriesId: bigint("series_id", { mode: "number" }).references(() => documentSeries.id),
+    purchaseRequestId: bigint("purchase_request_id", { mode: "number" }).references(() => purchaseRequests.id, { onDelete: "set null" }),
+    warehouseId: bigint("warehouse_id", { mode: "number" })
+      .notNull()
+      .references(() => warehouses.id),
+    requestDate: date("request_date").notNull(),
+    quotationDeadline: date("quotation_deadline"),
+    expectedDate: date("expected_date"),
+    status: text("status", { enum: rfqStatuses }).notNull().default("DRAFT"),
+    notes: text("notes"),
+    currency: text("currency").notNull().default("IDR"),
+    awardedSupplierId: bigint("awarded_supplier_id", { mode: "number" }).references(() => suppliers.id),
+    awardedAt: timestamp("awarded_at", { withTimezone: true }),
+    awardedBy: bigint("awarded_by", { mode: "number" }).references(() => users.id),
+    createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
+    branchId: bigint("branch_id", { mode: "number" }).references(() => branches.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_rfqs_warehouse").on(t.warehouseId),
+    index("idx_rfqs_status").on(t.status),
+    index("idx_rfqs_document_no").on(t.documentNo),
+    index("idx_rfqs_pr").on(t.purchaseRequestId),
+    index("idx_rfqs_public_id").on(t.publicId),
+  ]
+);
+
+export const rfqLines = pgTable(
+  "rfq_lines",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    rfqId: bigint("rfq_id", { mode: "number" })
+      .notNull()
+      .references(() => rfqs.id, { onDelete: "cascade" }),
+    itemId: bigint("item_id", { mode: "number" })
+      .notNull()
+      .references(() => items.id),
+    uomId: bigint("uom_id", { mode: "number" })
+      .notNull()
+      .references(() => uom.id),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    note: text("note"),
+  },
+  (t) => [index("idx_rfq_lines_rfq").on(t.rfqId)]
+);
+
+export const rfqSuppliers = pgTable(
+  "rfq_suppliers",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    rfqId: bigint("rfq_id", { mode: "number" })
+      .notNull()
+      .references(() => rfqs.id, { onDelete: "cascade" }),
+    supplierId: bigint("supplier_id", { mode: "number" })
+      .notNull()
+      .references(() => suppliers.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("INVITED"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_rfq_supplier").on(t.rfqId, t.supplierId),
+    index("idx_rfq_suppliers_rfq").on(t.rfqId),
+    index("idx_rfq_suppliers_supplier").on(t.supplierId),
+  ]
+);
+
+export const supplierQuotations = pgTable(
+  "supplier_quotations",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    rfqId: bigint("rfq_id", { mode: "number" })
+      .notNull()
+      .references(() => rfqs.id, { onDelete: "cascade" }),
+    supplierId: bigint("supplier_id", { mode: "number" })
+      .notNull()
+      .references(() => suppliers.id),
+    quotationNo: text("quotation_no"),
+    quotationDate: date("quotation_date").notNull(),
+    validUntil: date("valid_until"),
+    currency: text("currency").notNull().default("IDR"),
+    notes: text("notes"),
+    status: text("status", { enum: quotationStatuses }).notNull().default("DRAFT"),
+    totalAmount: numeric("total_amount", { precision: 15, scale: 2 }).notNull().default("0"),
+    deliveryLeadTime: text("delivery_lead_time"),
+    paymentTerm: text("payment_term"),
+    createdBy: bigint("created_by", { mode: "number" }).references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_supplier_quotation_rfq_supplier").on(t.rfqId, t.supplierId),
+    index("idx_supplier_quotations_rfq").on(t.rfqId),
+    index("idx_supplier_quotations_supplier").on(t.supplierId),
+    index("idx_supplier_quotations_status").on(t.status),
+  ]
+);
+
+export const supplierQuotationLines = pgTable(
+  "supplier_quotation_lines",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedByDefaultAsIdentity(),
+    publicId: uuid("public_id").notNull().unique().$defaultFn(() => uuidv7()),
+    quotationId: bigint("quotation_id", { mode: "number" })
+      .notNull()
+      .references(() => supplierQuotations.id, { onDelete: "cascade" }),
+    rfqLineId: bigint("rfq_line_id", { mode: "number" }).references(() => rfqLines.id, { onDelete: "set null" }),
+    itemId: bigint("item_id", { mode: "number" })
+      .notNull()
+      .references(() => items.id),
+    uomId: bigint("uom_id", { mode: "number" })
+      .notNull()
+      .references(() => uom.id),
+    qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
+    discount: numeric("discount", { precision: 15, scale: 2 }).notNull().default("0"),
+    subtotal: numeric("subtotal", { precision: 15, scale: 2 }).notNull().default("0"),
+    note: text("note"),
+  },
+  (t) => [index("idx_sqlines_quotation").on(t.quotationId)]
 );

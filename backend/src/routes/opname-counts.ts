@@ -4,6 +4,8 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/pool";
 import * as schema from "../db/schema";
 import { checkPermission } from "../middleware/rbac";
+import { logActivity, getActorInfo } from "../lib/activity-log";
+import { computeDiff, diffLines, DIFF_DENYLIST } from "../lib/diff";
 import type { Request, Response } from "express";
 
 const router = Router();
@@ -109,6 +111,13 @@ router.post("/", async (req: Request, res: Response) => {
       }
       return inserted.publicId;
     });
+    try {
+      const [cntRow] = await db.select({ id: schema.opnameCounts.id }).from(schema.opnameCounts).where(eq(schema.opnameCounts.publicId, publicId)).limit(1);
+      if (cntRow) {
+        const { internalId, role } = await getActorInfo(req);
+        await logActivity({ documentType: "SOC", documentId: cntRow.id, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo: cntRow.id } });
+      }
+    } catch {}
     res.status(201).json({ id: publicId });
   } catch (e) { console.error("POST opname-counts", e); res.status(500).json({ error: "Gagal membuat count." }); }
 });
@@ -182,6 +191,10 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const pid = String(req.params.id);
   const internal = await resolveCountId(pid);
   if (!internal) return res.status(404).json({ error: "Count tidak ditemukan." });
+  let oldRow: any = null;
+  let oldDetails: any[] = [];
+  try { const [r] = await db.select().from(schema.opnameCounts).where(eq(schema.opnameCounts.id, internal)).limit(1); oldRow = r; } catch {}
+  try { if (Array.isArray((req.body as any)?.details)) oldDetails = await db.select().from(schema.opnameCountDetails).where(eq(schema.opnameCountDetails.countId, internal)); } catch {}
   const patch = req.body as Record<string, unknown> & { details?: { itemId: string; qty: number | string; batch?: string | null; uomId?: string | null }[] };
   const allowed = ["postingDate", "postingTime", "cutOffDate", "cutOffTime", "notes", "status", "warehouseId", "projectId"];
   const toUpdate: Record<string, unknown> = {};
@@ -218,6 +231,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
       }
     }
   }
+  let linesDiff: any = null;
   await db.transaction(async (tx) => {
     if (Object.keys(toUpdate).length > 0) {
       (toUpdate as Record<string, unknown>).updatedAt = new Date();
@@ -235,6 +249,25 @@ router.patch("/:id", async (req: Request, res: Response) => {
       }
     }
   });
+  // compute diffs
+  try {
+    const { internalId, role } = await getActorInfo(req);
+    const changes = computeDiff(oldRow as any, toUpdate as any, { denylist: DIFF_DENYLIST });
+    const meta: Record<string, unknown> = { patchKeys: Object.keys(toUpdate) };
+    if (Object.keys(changes).length) meta.changes = changes;
+    if (Array.isArray(patch.details)) {
+      try {
+        const newDetailsResolved = await Promise.all((patch.details as any[]).map(async (l: any) => {
+          const itemId = l.itemId ? await resolveInternalId(s.items, String(l.itemId)) : l.itemId;
+          const uomId = l.uomId ? await resolveInternalId(s.uom, String(l.uomId)) : l.uomId;
+          return { ...l, itemId: itemId ?? l.itemId, uomId: uomId ?? l.uomId };
+        }));
+        linesDiff = diffLines(oldDetails as any, newDetailsResolved as any);
+      } catch {}
+      if (linesDiff && (linesDiff.added.length || linesDiff.removed.length || linesDiff.modified.length)) meta.linesDiff = linesDiff;
+    }
+    await logActivity({ documentType: "SOC", documentId: internal, action: "update", fromStatus: oldRow?.status ?? null, toStatus: (toUpdate as any).status ?? oldRow?.status ?? null, actorUserId: internalId, actorRole: role, metadata: meta });
+  } catch {}
   res.json({ ok: true });
 });
 
@@ -243,7 +276,13 @@ router.delete("/:id", async (req: Request, res: Response) => {
   const pid = String(req.params.id);
   const internal = await resolveCountId(pid);
   if (!internal) return res.status(404).json({ error: "Count tidak ditemukan." });
+  let delRow: any = null;
+  try { const [r] = await db.select().from(schema.opnameCounts).where(eq(schema.opnameCounts.id, internal)).limit(1); delRow = r; } catch {}
   await db.delete(schema.opnameCounts).where(eq(schema.opnameCounts.id, internal));
+  try {
+    const { internalId, role } = await getActorInfo(req);
+    await logActivity({ documentType: "SOC", documentId: internal, action: "delete", fromStatus: delRow?.status ?? null, toStatus: null, actorUserId: internalId, actorRole: role, metadata: { documentNo: delRow?.documentNo ?? null } });
+  } catch {}
   res.json({ ok: true });
 });
 

@@ -26,6 +26,7 @@ import {
   isAdminUser,
 } from "../middleware/rbac";
 import { logActivity, getActorInfo } from "../lib/activity-log";
+import { computeDiff, diffLines, DIFF_DENYLIST } from "../lib/diff";
 
 export const transactionsRouter = Router();
 export const stockLedgerRouter = Router();
@@ -1414,6 +1415,10 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Hanya transaksi berstatus DRAFT yang bisa diubah." });
     return;
   }
+  // fetch old row + old details for diff
+  const [oldRowFull] = await db.select().from(schema.stockMovements).where(wherePatch).limit(1);
+  let oldDetails: any[] = [];
+  try { oldDetails = await db.select().from(schema.stockMovementDetails).where(eq(schema.stockMovementDetails.movementId, existing.id)); } catch {}
 
   const parsed = parseBody(req.body);
   if (!parsed.ok) {
@@ -1519,7 +1524,13 @@ transactionsRouter.patch("/:id", async (req: Request, res: Response) => {
     });
     try {
       const { internalId, role } = await getActorInfo(req);
-      await logActivity({ documentType: "SMV", documentId: existing.id, action: "update", fromStatus: existing.status, toStatus: input.status ?? existing.status, actorUserId: internalId, actorRole: role });
+      const changes = computeDiff(oldRowFull as any, { typeId: input.typeId, status: input.status, referenceType: input.referenceType, referenceId: input.referenceId, description: input.description } as any, { denylist: DIFF_DENYLIST });
+      let linesDiff: any = null;
+      try { linesDiff = diffLines(oldDetails as any, input.details as any); } catch {}
+      const meta: Record<string, unknown> = {};
+      if (Object.keys(changes).length) meta.changes = changes;
+      if (linesDiff && (linesDiff.added.length || linesDiff.removed.length || linesDiff.modified.length)) meta.linesDiff = linesDiff;
+      await logActivity({ documentType: "SMV", documentId: existing.id, action: "update", fromStatus: existing.status, toStatus: input.status ?? existing.status, actorUserId: internalId, actorRole: role, metadata: meta });
     } catch {}
     res.json({ ok: true });
   } catch (e) {

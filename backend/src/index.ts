@@ -25,6 +25,7 @@ import { exchangeRouter } from "./routes/exchange";
 import { workflowsRouter } from "./routes/workflows";
 import { userSignaturesRouter } from "./routes/user-signatures";
 import { activityLogsRouter } from "./routes/activity-logs";
+import { rfqRouter } from "./routes/rfq";
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use("/api", exchangeRouter);
 app.use("/api", supplyChainRouter);
 app.use("/api", purchaseRequestRouter);
 app.use("/api", materialRequestRouter);
+app.use("/api", rfqRouter);
 app.use("/api", workflowsRouter);
 app.use("/api", userSignaturesRouter);
 app.use("/api", activityLogsRouter);

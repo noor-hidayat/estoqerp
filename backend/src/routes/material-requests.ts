@@ -6,6 +6,8 @@ import * as s from "../db/schema";
 import { checkPermission } from "../middleware/rbac";
 import { nextDocumentNo } from "../lib/document-number";
 import { logActivity, getActorInfo } from "../lib/activity-log";
+import { computeDiff, diffLines, DIFF_DENYLIST } from "../lib/diff";
+import { snapshotApprovalLevelsForDoc } from "../lib/workflow-approval";
 
 export const materialRequestRouter = Router();
 const putAndPatch = (path: string, ...handlers: any[]) => {
@@ -164,7 +166,7 @@ materialRequestRouter.post("/material-requests", async (req, res, next) => {
         additionalCharges,
         taxRate: resolvedTaxRate ?? (b.taxRate != null ? String(b.taxRate) : "0"),
         taxCategoryId,
-        createdBy: (req as any).user?.internalId ?? null,
+        createdBy: (await getActorInfo(req)).internalId ?? null,
         branchId,
       }).returning();
       if (Array.isArray(b.lines)) await replaceMrLines(tx, ins.id, b.lines);
@@ -374,6 +376,9 @@ putAndPatch("/material-requests/:id", async (req, res, next) => {
     const [cur] = await db.select({ id: s.materialRequests.id, status: s.materialRequests.status }).from(s.materialRequests).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Material Request tidak ditemukan." });
     if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya PR berstatus DRAFT yang dapat diubah." });
+    const [oldRowFull] = await db.select().from(s.materialRequests).where(where).limit(1);
+    let oldLines: any[] = [];
+    try { if (Array.isArray((req.body as any)?.lines)) oldLines = await db.select().from(s.materialRequestLines).where(eq(s.materialRequestLines.materialRequestId, cur.id)); } catch {}
     const b = req.body ?? {};
     if (Array.isArray(b.lines) && b.lines.length > 0) { try { validateRequireUnitPrice(b.lines, "MR"); } catch (e) { return res.status(400).json({ error: (e as Error).message }); } }
     const patch: Record<string, any> = {};
@@ -417,10 +422,25 @@ putAndPatch("/material-requests/:id", async (req, res, next) => {
     }
     patch.updatedAt = new Date();
     await db.update(s.materialRequests).set(patch).where(eq(s.materialRequests.id, cur.id));
-    if (Array.isArray(b.lines)) await db.transaction(async (tx) => { await replaceMrLines(tx, cur.id, b.lines); });
+    let linesDiff: any = null;
+    if (Array.isArray(b.lines)) {
+      await db.transaction(async (tx) => { await replaceMrLines(tx, cur.id, b.lines); });
+      try {
+        const newLinesResolved = await Promise.all((b.lines as any[]).map(async (l: any) => {
+          const itemId = l.itemId ? await resolveInternalId(s.items, String(l.itemId)) : l.itemId;
+          const uomId = l.uomId ? await resolveInternalId(s.uom, String(l.uomId)) : l.uomId;
+          return { ...l, itemId: itemId ?? l.itemId, uomId: uomId ?? l.uomId };
+        }));
+        linesDiff = diffLines(oldLines as any, newLinesResolved as any);
+      } catch {}
+    }
     try {
       const { internalId, role } = await getActorInfo(req);
-      await logActivity({ documentType: "MR", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(patch) } });
+      const changes = computeDiff(oldRowFull as any, patch as any, { denylist: DIFF_DENYLIST });
+      const meta: Record<string, unknown> = { patchKeys: Object.keys(patch) };
+      if (Object.keys(changes).length) meta.changes = changes;
+      if (linesDiff && (linesDiff.added.length || linesDiff.removed.length || linesDiff.modified.length)) meta.linesDiff = linesDiff;
+      await logActivity({ documentType: "MR", documentId: cur.id, action: "update", fromStatus: cur.status, toStatus: cur.status, actorUserId: internalId, actorRole: role, metadata: meta });
     } catch {}
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -592,7 +612,7 @@ materialRequestRouter.post("/material-requests/:id/create-po", async (req, res, 
         additionalCharges: (pr as any).additionalCharges ?? [],
         taxRate: (pr as any).taxRate ?? "0",
         taxCategoryId: (pr as any).taxCategoryId ?? null,
-        createdBy: (req as any).user?.internalId ?? null,
+        createdBy: (await getActorInfo(req)).internalId ?? null,
         branchId: pr.branchId,
       }).returning();
       for (const l of lines) {

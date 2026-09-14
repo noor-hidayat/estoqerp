@@ -219,6 +219,7 @@ export const NAV: NavGroup[] = [
         children: [
           { label: "Purchase Request", href: "/app/purchase-requests", icon: "FileText", menu: "supply.purchaseRequests" },
           { label: "Material Request", href: "/app/material-requests", icon: "FileText", menu: "supply.materialRequests" },
+          { label: "Request for Quotation", href: "/app/rfq", icon: "FileText", menu: "supply.purchaseRequests" },
         ],
       },
       {
@@ -565,6 +566,7 @@ export const PURCHASING_NAV: NavGroup[] = [
         children: [
           { label: "Purchase Request", href: "/app/purchase-requests", icon: "FileText", menu: "supply.purchaseRequests" },
           { label: "Material Request", href: "/app/material-requests", icon: "FileText", menu: "supply.materialRequests" },
+          { label: "Request for Quotation", href: "/app/rfq", icon: "FileText", menu: "supply.purchaseRequests" },
         ],
       },
       {

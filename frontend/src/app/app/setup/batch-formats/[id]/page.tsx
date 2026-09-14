@@ -3,7 +3,7 @@ import { FormSkeleton } from "@/components/ui/skeleton";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { BatchFormatEditor } from "@/components/batch/format-editor";
-import { FormPage } from "@/components/ui/form-page";
+import { FormPage, FormSection } from "@/components/ui/form-page";
 import { useBatchFormats, useRemove } from "@/lib/api/query";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 export default function EditBatchFormatPage() {
   const params = useParams<{ id: string }>();
@@ -91,7 +92,9 @@ export default function EditBatchFormatPage() {
         }
       >
         <BatchFormatEditor key={format.id} format={format} readOnly={!editing} hideInternalActions={!editing} onSaved={() => setEditing(false)} />
-      
+        <FormSection title="Aktivitas">
+          <ActivityTimeline documentType="BATCH_FORMAT" documentId={params.id!} />
+        </FormSection>
       </FormPage>
     </RoleGuard>
   );

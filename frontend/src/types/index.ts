@@ -995,4 +995,88 @@ export interface WorkflowTransition {
   updatedAt?: string;
 }
 
+export type RfqStatus = "DRAFT" | "SENT" | "QUOTED" | "AWARDED" | "CLOSED" | "CANCELED";
+export type QuotationStatus = "DRAFT" | "SUBMITTED" | "REJECTED" | "AWARDED";
+
+export interface RfqLine {
+  id: string;
+  rfqId?: string;
+  itemId: string;
+  uomId: string;
+  qty: string;
+  note?: string | null;
+}
+
+export interface RfqSupplier {
+  id: string;
+  rfqId: string;
+  supplierId: string;
+  supplierName: string;
+  supplierCode?: string;
+  status: string;
+}
+
+export interface SupplierQuotationLine {
+  id: string;
+  quotationId?: string;
+  rfqLineId?: string | null;
+  itemId: string;
+  itemCode?: string;
+  itemName?: string;
+  uomId: string;
+  uomName?: string;
+  qty: string;
+  unitPrice?: string | null;
+  discount?: string | null;
+  subtotal?: string | null;
+  note?: string | null;
+}
+
+export interface SupplierQuotation {
+  id: string;
+  _internalId?: number;
+  rfqId: string;
+  supplierId: string;
+  supplierName?: string;
+  quotationNo?: string | null;
+  quotationDate: string;
+  validUntil?: string | null;
+  currency: string;
+  notes?: string | null;
+  status: QuotationStatus;
+  totalAmount: string;
+  deliveryLeadTime?: string | null;
+  paymentTerm?: string | null;
+  createdAt?: string;
+  lines?: SupplierQuotationLine[];
+}
+
+export interface Rfq {
+  id: string;
+  publicId?: string;
+  documentNo?: string | null;
+  warehouseId: string;
+  warehouseName?: string | null;
+  purchaseRequestId?: string | null;
+  purchaseRequestNo?: string | null;
+  requestDate: string;
+  quotationDeadline?: string | null;
+  expectedDate?: string | null;
+  status: RfqStatus;
+  notes?: string | null;
+  currency: string;
+  awardedSupplierId?: string | null;
+  awardedSupplierName?: string | null;
+  awardedAt?: string | null;
+  branchId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  lines?: RfqLine[];
+  suppliers?: RfqSupplier[];
+  quotations?: SupplierQuotation[];
+  linesCount?: number;
+  suppliersCount?: number;
+  quotationsCount?: number;
+}
+
 

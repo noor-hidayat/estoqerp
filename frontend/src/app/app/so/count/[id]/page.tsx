@@ -22,6 +22,7 @@ import {
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ShellLoader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 interface DetailDraft {
   key: string;
@@ -447,6 +448,12 @@ export default function CountDetailPage() {
           </div>
         </div>
         )}
+        <div className="mt-6">
+          <div className="rounded-xl border border-border bg-card p-5">
+            <h3 className="mb-3 text-sm font-semibold">Aktivitas</h3>
+            <ActivityTimeline documentType="SOC" documentId={id!} />
+          </div>
+        </div>
       </FormPage>
     </div>
   );

@@ -25,6 +25,28 @@ const DOC_TABLE_MAP: Record<string, any> = {
   SMV: s.stockMovements,
   OPJ: s.opnameProjects,
   SOC: s.opnameCounts,
+  // Master setup (CRUD generic)
+  ITEM: s.items,
+  ITEM_GROUP: s.itemGroups,
+  WAREHOUSE: s.warehouses,
+  BRANCH: s.branches,
+  LOCATION: s.locations,
+  UOM: s.uom,
+  DEPARTMENT: (s as any).departments,
+  TAX_CATEGORY: (s as any).taxCategories,
+  PRICE_LIST: (s as any).priceLists,
+  PRICE_LIST_LINE: (s as any).priceListLines,
+  MOVEMENT_TYPE: s.movementTypes,
+  SUPPLIER: s.suppliers,
+  CUSTOMER: s.customers,
+  ROLE: s.roles,
+  USER: s.users,
+  BATCH: s.batches,
+  STOCK_BATCH: s.stockBatches,
+  STOCK_BARCODE: s.stockBarcodes,
+  BATCH_FORMAT: s.batchFormats,
+  BARCODE_FORMAT: s.barcodeFormats,
+  WORKSPACE: s.workspaces,
 };
 
 const DOC_MENU_MAP: Record<string, string> = {
@@ -41,6 +63,27 @@ const DOC_MENU_MAP: Record<string, string> = {
   SMV: "inventory.transactions",
   OPJ: "opname",
   SOC: "opname",
+  ITEM: "master.items",
+  ITEM_GROUP: "master.itemGroups",
+  WAREHOUSE: "inventory.warehouses",
+  BRANCH: "inventory.branches",
+  LOCATION: "inventory.locations",
+  UOM: "master.uom",
+  DEPARTMENT: "master.departments",
+  TAX_CATEGORY: "master.taxCategories",
+  PRICE_LIST: "master.priceLists",
+  PRICE_LIST_LINE: "master.priceLists",
+  MOVEMENT_TYPE: "master.movementTypes",
+  SUPPLIER: "supply.suppliers",
+  CUSTOMER: "supply.customers",
+  ROLE: "settings.roles",
+  USER: "settings.users",
+  BATCH: "inventory.batches",
+  STOCK_BATCH: "inventory.batches",
+  STOCK_BARCODE: "inventory.batches",
+  BATCH_FORMAT: "master.batchFormats",
+  BARCODE_FORMAT: "master.barcodeFormats",
+  WORKSPACE: "settings.roles",
 };
 
 async function resolveInternalId(table: any, pid: string): Promise<number | null> {
@@ -174,8 +217,8 @@ async function syntheticEvents(documentType: string, docRow: any, table: any): P
     }
   }
 
-  // sort by createdAt
-  events.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  // sort by createdAt - terbaru di atas (desc)
+  events.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   return events;
 }
 
@@ -199,12 +242,12 @@ activityLogsRouter.get("/activity-logs", async (req, res, next) => {
     const internalId = await resolveInternalId(table, documentIdRaw);
     if (!internalId) return res.json([]);
 
-    // fetch real activities
+    // fetch real activities - terbaru di atas
     const rows = await db
       .select()
       .from(s.documentActivities)
       .where(and(eq(s.documentActivities.documentType, dt), eq(s.documentActivities.documentId, internalId)))
-      .orderBy(asc(s.documentActivities.createdAt));
+      .orderBy(desc(s.documentActivities.createdAt));
 
     // if no real logs, synthesize from document row
     let out: any[] = rows.map((r: any) => ({ ...r, isBackfilled: false }));
@@ -220,7 +263,7 @@ activityLogsRouter.get("/activity-logs", async (req, res, next) => {
     const userIds = out.map((r: any) => r.actorUserId).filter(Boolean);
     const userMap = await enrichUsers(userIds as number[]);
 
-    const enriched = out.map((r: any) => ({
+    let enriched = out.map((r: any) => ({
       id: r.publicId ?? r.id,
       publicId: r.publicId ?? null,
       documentType: r.documentType,
@@ -236,6 +279,12 @@ activityLogsRouter.get("/activity-logs", async (req, res, next) => {
       createdAt: r.createdAt,
       isBackfilled: !!r.isBackfilled,
     }));
+    // limit param for retention-forever pagination (client can send ?limit=50) - desc order jadi ambil paling atas
+    const limitRaw = (req.query as any).limit ?? (req.query as any).pageSize;
+    const limitNum = limitRaw ? Number(limitRaw) : null;
+    if (limitNum && Number.isFinite(limitNum) && limitNum > 0 && limitNum < 1000) {
+      enriched = enriched.slice(0, limitNum);
+    }
 
     res.json(enriched);
   } catch (e) {
@@ -265,7 +314,7 @@ activityLogsRouter.get("/activity-logs/:documentType/:documentId", async (req, r
       .select()
       .from(s.documentActivities)
       .where(and(eq(s.documentActivities.documentType, dt), eq(s.documentActivities.documentId, internalId)))
-      .orderBy(asc(s.documentActivities.createdAt));
+      .orderBy(desc(s.documentActivities.createdAt));
     let out: any[] = rows.map((r: any) => ({ ...r, isBackfilled: false }));
     if (out.length === 0) {
       const [docRow] = await db.select().from(table).where(eq(table.id, internalId)).limit(1);
@@ -273,7 +322,7 @@ activityLogsRouter.get("/activity-logs/:documentType/:documentId", async (req, r
     }
     const userIds = out.map((r: any) => r.actorUserId).filter(Boolean);
     const userMap = await enrichUsers(userIds as number[]);
-    const enriched = out.map((r: any) => ({
+    let enriched2 = out.map((r: any) => ({
       id: r.publicId ?? r.id,
       publicId: r.publicId ?? null,
       documentType: r.documentType,
@@ -289,7 +338,10 @@ activityLogsRouter.get("/activity-logs/:documentType/:documentId", async (req, r
       createdAt: r.createdAt,
       isBackfilled: !!r.isBackfilled,
     }));
-    res.json(enriched);
+    const limitRaw2 = (req.query as any).limit ?? (req.query as any).pageSize;
+    const limitNum2 = limitRaw2 ? Number(limitRaw2) : null;
+    if (limitNum2 && Number.isFinite(limitNum2) && limitNum2 > 0 && limitNum2 < 1000) enriched2 = enriched2.slice(0, limitNum2);
+    res.json(enriched2);
   } catch (e) {
     next(e);
   }

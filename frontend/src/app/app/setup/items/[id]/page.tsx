@@ -21,6 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 export default function EditItemPage() {
   const { id } = useParams<{ id: string }>();
@@ -253,6 +254,9 @@ export default function EditItemPage() {
               <Switch checked={!!form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: !!v })} disabled={!editing} />
             </div>
           </FormGrid>
+          </FormSection>
+          <FormSection title="Aktivitas">
+            <ActivityTimeline documentType="ITEM" documentId={id!} />
           </FormSection>
         </FormPage>
     </RoleGuard>

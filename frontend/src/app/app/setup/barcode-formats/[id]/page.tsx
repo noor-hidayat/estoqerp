@@ -3,7 +3,7 @@ import { FormSkeleton } from "@/components/ui/skeleton";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { FormatEditor } from "@/components/barcode/format-editor";
-import { FormPage } from "@/components/ui/form-page";
+import { FormPage, FormSection } from "@/components/ui/form-page";
 import { useBarcodeFormats, useRemove } from "@/lib/api/query";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 
 export default function EditBarcodeFormatPage() {
   const params = useParams<{ id: string }>();
@@ -100,7 +101,9 @@ export default function EditBarcodeFormatPage() {
         }
       >
         <FormatEditor key={format.id} format={format} readOnly={!editing} hideInternalActions={!editing} onSaved={() => setEditing(false)} />
-      
+        <FormSection title="Aktivitas">
+          <ActivityTimeline documentType="BARCODE_FORMAT" documentId={params.id!} />
+        </FormSection>
       </FormPage>
     </RoleGuard>
   );
