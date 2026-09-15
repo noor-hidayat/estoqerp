@@ -85,7 +85,7 @@ export default function TransactionsPage() {
       header: "Type",
       sortValue: (m) => m.typeName ?? "",
       cell: (m) => (
-        <span className="text-xs text-foreground">{m.typeName ?? m.typeCode ?? "—"}</span>
+        <span className="text-xs text-foreground">{m.typeName ?? m.typeCode ?? ""}</span>
       ),
       className: "whitespace-nowrap",
     },
@@ -112,7 +112,7 @@ export default function TransactionsPage() {
       header: "By",
       sortValue: (m) => m.createdByName ?? "",
       cell: (m) => (
-        <span className="text-xs text-muted-foreground">{m.createdByName ?? "—"}</span>
+        <span className="text-xs text-muted-foreground">{m.createdByName ?? ""}</span>
       ),
     },
     {

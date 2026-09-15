@@ -219,8 +219,13 @@ export const NAV: NavGroup[] = [
         children: [
           { label: "Purchase Request", href: "/app/purchase-requests", icon: "FileText", menu: "supply.purchaseRequests" },
           { label: "Material Request", href: "/app/material-requests", icon: "FileText", menu: "supply.materialRequests" },
-          { label: "Request for Quotation", href: "/app/rfq", icon: "FileText", menu: "supply.purchaseRequests" },
         ],
+      },
+      {
+        label: "Request for Quotation",
+        href: "/app/rfq",
+        icon: "FileText",
+        menu: "supply.purchaseOrders",
       },
       {
         label: "Purchase Orders",
@@ -546,6 +551,7 @@ export const QUALITY_NAV: NavGroup[] = [
 
 // ---------------------------------------------------------------------------
 // Workspace Purchasing — hanya menu relevan procurement.
+// Request (PR/MR) terpisah dari RFQ/Quotation yang khusus purchasing.
 // ---------------------------------------------------------------------------
 export const PURCHASING_NAV: NavGroup[] = [
   {
@@ -566,8 +572,13 @@ export const PURCHASING_NAV: NavGroup[] = [
         children: [
           { label: "Purchase Request", href: "/app/purchase-requests", icon: "FileText", menu: "supply.purchaseRequests" },
           { label: "Material Request", href: "/app/material-requests", icon: "FileText", menu: "supply.materialRequests" },
-          { label: "Request for Quotation", href: "/app/rfq", icon: "FileText", menu: "supply.purchaseRequests" },
         ],
+      },
+      {
+        label: "Request for Quotation",
+        href: "/app/rfq",
+        icon: "FileText",
+        menu: "supply.purchaseOrders",
       },
       {
         label: "Purchase Orders",

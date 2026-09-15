@@ -43,9 +43,9 @@ export default function DeliveryDetailPage() {
   useErrorToast(error);
   const [editing, setEditing] = useState(false);
 
-  const customerName = (cid?: string | null) => (cid ? customers.find((c) => c.id === cid)?.name ?? "—" : "—");
-  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "—";
-  const soNo = (sid?: string | null) => (sid ? salesOrders.find((s) => s.id === sid)?.soNo ?? formatId(sid) : "—");
+  const customerName = (cid?: string | null) => (cid ? customers.find((c) => c.id === cid)?.name ?? "" : "");
+  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "";
+  const soNo = (sid?: string | null) => (sid ? salesOrders.find((s) => s.id === sid)?.soNo ?? formatId(sid) : "");
 
   if (isLoading) {
     return (
@@ -230,11 +230,11 @@ export default function DeliveryDetailPage() {
         <div className="space-y-6">
           <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
             <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-              <Detail label="Sales Order" value={dlv.salesOrderId ? String(soNo(dlv.salesOrderId)) : "—"} />
+              <Detail label="Sales Order" value={dlv.salesOrderId ? String(soNo(dlv.salesOrderId)) : ""} />
               <Detail label="Customer" value={customerName(dlv.customerId)} />
               <Detail label="Warehouse" value={warehouseName(dlv.warehouseId)} />
-              <Detail label="Delivery Date" value={dlv.deliveryDate?.slice(0, 10) ?? "—"} />
-              <Detail label="Notes" value={(dlv as any).notes || "—"} />
+              <Detail label="Delivery Date" value={dlv.deliveryDate?.slice(0, 10) ?? ""} />
+              <Detail label="Notes" value={(dlv as any).notes || ""} />
             </dl>
           </div>
           <div>

@@ -74,6 +74,7 @@ async function ensureDocumentTypes() {
     { name: "Stock Opname Count", prefix: "SOC", description: "Hitung Stok Opname" },
     { name: "Opname Project", prefix: "OPJ", description: "Project Opname" },
     { name: "Request for Quotation", prefix: "RFQ", description: "Permintaan Penawaran Harga" },
+    { name: "QC Inspection", prefix: "QC", description: "Inspeksi Quality Control" },
   ];
   for (const t of types) {
     const [inserted] = await db.insert(documentTypes).values({ name: t.name, description: t.description, isActive: true }).returning();
@@ -166,6 +167,29 @@ async function ensureRfqDocType() {
       isActive: true,
     });
     console.log(`Default RFQ series (RFQ) created`);
+  }
+}
+
+async function ensureQcDocType() {
+  let [type] = await db.select().from(documentTypes).where(eq(documentTypes.name, "QC Inspection")).limit(1);
+  if (!type) {
+    [type] = await db.insert(documentTypes).values({ name: "QC Inspection", description: "Inspeksi Quality Control", isActive: true }).returning();
+    console.log(`Document type QC Inspection created`);
+  }
+  let [series] = await db.select().from(documentSeries).where(eq(documentSeries.documentTypeId, type.id)).limit(1);
+  if (!series) {
+    await db.insert(documentSeries).values({
+      documentTypeId: type.id,
+      name: "Default QC Inspection",
+      prefix: "QC",
+      format: "{PREFIX}-{YYMM}-{SEQ:4}",
+      padding: 4,
+      resetPolicy: "MONTHLY",
+      isDefault: true,
+      branchSpecific: false,
+      isActive: true,
+    });
+    console.log(`Default QC series (QC) created`);
   }
 }
 
@@ -270,6 +294,7 @@ async function main() {
   await ensureReceivingDocType();
   await ensurePurchaseRequestDocType();
   await ensureRfqDocType();
+  await ensureQcDocType();
   // Note: dummy data intentionally not seeded per request (data dummy di hapus)
   // If you need to wipe old dummy data, uncomment truncate section below
   // await db.execute(sql`TRUNCATE ... CASCADE`)

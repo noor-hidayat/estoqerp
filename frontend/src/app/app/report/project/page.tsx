@@ -74,7 +74,7 @@ export default function ProjectReportPage() {
     return {
       code: item?.code ?? r.code,
       name: item?.name ?? r.name,
-      itemGroup: ig?.name ?? "—",
+      itemGroup: ig?.name ?? "",
       unit: r.unit,
       warehouseName: r.warehouseName,
       systemQty: r.systemQty,
@@ -125,7 +125,7 @@ export default function ProjectReportPage() {
       cell: (r) => {
         const item = items.find((i) => i.id === r.itemId);
         const ig = itemGroups.find((c) => c.id === item?.itemGroupId);
-        return <span className="text-xs text-muted-foreground">{ig?.name ?? "—"}</span>;
+        return <span className="text-xs text-muted-foreground">{ig?.name ?? ""}</span>;
       },
     },
     {

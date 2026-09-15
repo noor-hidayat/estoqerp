@@ -73,15 +73,15 @@ export default function BatchesPage() {
           key: `${b.id}|none`,
           batchId: b.id,
           itemId: b.itemId,
-          itemCode: item?.code ?? "—",
-          itemName: item?.name ?? "—",
+          itemCode: item?.code ?? "",
+          itemName: item?.name ?? "",
           batchNumber: b.batchNumber,
           status: b.status,
           productionDate: b.productionDate ?? null,
           expiryDate: b.expiryDate ?? null,
           shift: b.shift ?? null,
           warehouseId: null,
-          warehouseLabel: "—",
+          warehouseLabel: "",
           qty: 0,
         });
       } else {
@@ -91,8 +91,8 @@ export default function BatchesPage() {
             key: `${b.id}|${s.warehouseId}`,
             batchId: b.id,
             itemId: b.itemId,
-            itemCode: item?.code ?? "—",
-            itemName: item?.name ?? "—",
+            itemCode: item?.code ?? "",
+            itemName: item?.name ?? "",
             batchNumber: b.batchNumber,
             status: b.status,
             productionDate: b.productionDate ?? null,
@@ -164,7 +164,7 @@ export default function BatchesPage() {
       sortValue: (r) => r.productionDate ?? "",
       cell: (r) => (
         <span className="whitespace-nowrap text-xs text-muted-foreground">
-          {r.productionDate ? formatDate(r.productionDate) : "—"}
+          {r.productionDate ? formatDate(r.productionDate) : ""}
         </span>
       ),
       className: "min-w-[100px]",
@@ -179,7 +179,7 @@ export default function BatchesPage() {
         return (
           <span className="flex items-center gap-1.5 whitespace-nowrap text-xs">
             <span className="text-muted-foreground">
-              {r.expiryDate ? formatDate(r.expiryDate) : "—"}
+              {r.expiryDate ? formatDate(r.expiryDate) : ""}
             </span>
             {expired && (
               <Badge tone="red">Expired</Badge>
@@ -195,7 +195,7 @@ export default function BatchesPage() {
       sortValue: (r) => r.shift ?? "",
       cell: (r) => (
         <span className="whitespace-nowrap text-xs text-muted-foreground">
-          {r.shift ?? "—"}
+          {r.shift ?? ""}
         </span>
       ),
       className: "min-w-[60px]",

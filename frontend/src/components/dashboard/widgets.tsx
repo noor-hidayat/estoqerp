@@ -113,9 +113,9 @@ function KpiWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
   const isCurrency = isCurrencyConfig(widget.config);
   const isPercent = isPercentConfig(widget.config);
   const formattedCompact = (() => {
-    if (raw === undefined || raw === null) return "—";
+    if (raw === undefined || raw === null) return "";
     const num = Number(raw);
-    if (!Number.isFinite(num)) return "—";
+    if (!Number.isFinite(num)) return "";
     if (isPercent) {
       const pct = Number(num.toFixed(2));
       const formatted = new Intl.NumberFormat("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(pct);
@@ -147,7 +147,7 @@ function KpiWidget({ widget, dragHandle, data: presetData, isLoading: presetLoad
       <CardHeader className="flex flex-col gap-1.5 p-4">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="truncate text-sm font-medium leading-tight" title={widget.config.title || ""}>
-            {widget.config.title || "—"}
+            {widget.config.title || ""}
           </CardTitle>
           {dragHandle}
         </div>
@@ -829,7 +829,7 @@ function TableWidget({ widget, dragHandle, data: presetData, isLoading: presetLo
                   <tr key={i} className="border-b last:border-0">
                     {cols.map((c) => (
                       <td key={c} className="px-4 py-2.5 tabular-nums">
-                        {typeof r[c] === "number" ? formatNumber(Number(r[c])) : String(r[c] ?? "—")}
+                        {typeof r[c] === "number" ? formatNumber(Number(r[c])) : String(r[c] ?? "")}
                       </td>
                     ))}
                   </tr>

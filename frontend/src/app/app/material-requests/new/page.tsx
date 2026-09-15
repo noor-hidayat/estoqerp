@@ -12,6 +12,7 @@ import {
   useExchangeRate,
   useCreateMaterialRequest,
   useWorkflows,
+  useDepartments,
 } from "@/lib/api/query";
 import { useSession } from "@/lib/session";
 import { RoleGuard } from "@/components/ui/role-guard";
@@ -20,6 +21,7 @@ import { DocMenu } from "@/components/ui/doc-menu";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSkeleton } from "@/components/ui/skeleton";
@@ -187,6 +189,15 @@ export default function NewMaterialRequestPage() {
   const { data: taxCategories = [] } = useTaxCategories();
   const { data: company } = useCompanySettings();
   const { data: workflows = [] } = useWorkflows();
+  const { data: departments = [] } = useDepartments();
+  const departmentOptions = useMemo(
+    () =>
+      (departments as any[])
+        .filter((d) => d.isActive !== false)
+        .sort((a, b) => String(a.code).localeCompare(String(b.code)))
+        .map((d) => ({ value: d.name, label: d.code ? `${d.code} - ${d.name}` : d.name })),
+    [departments]
+  );
   const hasDefaultMR = useMemo(
     () => (workflows as any[]).some((w) => String(w.documentType).toUpperCase() === "PR" && !!w.isDefault && w.isActive !== false),
     [workflows]
@@ -201,6 +212,7 @@ export default function NewMaterialRequestPage() {
     expectedDate: "",
     notes: "",
     department: "",
+    toDepartment: "",
     costCenter: "",
     branchId: "",
     currency: "",
@@ -282,6 +294,7 @@ export default function NewMaterialRequestPage() {
       requestDate: todayISO(),
       expectedDate: "",      notes: "",
       department: "",
+      toDepartment: "",
       costCenter: "",
       branchId: "",
       currency: (company as any)?.baseCurrency ?? "IDR",
@@ -310,6 +323,7 @@ export default function NewMaterialRequestPage() {
         requestDate: form.requestDate,
         expectedDate: form.expectedDate || null,        notes: form.notes.trim() || null,
         department: form.department.trim() || null,
+        toDepartment: form.toDepartment.trim() || null,
         costCenter: form.costCenter.trim() || null,
         branchId: form.branchId || null,
         currency: form.currency || baseCurrency,
@@ -416,25 +430,24 @@ export default function NewMaterialRequestPage() {
             </div>
           </div>
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-            <Input
+            <SearchableSelect
               label="From Department"
-              placeholder="e.g. Budi - Warehouse"
+              options={departmentOptions}
               value={form.department}
-              onChange={(e) => setForm({ ...form, department: e.target.value })}
+              onChange={(v) => setForm({ ...form, department: v })}
+              placeholder="Select department..."
+              emptyText="No department found"
+              emptyLabel="— No Department —"
             />
-            <Select
+            <SearchableSelect
               label="To Department"
-              value={form.branchId}
-              onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-              className="h-8"
-            >
-              <option value="">Select branch...</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </Select>
+              options={departmentOptions}
+              value={form.toDepartment}
+              onChange={(v) => setForm({ ...form, toDepartment: v })}
+              placeholder="Select department..."
+              emptyText="No department found"
+              emptyLabel="— No Department —"
+            />
           </div>
           {/* Notes | Target Warehouse */}
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -458,7 +471,7 @@ export default function NewMaterialRequestPage() {
                   const parent = (w as any).parentId ? warehouses.find((x) => x.id === (w as any).parentId) : null;
                   return (
                     <option key={w.id} value={w.id}>
-                      {(w as any).parentId ? `↳ ${w.name} (induk: ${parent?.name ?? "—"})` : w.name}
+                      {(w as any).parentId ? `↳ ${w.name} (induk: ${parent?.name ?? ""})` : w.name}
                     </option>
                   );
                 })}
@@ -473,7 +486,7 @@ export default function NewMaterialRequestPage() {
                     {wh.phone ? <div>Telp Gudang: {wh.phone}</div> : null}
                     {wh.email ? <div>Email Gudang: {wh.email}</div> : null}
                     {wh.address ? <div>Alamat: {wh.address}</div> : null}
-                    {wh.parentId ? <div className="text-muted-foreground">Induk: {warehouses.find((x) => x.id === wh.parentId)?.name ?? "—"}</div> : null}
+                    {wh.parentId ? <div className="text-muted-foreground">Induk: {warehouses.find((x) => x.id === wh.parentId)?.name ?? ""}</div> : null}
                   </div>
                 );
               })()}
@@ -489,11 +502,10 @@ export default function NewMaterialRequestPage() {
             currency={form.currency || baseCurrency}
             exchangeRate={form.exchangeRate}
             baseCurrency={baseCurrency}
+            variant="material-request"
           />
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <Input label="Total Quantity" value={formatNumber(totalQty)} disabled className="h-8 bg-zinc-100 text-sm" />
-            <div className="hidden sm:block" aria-hidden="true" />
-            <Input label="Total (IDR)" value={`Rp ${formatNumber(totalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
           </div>
         </FormSection>
       </FormPage>

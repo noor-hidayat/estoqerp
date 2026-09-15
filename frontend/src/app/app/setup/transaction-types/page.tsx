@@ -47,7 +47,7 @@ export default function TransactionTypesPage() {
       sortValue: (t) => t.kind,
       cell: (t) => (
         <span className="text-xs font-medium text-foreground">
-          {KIND_LABELS[t.kind] ?? t.kind ?? "—"}
+          {KIND_LABELS[t.kind] ?? t.kind ?? ""}
         </span>
       ),
     },
@@ -57,7 +57,7 @@ export default function TransactionTypesPage() {
       sortValue: (t) => t.series,
       cell: (t) => (
         <span className="text-xs text-muted-foreground">
-          {t.series ? `${t.series}-0001` : "—"}
+          {t.series ? `${t.series}-0001` : ""}
         </span>
       ),
     },

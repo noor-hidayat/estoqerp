@@ -10,7 +10,7 @@ export function cx(...parts: Array<string | false | null | undefined>) {
 }
 
 export function formatDate(iso?: string) {
-  if (!iso) return "—";
+  if (!iso) return "";
   return new Date(iso).toLocaleDateString("id-ID", {
     day: "numeric",
     month: "short",
@@ -19,7 +19,7 @@ export function formatDate(iso?: string) {
 }
 
 export function formatDateTime(iso?: string) {
-  if (!iso) return "—";
+  if (!iso) return "";
   return new Date(iso).toLocaleString("id-ID", {
     day: "numeric",
     month: "short",
@@ -30,7 +30,7 @@ export function formatDateTime(iso?: string) {
 }
 
 export function formatTime(iso?: string) {
-  if (!iso) return "—";
+  if (!iso) return "";
   return new Date(iso).toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
@@ -41,9 +41,9 @@ export function formatNumber(
   n: number | string | null | undefined,
   opts?: { minimumFractionDigits?: number; maximumFractionDigits?: number }
 ) {
-  if (n == null || n === "") return "—";
+  if (n == null || n === "") return "";
   const num = typeof n === "string" ? Number(n) : n;
-  if (!Number.isFinite(num)) return "—";
+  if (!Number.isFinite(num)) return "";
   const minimumFractionDigits = opts?.minimumFractionDigits ?? 0;
   const maximumFractionDigits = opts?.maximumFractionDigits ?? 3;
   return new Intl.NumberFormat("id-ID", {
@@ -60,7 +60,7 @@ export function formatQty(n: number | string | null | undefined) {
  * Format Rupiah: Rp 10.000 (desimal hanya muncul bila ada, maks 2 digit).
  */
 export function formatIDR(n: number) {
-  if (!Number.isFinite(n)) return "—";
+  if (!Number.isFinite(n)) return "";
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
@@ -75,7 +75,7 @@ export function formatIDR(n: number) {
  * Desimal maks 1 digit, trailing .0 dihapus (1500 -> 1.5K, 15000 -> 15K).
  */
 export function formatCompact(n: number, decimals = 1) {
-  if (!Number.isFinite(n)) return "—";
+  if (!Number.isFinite(n)) return "";
   const abs = Math.abs(n);
   if (abs < 1000) return formatNumber(n);
   const units: Array<[number, string]> = [
@@ -106,7 +106,7 @@ export function formatCompact(n: number, decimals = 1) {
 
 /** Format id internal (ses_2608_0001) → tampilan rapi (SES-2608-0001). */
 export function formatId(id?: string | number | null): string {
-  if (id == null || id === "") return "—";
+  if (id == null || id === "") return "";
   return String(id).toUpperCase().replace(/_/g, "-");
 }
 
@@ -131,7 +131,7 @@ export function relativeTime(iso: string) {
 
 /** Waktu relatif ringkas: just now, 1m, 5h, 3d, 2w, 4M, 1y */
 export function timeAgo(iso?: string): string {
-  if (!iso) return "—";
+  if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
   if (diff < 60_000) return "just now";
   const mins = Math.floor(diff / 60_000);

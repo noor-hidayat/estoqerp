@@ -41,7 +41,7 @@ export default function GoodsReceiptDetailPage() {
   useErrorToast(error);
   const [editing, setEditing] = useState(false);
 
-  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "—";
+  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "";
 
   const [form, setForm] = useState({
     warehouseId: "",
@@ -223,8 +223,8 @@ export default function GoodsReceiptDetailPage() {
                 </dd>
               </div>
               <Detail label="Warehouse" value={warehouseName(gr.warehouseId)} />
-              <Detail label="Receipt Date" value={gr.receiptDate?.slice(0, 10) ?? "—"} />
-              <Detail label="Notes" value={gr.notes || "—"} />
+              <Detail label="Receipt Date" value={gr.receiptDate?.slice(0, 10) ?? ""} />
+              <Detail label="Notes" value={gr.notes || ""} />
             </dl>
           </div>
           <div>

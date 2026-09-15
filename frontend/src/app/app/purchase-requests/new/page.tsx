@@ -12,6 +12,7 @@ import {
   useExchangeRate,
   useCreatePurchaseRequest,
   useWorkflows,
+  useDepartments,
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { DocMenu } from "@/components/ui/doc-menu";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSkeleton } from "@/components/ui/skeleton";
@@ -186,6 +188,15 @@ export default function NewPurchaseRequestPage() {
   const { data: taxCategories = [] } = useTaxCategories();
   const { data: company } = useCompanySettings();
   const { data: workflows = [] } = useWorkflows();
+  const { data: departments = [] } = useDepartments();
+  const departmentOptions = useMemo(
+    () =>
+      (departments as any[])
+        .filter((d) => d.isActive !== false)
+        .sort((a, b) => String(a.code).localeCompare(String(b.code)))
+        .map((d) => ({ value: d.name, label: d.code ? `${d.code} - ${d.name}` : d.name })),
+    [departments]
+  );
   const hasDefaultPR = useMemo(
     () => (workflows as any[]).some((w) => String(w.documentType).toUpperCase() === "PR" && !!w.isDefault && w.isActive !== false),
     [workflows]
@@ -424,20 +435,35 @@ export default function NewPurchaseRequestPage() {
             </div>
           </div>
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-            <Input
+            <SearchableSelect
               label="From Department"
-              placeholder="e.g. Budi - Purchasing"
+              options={departmentOptions}
               value={form.department}
-              onChange={(e) => setForm({ ...form, department: e.target.value })}
+              onChange={(v) => setForm({ ...form, department: v })}
+              placeholder="Select department..."
+              emptyText="No department found"
+              emptyLabel="— No Department —"
             />
-            <Input
+            <SearchableSelect
               label="To Department"
-              placeholder="e.g. Warehouse - Central"
+              options={departmentOptions}
               value={form.toDepartment}
-              onChange={(e) => setForm({ ...form, toDepartment: e.target.value })}
+              onChange={(v) => setForm({ ...form, toDepartment: v })}
+              placeholder="Select department..."
+              emptyText="No department found"
+              emptyLabel="— No Department —"
             />
           </div>
+          {/* Notes | Urgency */}
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
+              <Textarea
+                placeholder="Optional notes..."
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
+            </div>
             <Select
               label="Urgency"
               value={form.urgency}
@@ -448,14 +474,6 @@ export default function NewPurchaseRequestPage() {
               <option value="MEDIUM">Medium</option>
               <option value="HIGH">High</option>
             </Select>
-          </div>
-          <div className="mt-6">
-            <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
-            <Textarea
-              placeholder="Optional notes..."
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            />
           </div>
         </FormSection>
 
@@ -470,8 +488,6 @@ export default function NewPurchaseRequestPage() {
           />
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <Input label="Total Quantity" value={formatNumber(totalQty)} disabled className="h-8 bg-zinc-100 text-sm" />
-            <div className="hidden sm:block" aria-hidden="true" />
-            <Input label="Total (IDR)" value={`Rp ${formatNumber(totalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
           </div>
         </FormSection>
       </FormPage>

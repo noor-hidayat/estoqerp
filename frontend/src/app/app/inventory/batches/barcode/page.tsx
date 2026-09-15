@@ -44,7 +44,7 @@ export default function BatchBarcodesPage() {
       sortValue: (r) => itemMap.get(r.itemId ?? "")?.code ?? "",
       cell: (r) => (
         <span className="whitespace-nowrap text-xs font-medium text-foreground">
-          {itemMap.get(r.itemId ?? "")?.code ?? "—"}
+          {itemMap.get(r.itemId ?? "")?.code ?? ""}
         </span>
       ),
       className: "min-w-[100px]",
@@ -55,7 +55,7 @@ export default function BatchBarcodesPage() {
       sortValue: (r) => itemMap.get(r.itemId ?? "")?.name ?? "",
       cell: (r) => (
         <span className="block max-w-[280px] truncate text-[13px] font-medium text-foreground">
-          {itemMap.get(r.itemId ?? "")?.name ?? "—"}
+          {itemMap.get(r.itemId ?? "")?.name ?? ""}
         </span>
       ),
       className: "min-w-[180px]",

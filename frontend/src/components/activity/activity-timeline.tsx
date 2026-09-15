@@ -27,6 +27,7 @@ type Activity = {
   documentId: number;
   actorUserId: number | null;
   actorName: string | null;
+  actorEmail: string | null;
   actorRole: string | null;
   action: string;
   fromStatus: string | null;
@@ -291,7 +292,7 @@ function Sentence({ actor, label, from, to, suffix }: { actor: string; label?: s
 }
 
 function sentencesFor(a: Activity): React.ReactNode[] {
-  const actor = a.actorName ?? "System";
+  const actor = a.actorEmail ?? a.actorName ?? "System";
   const act = a.action?.toLowerCase();
   const ago = timeAgo(a.createdAt);
   const nodes: React.ReactNode[] = [];

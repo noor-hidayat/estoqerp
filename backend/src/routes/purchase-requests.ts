@@ -601,7 +601,7 @@ purchaseRequestRouter.post("/purchase-requests/:id/create-po", async (req, res, 
     const lines = await prLines(db, pr.id);
     const supplierId = req.body?.supplierId ? await resolveInternalId(s.suppliers, String(req.body.supplierId)) : null;
     if (!supplierId) return res.status(400).json({ error: "supplierId wajib untuk PO (isi di body)." });
-    const { documentNo } = await db.transaction(async (tx) => {
+    const { documentNo, id: poInternalId, publicId: poPublicId } = await db.transaction(async (tx) => {
       const doc = await nextDocumentNo(tx as any, "PO", { branchId: pr.branchId ?? undefined, date: new Date() });
       const [po] = await tx.insert(s.purchaseOrders).values({
         documentNo: doc.documentNo,
@@ -640,7 +640,13 @@ purchaseRequestRouter.post("/purchase-requests/:id/create-po", async (req, res, 
       return { documentNo: doc.documentNo, id: po.id, publicId: po.publicId };
     });
     const [created] = await db.select({ publicId: s.purchaseOrders.publicId }).from(s.purchaseOrders).where(eq(s.purchaseOrders.documentNo, documentNo)).limit(1);
-    try { const { internalId, role } = await getActorInfo(req); await logActivity({ documentType: "PR", documentId: pr.id, action: "convert", fromStatus: pr.status, toStatus: pr.status, actorUserId: internalId, actorRole: role, metadata: { targetType: "PO", targetDocumentNo: documentNo, targetPublicId: created.publicId } }); } catch {}
-    res.status(201).json({ id: created.publicId, documentNo });
+    const targetPublicId = created?.publicId ?? poPublicId;
+    try {
+      const { internalId, role } = await getActorInfo(req);
+      await logActivity({ documentType: "PR", documentId: pr.id, action: "convert", fromStatus: pr.status, toStatus: pr.status, actorUserId: internalId, actorRole: role, metadata: { targetType: "PO", targetDocumentNo: documentNo, targetPublicId } });
+      // Also record on PO side so PO timeline shows source PR
+      await logActivity({ documentType: "PO", documentId: poInternalId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: internalId, actorRole: role, metadata: { documentNo, sourceType: "PR", sourceDocumentNo: pr.documentNo, sourcePublicId: pr.publicId, sourceId: pr.id } });
+    } catch {}
+    res.status(201).json({ id: targetPublicId, documentNo });
   } catch (e) { next(e); }
 });

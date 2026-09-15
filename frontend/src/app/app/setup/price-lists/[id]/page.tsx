@@ -289,8 +289,8 @@ export default function EditPriceListPage() {
                         const lineCustomerName = (l as any)?.customerId ? customers.find((c: any) => c.id === (l as any).customerId)?.name ?? null : null;
                         const plSupplierName = (pl as any)?.supplierId ? suppliers.find((s: any) => s.id === (pl as any).supplierId)?.name ?? null : null;
                         const plCustomerName = (pl as any)?.customerId ? customers.find((c: any) => c.id === (pl as any).customerId)?.name ?? null : null;
-                        const supplierName = lineSupplierName ?? plSupplierName ?? "—";
-                        const customerName = lineCustomerName ?? plCustomerName ?? "—";
+                        const supplierName = lineSupplierName ?? plSupplierName ?? "";
+                        const customerName = lineCustomerName ?? plCustomerName ?? "";
                         const globalIdx = (page-1)*pageSize + idx;
                         return (
                           <TableRow key={l.id} className="hover:bg-muted/50">
@@ -324,7 +324,7 @@ export default function EditPriceListPage() {
                               />
                             </TableCell>
                             <TableCell className="w-[100px] text-left">
-                              <span className="text-xs">{uom?.name ?? "—"}</span>
+                              <span className="text-xs">{uom?.name ?? ""}</span>
                             </TableCell>
                           </TableRow>
                         );
@@ -382,7 +382,7 @@ export default function EditPriceListPage() {
                           {(() => {
                             const it = items.find((i: any) => i.id === addForm.itemId) as any;
                             const uom = it?.uomId ? uoms.find((u: any) => u.id === it.uomId)?.name : null;
-                            return uom ?? "—";
+                            return uom ?? "";
                           })()}
                         </div>
                         <span className="text-[11px] text-muted-foreground">Diambil dari master item</span>

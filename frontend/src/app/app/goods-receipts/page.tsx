@@ -20,8 +20,8 @@ export default function GoodsReceiptsPage() {
   const { data: pos = [] } = usePurchaseOrders();
   const { data: warehouses = [] } = useAllWarehouses();
 
-  const poNo = (id: string) => pos.find((p) => p.id === id)?.poNo ?? "—";
-  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "—";
+  const poNo = (id: string) => pos.find((p) => p.id === id)?.poNo ?? "";
+  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "";
 
   const filtered = useMemo(
     () =>

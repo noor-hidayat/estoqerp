@@ -21,9 +21,9 @@ export default function DeliveriesPage() {
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: salesOrders = [] } = useSalesOrders();
 
-  const customerName = (id?: string | null) => (id ? customers.find((c) => c.id === id)?.name ?? "—" : "—");
-  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "—";
-  const soNo = (id?: string | null) => (id ? salesOrders.find((s) => s.id === id)?.soNo ?? formatId(id) : "—");
+  const customerName = (id?: string | null) => (id ? customers.find((c) => c.id === id)?.name ?? "" : "");
+  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "";
+  const soNo = (id?: string | null) => (id ? salesOrders.find((s) => s.id === id)?.soNo ?? formatId(id) : "");
 
   const filtered = useMemo(
     () =>
@@ -45,7 +45,7 @@ export default function DeliveriesPage() {
     {
       id: "salesOrder",
       header: "Sales Order",
-      cell: (d) => <span className="font-medium text-foreground">{d.salesOrderId ? `SO ${soNo(d.salesOrderId)}` : "—"}</span>,
+      cell: (d) => <span className="font-medium text-foreground">{d.salesOrderId ? `SO ${soNo(d.salesOrderId)}` : ""}</span>,
       sortValue: (d) => String(d.salesOrderId ?? ""),
     },
     {

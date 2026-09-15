@@ -467,7 +467,7 @@ export default function NewPurchaseOrderPage() {
             </div>
 
             {/* Baris 2: Purchaser Name | Expected Date */}
-            <Input label="Purchaser Name" value={user?.name ?? "—"} disabled placeholder="Auto dari akun" />
+            <Input label="Purchaser Name" value={user?.name ?? ""} disabled placeholder="Auto dari akun" />
             <DatePicker
               label="Expected Date"
               value={form.expectedDate}
@@ -626,7 +626,7 @@ export default function NewPurchaseOrderPage() {
                     {wh.phone ? <div>Telp Gudang: {wh.phone}</div> : null}
                     {wh.email ? <div>Email Gudang: {wh.email}</div> : null}
                     {wh.address ? <div>Alamat: {wh.address}</div> : null}
-                    {wh.parentId ? <div className="text-muted-foreground">Induk: {warehouses.find((x) => x.id === wh.parentId)?.name ?? "—"}</div> : null}
+                    {wh.parentId ? <div className="text-muted-foreground">Induk: {warehouses.find((x) => x.id === wh.parentId)?.name ?? ""}</div> : null}
                   </div>
                 );
               })()}

@@ -210,7 +210,7 @@ router.get("/", async (req: Request, res: Response) => {
             warehouseId: whPublicMap.get(w.warehouseId) ?? String(w.warehouseId),
             _internalId: w.id,
             _warehouseInternalId: w.warehouseId,
-            warehouseName: whNameMap.get(w.warehouseId) ?? "—",
+            warehouseName: whNameMap.get(w.warehouseId) ?? "",
             status: w.status,
             pct: prog.pct,
             countedLokasi: prog.counted,
@@ -328,8 +328,8 @@ router.get("/:id/detail", async (req: Request, res: Response) => {
       const wh = whMap.get(w.warehouseId);
       return {
         ...w,
-        warehouseName: wh?.name ?? "—",
-        branchName: (wh && branchMap.get(wh.branchId)) ?? "—",
+        warehouseName: wh?.name ?? "",
+        branchName: (wh && branchMap.get(wh.branchId)) ?? "",
         totalLokasi: prog.total,
         countedLokasi: prog.counted,
         pct: prog.pct,
@@ -464,15 +464,15 @@ router.get("/:id/scans", async (req: Request, res: Response) => {
       const last = lastMap.get(sess.id);
       return {
         ...sess,
-        userName: sess.userName ?? "—",
+        userName: sess.userName ?? "",
         barcodes: Number(agg?.barcodes ?? 0),
         qty: Number(agg?.qty ?? 0),
         itemCount: Number(agg?.itemCount ?? 0),
         warehouses: whByScan.get(sess.id) ?? [],
         locations: locByScan.get(sess.id) ?? [],
         lastItemId: last?.itemId ?? null,
-        lastItemName: last?.itemName ?? "—",
-        lastItemUnit: last?.itemUnit ?? "—",
+        lastItemName: last?.itemName ?? "",
+        lastItemUnit: last?.itemUnit ?? "",
       };
     });
     res.json({
@@ -588,9 +588,9 @@ router.get("/:id/stats", async (req: Request, res: Response) => {
       itemId,
       itemCode: item.code,
       itemName: item.name,
-      unit: item.uomId ? (uomById.get(item.uomId)?.name ?? "—") : "—",
+      unit: item.uomId ? (uomById.get(item.uomId)?.name ?? "") : "",
       warehouseId,
-      warehouseName: whNameMap.get(warehouseId) ?? "—",
+      warehouseName: whNameMap.get(warehouseId) ?? "",
       systemQty,
       countedQty,
       diff: countedQty - systemQty,

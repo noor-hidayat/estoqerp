@@ -74,7 +74,7 @@ export default function SummaryReportPage() {
       return {
         id: p.id,
         name: p.name,
-        warehouse: p.warehouses.map((w) => w.warehouseName).join(", ") || "—",
+        warehouse: p.warehouses.map((w) => w.warehouseName).join(", ") || "",
         status: p.status,
         mode: p.mode,
         counted: progress.counted,

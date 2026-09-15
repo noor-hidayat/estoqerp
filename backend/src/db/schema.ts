@@ -1093,6 +1093,7 @@ export const materialRequests = pgTable(
     status: text("status", { enum: docStatuses }).notNull().default("DRAFT"),
     notes: text("notes"),
     department: text("department"),
+    toDepartment: text("to_department"),
     costCenter: text("cost_center"),
     currency: text("currency").notNull().default("IDR"),
     exchangeRate: numeric("exchange_rate", { precision: 15, scale: 6 }).notNull().default("1"),

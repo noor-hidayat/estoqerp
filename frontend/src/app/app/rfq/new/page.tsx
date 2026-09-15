@@ -1,28 +1,27 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, Trash2 } from "lucide-react";
 import {
   useAllWarehouses,
-  useBranches,
-  useUoms,
-  useItemsList,
   useSuppliers,
   usePurchaseRequests,
   usePurchaseRequest,
   useCreateRfq,
   useCompanySettings,
 } from "@/lib/api/query";
+import { Plus, Trash2 } from "lucide-react";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { FormPage, FormSection } from "@/components/ui/form-page";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TableInput } from "@/components/ui/table-input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
+import { SearchableSelect as TableSearchableSelect } from "@/components/ui/searchable-select";
+import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
 import { useErrorToast } from "@/hooks/use-error-toast";
+import { formatNumber } from "@/lib/utils";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -86,12 +85,7 @@ function SearchableSelect({
   );
 }
 
-interface RfqLineInput {
-  itemId: string;
-  uomId: string;
-  qty: string;
-  note: string;
-}
+
 
 export default function NewRfqPage() {
   const navigate = useNavigate();
@@ -99,9 +93,6 @@ export default function NewRfqPage() {
   const prIdParam = searchParams.get("prId");
   const { data: pr } = usePurchaseRequest(prIdParam || undefined);
   const { data: warehouses = [] } = useAllWarehouses();
-  const { data: branches = [] } = useBranches();
-  const { data: items = [] } = useItemsList();
-  const { data: uoms = [] } = useUoms();
   const { data: suppliers = [] } = useSuppliers();
   const { data: prs = [] } = usePurchaseRequests();
   const create = useCreateRfq();
@@ -120,8 +111,10 @@ export default function NewRfqPage() {
     currency: baseCurrency,
     branchId: "",
   });
-  const [lines, setLines] = useState<RfqLineInput[]>([{ itemId: "", uomId: "", qty: "", note: "" }]);
-  const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
+  const [lines, setLines] = useState<OrderLineInput[]>([emptyOrderLine()]);
+  // Supplier table: same UX as Items — default 1 empty row, typeable SearchableSelect inside table
+  const [supplierRows, setSupplierRows] = useState<string[]>([""]);
+  const [selectedSupplierRows, setSelectedSupplierRows] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (pr && prIdParam) {
@@ -136,8 +129,12 @@ export default function NewRfqPage() {
           pr.lines.map((l: any) => ({
             itemId: l.itemId,
             uomId: l.uomId,
-            qty: l.qty,
+            qty: String(l.qty),
+            unitPrice: "",
+            discount: "",
+            batchNumber: "",
             note: l.note ?? "",
+            deliveryDate: (l as any).deliveryDate ?? "",
           }))
         );
       }
@@ -148,25 +145,49 @@ export default function NewRfqPage() {
     if (!form.warehouseId && warehouses.length) setForm((f) => ({ ...f, warehouseId: warehouses[0].id }));
   }, [warehouses, form.warehouseId]);
 
-  // auto fill uom when item selected
-  const itemOptions = items.map((i: any) => ({ value: i.id, label: `${i.code}: ${i.name}` }));
-  const uomName = (id: string) => uoms.find((u) => u.id === id)?.name ?? "UOM";
+  const totalQty = lines.reduce((s, l) => s + Number(l.qty || 0), 0);
 
-  const setLine = (idx: number, patch: Partial<RfqLineInput>) => {
-    setLines((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const supplierOptions = (suppliers as any[])
+    .filter((s: any) => s.isActive !== false)
+    .map((s: any) => ({
+      value: s.id,
+      label: s.code ? `${s.code} — ${s.name}` : s.name,
+    }));
+
+  const setSupplierRow = (idx: number, value: string) => {
+    setSupplierRows((prev) => prev.map((v, i) => (i === idx ? value : v)));
   };
-
-  const toggleSupplier = (id: string, checked: boolean) => {
-    setSelectedSuppliers((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
+  const addSupplierRow = () => {
+    setSupplierRows((prev) => [...prev, ""]);
+  };
+  const toggleSupplierRow = (idx: number, checked: boolean) => {
+    setSelectedSupplierRows((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(idx);
+      else next.delete(idx);
+      return next;
+    });
+  };
+  const toggleAllSupplierRows = (checked: boolean) => {
+    if (checked) setSelectedSupplierRows(new Set(supplierRows.map((_, i) => i)));
+    else setSelectedSupplierRows(new Set());
+  };
+  const deleteSelectedSupplierRows = () => {
+    const next = supplierRows.filter((_, i) => !selectedSupplierRows.has(i));
+    setSupplierRows(next.length ? next : [""]);
+    setSelectedSupplierRows(new Set());
   };
 
   const submit = async () => {
     if (!form.warehouseId) return setErr("Warehouse wajib.");
     if (!form.requestDate) return setErr("Request date wajib.");
-    const valid = lines.filter((l) => l.itemId && l.uomId && l.qty);
-    if (valid.length === 0) return setErr("Minimal 1 line dengan item, uom, qty.");
+    const valid = lines.filter((l) => l.itemId && l.qty);
+    if (valid.length === 0) return setErr("Minimal 1 line dengan item, qty.");
     for (const l of valid) if (Number(l.qty) <= 0) return setErr("Qty harus >0");
-    if (selectedSuppliers.length === 0) return setErr("Pilih minimal 1 supplier.");
+    const validSuppliers = supplierRows.map((s) => s.trim()).filter(Boolean);
+    const uniqueSuppliers = [...new Set(validSuppliers)];
+    if (validSuppliers.length === 0) return setErr("Pilih minimal 1 supplier.");
+    if (uniqueSuppliers.length !== validSuppliers.length) return setErr("Supplier duplikat tidak diizinkan.");
     try {
       const res = await create.mutateAsync({
         warehouseId: form.warehouseId,
@@ -178,7 +199,7 @@ export default function NewRfqPage() {
         currency: form.currency || baseCurrency,
         branchId: form.branchId || null,
         lines: valid.map((l) => ({ itemId: l.itemId, uomId: l.uomId, qty: l.qty, note: l.note || null })),
-        supplierIds: selectedSuppliers,
+        supplierIds: uniqueSuppliers,
       });
       navigate(`/app/rfq/${(res as any).id}`);
     } catch (e) {
@@ -189,7 +210,7 @@ export default function NewRfqPage() {
   const prOptions = (prs as any[]).filter((p) => ["APPROVED", "POSTED"].includes(String(p.status).toUpperCase())).map((p) => ({ value: p.id, label: `${p.documentNo ?? p.prNo ?? p.id} - ${p.requestDate}` }));
 
   return (
-    <RoleGuard roles={[]} menus={["supply.purchaseRequests"]}>
+    <RoleGuard roles={[]} menus={["supply.purchaseOrders"]}>
       <FormPage
         title="New RFQ"
         actions={
@@ -244,85 +265,74 @@ export default function NewRfqPage() {
           </div>
         </FormSection>
 
-        <FormSection title="Items (tanpa harga)">
-          <div className="overflow-hidden rounded-lg border">
-            <Table>
-              <TableHeader className="bg-zinc-100">
-                <TableRow>
-                  <TableHead className="w-10 text-center">No</TableHead>
-                  <TableHead>Item Code</TableHead>
-                  <TableHead className="w-24">UOM</TableHead>
-                  <TableHead className="w-28 text-right">Qty</TableHead>
-                  <TableHead>Note</TableHead>
-                  <TableHead className="w-10"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lines.map((l, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="text-center text-sm">{idx + 1}</TableCell>
-                    <TableCell className="p-0 border-r">
-                      <SearchableSelect
-                        value={l.itemId}
-                        onChange={(v) => {
-                          const it = (items as any[]).find((x) => x.id === v);
-                          setLine(idx, { itemId: v, uomId: it?.uomId ?? l.uomId });
-                        }}
-                        options={itemOptions}
-                        placeholder="Select item..."
-                      />
-                    </TableCell>
-                    <TableCell className="text-xs">{uomName(l.uomId) ?? l.uomId ?? "—"}</TableCell>
-                    <TableCell className="p-0 border-r">
-                      <TableInput value={l.qty} onChange={(v) => setLine(idx, { qty: v })} columnTitle="Qty" isNumeric />
-                    </TableCell>
-                    <TableCell className="p-0">
-                      <TableInput value={l.note} onChange={(v) => setLine(idx, { note: v })} columnTitle="Note" />
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}>
-                        <Trash2 size={14} />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <div className="border-t p-3">
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setLines((prev) => [...prev, { itemId: "", uomId: "", qty: "", note: "" }])}>
-                <Plus size={14} /> Add Item
-              </Button>
-            </div>
+        <FormSection title="Lines">
+          <OrderLineTable
+            value={lines}
+            onChange={setLines}
+            currency={form.currency || baseCurrency}
+            baseCurrency={baseCurrency}
+            variant="rfq"
+          />
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <Input label="Total Quantity" value={formatNumber(totalQty)} disabled className="h-8 bg-zinc-100 text-sm" />
           </div>
         </FormSection>
 
         <FormSection title="Invite Suppliers (min 1)">
-          <div className="rounded-lg border p-4">
-            <div className="flex flex-wrap gap-2">
-              {selectedSuppliers.map((sid) => {
-                const s = (suppliers as any[]).find((x) => x.id === sid);
-                return (
-                  <Badge key={sid} variant="secondary" className="gap-1">
-                    {s?.name ?? sid}
-                    <button type="button" onClick={() => toggleSupplier(sid, false)} className="ml-1">
-                      ×
-                    </button>
-                  </Badge>
-                );
-              })}
+          <div className="overflow-hidden rounded-lg border border-border">
+            <Table className="table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0">
+              <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="w-8 px-2 text-center">
+                    <Checkbox
+                      checked={supplierRows.length > 0 && selectedSupplierRows.size === supplierRows.length ? true : selectedSupplierRows.size > 0 ? "indeterminate" : false}
+                      onCheckedChange={(v) => toggleAllSupplierRows(!!v)}
+                      aria-label="select all suppliers"
+                    />
+                  </TableHead>
+                  <TableHead className="w-10 px-3 text-center">No</TableHead>
+                  <TableHead className="px-3">Supplier</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="[&_tr]:border-border/70">
+                {supplierRows.map((sid, idx) => {
+                  const rowOptions = supplierOptions.filter((o) => !supplierRows.includes(o.value) || o.value === sid);
+                  return (
+                    <TableRow key={idx} className="border-border/70 hover:bg-transparent data-[state=selected]:bg-muted" data-state={selectedSupplierRows.has(idx) ? "selected" : undefined}>
+                      <TableCell className="px-2 text-center">
+                        <Checkbox checked={selectedSupplierRows.has(idx)} onCheckedChange={(v) => toggleSupplierRow(idx, !!v)} aria-label={`select supplier row ${idx + 1}`} />
+                      </TableCell>
+                      <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
+                      <TableCell className="p-0">
+                        <TableSearchableSelect
+                          table
+                          value={sid}
+                          onChange={(v) => setSupplierRow(idx, v)}
+                          options={rowOptions}
+                          placeholder="Ketik nama / kode supplier..."
+                          columnTitle="Supplier"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            <div className="border-t border-border p-3">
+              {selectedSupplierRows.size > 0 ? (
+                <Button variant="destructive" size="sm" className="h-7 gap-1 px-2.5 text-xs" onClick={deleteSelectedSupplierRows}>
+                  <Trash2 size={13} strokeWidth={2} />
+                  Delete
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-xs" onClick={addSupplierRow}>
+                  <Plus size={13} strokeWidth={2} />
+                  Add Row
+                </Button>
+              )}
             </div>
-            <div className="mt-3 grid max-h-48 gap-2 overflow-y-auto">
-              {(suppliers as any[]).map((s) => (
-                <label key={s.id} className="flex items-center gap-2 rounded border p-2 text-sm">
-                  <Checkbox checked={selectedSuppliers.includes(s.id)} onCheckedChange={(v) => toggleSupplier(s.id, !!v)} />
-                  <span className="font-medium">{s.code}</span>
-                  <span>{s.name}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{s.phone ?? ""}</span>
-                </label>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">Supplier terpilih akan mendapatkan dokumen RFQ terpisah saat Print (1 halaman per supplier).</p>
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">Supplier terpilih akan mendapatkan dokumen RFQ terpisah saat Print (1 halaman per supplier). Ketik di kolom Supplier untuk mencari.</p>
         </FormSection>
       </FormPage>
     </RoleGuard>

@@ -42,7 +42,7 @@ export default function NewQcInspectionPage() {
 
   const { data: receiving } = useReceiving(receivingId || undefined) as any;
   const supplierIdForReceiving = (receiving as any)?.supplierId ?? (pos.find((p: any) => p.id === (receiving as any)?.purchaseOrderId) as any)?.supplierId;
-  const supplierName = suppliers.find((s) => s.id === supplierIdForReceiving)?.name ?? "—";
+  const supplierName = suppliers.find((s) => s.id === supplierIdForReceiving)?.name ?? "";
   const postingDateFromReceiving = (receiving as any)?.receiptDate?.slice(0, 10) ?? "";
 
   useEffect(() => {

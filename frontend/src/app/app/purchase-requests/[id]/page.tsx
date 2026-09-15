@@ -1,8 +1,16 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
-import { X, Coins, ChevronDown, Briefcase, Printer, ChevronsUpDown, PackageCheck, FileText, Trash2 } from "lucide-react";
+import { X, Coins, ChevronDown, Briefcase, Printer, ChevronsUpDown, PackageCheck, FileText, Trash2, Truck, Building2, Search } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   usePurchaseRequest,
   useSuppliers,
@@ -23,6 +31,7 @@ import {
   useWorkflows,
   useWorkflowStates,
   useUserSignature,
+  useDepartments,
 } from "@/lib/api/query";
 import { useSession } from "@/lib/session";
 import { RoleGuard } from "@/components/ui/role-guard";
@@ -37,6 +46,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -198,9 +208,9 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 function formatDdMmmYyyy(dateStr?: string | null): string {
-  if (!dateStr) return "-";
+  if (!dateStr) return "";
   const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return "-";
+  if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 const CURRENCY_SYMBOLS: Record<string, string> = { IDR: "Rp", USD: "$", EUR: "€", SGD: "S$", JPY: "¥", CNY: "¥", MYR: "RM", THB: "฿", AUD: "A$" };
@@ -223,7 +233,7 @@ export default function PurchaseRequestDetailPage() {
   const createPO = useCreatePOFromPR();
   const [editing, setEditing] = useState(false);
 
-  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "—";
+  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "";
 
   if (isLoading) {
     return (
@@ -295,6 +305,15 @@ function PRBody({
   const { user } = useSession();
   const { data: taxCategories = [] } = useTaxCategories();
   const { data: branches = [] } = useBranches();
+  const { data: departments = [] } = useDepartments();
+  const departmentOptions = useMemo(
+    () =>
+      (departments as any[])
+        .filter((d) => d.isActive !== false)
+        .sort((a, b) => String(a.code).localeCompare(String(b.code)))
+        .map((d) => ({ value: d.name, label: d.code ? `${d.code} - ${d.name}` : d.name })),
+    [departments]
+  );
   const { data: company } = useCompanySettings();
   const { data: items = [] } = useItemsList();
   const { data: workflows = [] } = useWorkflows();
@@ -757,7 +776,7 @@ function PRBody({
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none">Branch</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {branches.find((b) => b.id === (pr as any).branchId)?.name ?? "—"}
+                    {branches.find((b) => b.id === (pr as any).branchId)?.name ?? ""}
                   </div>
                 </div>
               )}
@@ -780,37 +799,53 @@ function PRBody({
             </div>
             <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
               {editable ? (
-                <Input
+                <SearchableSelect
                   label="From Department"
-                  placeholder="e.g. Budi - Purchasing"
+                  options={departmentOptions}
                   value={form.department}
-                  onChange={(e) => setForm({ ...form, department: e.target.value })}
+                  onChange={(v) => setForm({ ...form, department: v })}
+                  placeholder="Select department..."
+                  emptyText="No department found"
+                  emptyLabel="— No Department —"
                 />
               ) : (
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none">From Department</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {(pr as any).department ?? "—"}
+                    {(pr as any).department ?? ""}
                   </div>
                 </div>
               )}
               {editable ? (
-                <Input
+                <SearchableSelect
                   label="To Department"
-                  placeholder="e.g. Warehouse - Central"
+                  options={departmentOptions}
                   value={form.toDepartment}
-                  onChange={(e) => setForm({ ...form, toDepartment: e.target.value })}
+                  onChange={(v) => setForm({ ...form, toDepartment: v })}
+                  placeholder="Select department..."
+                  emptyText="No department found"
+                  emptyLabel="— No Department —"
                 />
               ) : (
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none">To Department</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {(pr as any).toDepartment ?? "—"}
+                    {(pr as any).toDepartment ?? ""}
                   </div>
                 </div>
               )}
             </div>
+            {/* Notes | Urgency */}
             <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
+                <Textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  disabled={!editable}
+                  placeholder={editable ? "Optional notes..." : ""}
+                />
+              </div>
               {editable ? (
                 <Select
                   label="Urgency"
@@ -831,15 +866,6 @@ function PRBody({
                 </div>
               )}
             </div>
-            <div className="mt-6">
-              <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
-              <Textarea
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                disabled={!editable}
-                placeholder={editable ? "Optional notes..." : "—"}
-              />
-            </div>
           </FormSection>
 
           <FormSection title="Lines">
@@ -855,8 +881,6 @@ function PRBody({
             />
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               <Input label="Total Quantity" value={formatNumber(editable ? totalQty : viewTotalQty)} disabled className="h-8 bg-zinc-100 text-sm" />
-              <div className="hidden sm:block" aria-hidden="true" />
-              <Input label="Total (IDR)" value={`Rp ${formatNumber(editable ? totalAmountIDR : viewTotalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
             </div>
           </FormSection>
 
@@ -866,37 +890,138 @@ function PRBody({
         </FormPage>
       </div>
 
-      {showSupplierDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg dark:bg-zinc-900">
-            <h3 className="text-sm font-semibold">Pilih Supplier untuk PO</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Pilih supplier untuk membuat Purchase Order dari PR ini.</p>
-            <div className="mt-4">
-              <Select
-                label="Supplier"
-                value={selectedSupplierForPO}
-                onChange={(e) => setSelectedSupplierForPO(e.target.value)}
-                className="h-8"
-              >
-                <option value="">Pilih supplier...</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
+      <Dialog open={showSupplierDialog} onOpenChange={(o) => setShowSupplierDialog(o)}>
+        <DialogContent className="sm:max-w-[480px] p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4">
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                <Truck size={18} strokeWidth={2} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-[15px] font-semibold leading-tight">Buat Purchase Order</DialogTitle>
+                <DialogDescription className="mt-1 text-xs leading-relaxed">
+                  Pilih supplier untuk membuat PO dari <span className="font-medium text-foreground">{pr.documentNo ?? formatId(pr.id)}</span> — {pr.lines?.length ?? 0} item akan disalin.
+                </DialogDescription>
+              </div>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setShowSupplierDialog(false)}>
-                Batal
-              </Button>
-              <Button size="sm" onClick={handleConfirmCreatePO} disabled={!selectedSupplierForPO || createPO.isPending}>
-                {createPO.isPending ? "Membuat..." : "Buat PO"}
-              </Button>
+          </DialogHeader>
+
+          <div className="border-y border-border bg-muted/30 px-6 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <Building2 size={12} strokeWidth={2} />
+                  Purchase Request
+                </div>
+                <div className="mt-1 truncate text-sm font-medium text-foreground">{pr.documentNo ?? formatId(pr.id)}</div>
+                <div className="text-xs text-muted-foreground">{warehouse?.name ?? warehouseName(pr.warehouseId)} • {pr.lines?.length ?? 0} item • Qty {formatNumber((pr.lines ?? []).reduce((s: number, l: any) => s + Number(l.qty || 0), 0))}</div>
+              </div>
+              <div className="hidden sm:flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground">
+                <PackageCheck size={16} strokeWidth={2} />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+
+          <div className="px-6 py-5 space-y-4">
+            {suppliers.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
+                <div className="mx-auto flex size-9 items-center justify-center rounded-full bg-muted">
+                  <Search size={16} className="text-muted-foreground" />
+                </div>
+                <p className="mt-3 text-sm font-medium">Belum ada supplier aktif</p>
+                <p className="mt-1 text-xs text-muted-foreground">Tambahkan supplier di master data sebelum membuat PO.</p>
+                <Button variant="outline" size="sm" className="mt-4 h-8" onClick={() => { setShowSupplierDialog(false); navigate("/app/suppliers"); }}>
+                  Ke Master Supplier
+                </Button>
+              </div>
+            ) : (
+              <>
+                <SearchableSelect
+                  label="Supplier"
+                  placeholder="Cari supplier (kode / nama)..."
+                  emptyText="Supplier tidak ditemukan"
+                  options={suppliers
+                    .filter((s: any) => s.isActive !== false)
+                    .map((s: any) => ({
+                      value: s.id,
+                      label: s.code ? `${s.code} — ${s.name}` : s.name,
+                    }))}
+                  value={selectedSupplierForPO}
+                  onChange={setSelectedSupplierForPO}
+                />
+
+                {(() => {
+                  const sel = suppliers.find((s: any) => s.id === selectedSupplierForPO) as any;
+                  if (!sel) {
+                    return (
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Ketik untuk mencari supplier. PO akan dibuat dengan seluruh line dari PR ini. Supplier bisa diganti lagi di halaman PO (Draft).
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="rounded-lg border border-border bg-card overflow-hidden">
+                      <div className="flex items-center gap-2 border-b border-border bg-zinc-50 px-3 py-2 dark:bg-zinc-900/50">
+                        <div className="flex size-7 items-center justify-center rounded-md bg-background border border-border text-muted-foreground">
+                          <Building2 size={14} strokeWidth={2} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs font-semibold text-foreground">{sel.code ? `${sel.code} — ${sel.name}` : sel.name}</div>
+                          <div className="truncate text-[11px] text-muted-foreground">{sel.code ? `Kode: ${sel.code}` : "Supplier terpilih"}</div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">Terpilih</span>
+                      </div>
+                      <div className="grid gap-2 px-3 py-3 text-xs leading-relaxed">
+                        {(sel.contactPerson || sel.phone || sel.email) && (
+                          <div className="grid gap-1">
+                            {sel.contactPerson && <div><span className="text-muted-foreground">Kontak:</span> <span className="font-medium text-foreground">{sel.contactPerson}</span> {sel.phone ? <span className="text-muted-foreground">• {sel.phone}</span> : null}</div>}
+                            {!sel.contactPerson && sel.phone && <div><span className="text-muted-foreground">Telp:</span> <span className="font-medium text-foreground">{sel.phone}</span></div>}
+                            {sel.email && <div><span className="text-muted-foreground">Email:</span> <span className="font-medium text-foreground">{sel.email}</span></div>}
+                          </div>
+                        )}
+                        {sel.address && <div className="text-muted-foreground line-clamp-2">Alamat: <span className="text-foreground">{sel.address}</span></div>}
+                        {!sel.contactPerson && !sel.phone && !sel.email && !sel.address && (
+                          <div className="text-muted-foreground">Tidak ada detail kontak — lanjutkan untuk membuat PO.</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="px-6 py-4 bg-zinc-50 dark:bg-zinc-900/50 border-t sm:justify-between gap-2">
+            <p className="hidden sm:block text-xs text-muted-foreground">
+              {suppliers.length} supplier tersedia
+            </p>
+            <div className="flex w-full sm:w-auto justify-end gap-2">
+              <Button variant="ghost" size="sm" className="h-8" onClick={() => setShowSupplierDialog(false)} disabled={createPO.isPending}>
+                Batal
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                className="h-8 min-w-[110px]"
+                onClick={handleConfirmCreatePO}
+                disabled={!selectedSupplierForPO || createPO.isPending || suppliers.length === 0}
+              >
+                {createPO.isPending ? (
+                  <>
+                    <span className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Membuat...
+                  </>
+                ) : (
+                  <>
+                    <PackageCheck size={14} strokeWidth={2} />
+                    Buat PO
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Print view for PR */}
       <style>{`@media print { @page { size: A4; margin: 0; } html, body { height: auto !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } body * { visibility: hidden; } .print-doc, .print-doc * { visibility: visible; } .print-doc { position: absolute; left: 0; top: 0; width: 100%; height: auto; } header, nav, aside { display: none !important; } table { page-break-inside: auto; } tr { page-break-inside: avoid; page-break-after: auto; } }`}</style>
       <div className="hidden print:block print-doc bg-white text-black print:absolute print:inset-0 print:p-0">
@@ -930,8 +1055,8 @@ function PRBody({
               <div className="flex"><span className="w-24 text-zinc-600">Urgency</span><span className="text-black">{String((pr as any).urgency ?? "MEDIUM")}</span></div>
             </div>
             <div className="space-y-1">
-              <div className="flex"><span className="w-24 text-zinc-600">Request Date</span><span className="text-black">{pr.requestDate ? new Date(pr.requestDate).toLocaleDateString("id-ID").replace(/\//g, "-") : "-"}</span></div>
-              <div className="flex"><span className="w-24 text-zinc-600">Expected Date</span><span className="text-black">{pr.expectedDate ? new Date(pr.expectedDate).toLocaleDateString("id-ID").replace(/\//g, "-") : "-"}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Request Date</span><span className="text-black">{pr.requestDate ? new Date(pr.requestDate).toLocaleDateString("id-ID").replace(/\//g, "-") : ""}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Expected Date</span><span className="text-black">{pr.expectedDate ? new Date(pr.expectedDate).toLocaleDateString("id-ID").replace(/\//g, "-") : ""}</span></div>
               <div className="flex"><span className="w-24 text-zinc-600">Currency</span><span className="text-black">{(pr as any).currency ?? baseCurrency ?? "IDR"}</span></div>
             </div>
           </div>
@@ -939,8 +1064,8 @@ function PRBody({
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wide text-black">SHIP TO</div>
               <div className="mt-2 font-medium text-black">{warehouse?.name ?? warehouseName(pr.warehouseId)}</div>
-              <div className="mt-1 leading-snug text-zinc-600">{(warehouse as any)?.address ?? (company as any)?.address ?? "-"}</div>
-              <div className="mt-2 space-y-0.5 text-zinc-600"><div>PIC : {(warehouse as any)?.pic ?? (warehouse as any)?.contactPerson ?? "-"}</div><div>Telp : {(warehouse as any)?.phone ?? "-"}</div></div>
+              <div className="mt-1 leading-snug text-zinc-600">{(warehouse as any)?.address ?? (company as any)?.address ?? ""}</div>
+              <div className="mt-2 space-y-0.5 text-zinc-600"><div>PIC : {(warehouse as any)?.pic ?? (warehouse as any)?.contactPerson ?? ""}</div><div>Telp : {(warehouse as any)?.phone ?? ""}</div></div>
             </div>
           </div>
           <table className="mt-6 w-full border-collapse text-[11px]">
@@ -985,7 +1110,7 @@ function PRBody({
           </div>
           <div className="mt-6 border-t border-zinc-200 pt-3 text-[11px]">
             <div className="font-bold uppercase tracking-wide">Notes</div>
-            <div className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-700">{(pr as any).notes?.trim() ? (pr as any).notes : pr.notes?.trim() ? pr.notes : "-"}</div>
+            <div className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-700">{(pr as any).notes?.trim() ? (pr as any).notes : pr.notes?.trim() ? pr.notes : ""}</div>
           </div>
           <div className="mt-10 grid grid-cols-2 gap-8 text-center text-[11px]">
             <div className="flex flex-col items-center">
@@ -996,7 +1121,7 @@ function PRBody({
                 ) : null}
               </div>
               <div className="h-px w-[180px] bg-zinc-900" />
-              <div className="mt-2 text-[10px] font-medium text-black">{(pr as any).preparedByName ?? (pr as any).createdByName ?? "—"}</div>
+              <div className="mt-2 text-[10px] font-medium text-black">{(pr as any).preparedByName ?? (pr as any).createdByName ?? ""}</div>
               <div className="text-[10px] text-zinc-600">{formatDdMmmYyyy((pr as any).preparedSignedAt ?? pr.requestDate)}</div>
             </div>
             <div className="flex flex-col items-center">
@@ -1007,8 +1132,8 @@ function PRBody({
                 ) : null}
               </div>
               <div className="h-px w-[180px] bg-zinc-900" />
-              <div className="mt-2 text-[10px] font-medium text-black">{(pr as any).approvedByName ?? "-"}</div>
-              <div className="text-[10px] text-zinc-600">{(pr as any).approvedSignedAt ? formatDdMmmYyyy((pr as any).approvedSignedAt) : (pr as any).status === "APPROVED" ? formatDdMmmYyyy((pr as any).updatedAt) : "-"}</div>
+              <div className="mt-2 text-[10px] font-medium text-black">{(pr as any).approvedByName ?? ""}</div>
+              <div className="text-[10px] text-zinc-600">{(pr as any).approvedSignedAt ? formatDdMmmYyyy((pr as any).approvedSignedAt) : (pr as any).status === "APPROVED" ? formatDdMmmYyyy((pr as any).updatedAt) : ""}</div>
             </div>
           </div>
         </div>

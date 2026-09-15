@@ -117,6 +117,13 @@ export default function ItemsPage() {
 
   const columns: DataTableColumn<Item>[] = [
     {
+      id: "no",
+      header: "No",
+      align: "center",
+      cell: (_item, index) => <span className="text-xs tabular-nums text-muted-foreground">{index ?? ""}</span>,
+      className: "w-[56px] pr-8 text-center tabular-nums",
+    },
+    {
       id: "code",
       header: "Item Code",
       cell: (item) => <span className="text-xs text-muted-foreground whitespace-nowrap">{item.code}</span>,
@@ -140,7 +147,7 @@ export default function ItemsPage() {
         const found = key ? (itemGroupMap.get(key) ?? itemGroupMap.get(key.toLowerCase())) : null;
         return (
           <Badge tone="neutral" className="rounded-md">
-            {found?.name ?? "—"}
+            {found?.name ?? ""}
           </Badge>
         );
       },
@@ -154,7 +161,7 @@ export default function ItemsPage() {
         const found = key ? (uomMap.get(key) ?? uomMap.get(key.toLowerCase())) : null;
         return (
           <Badge tone="neutral" className="rounded-md whitespace-nowrap">
-            {found?.name ?? (found?.code ?? "—")}
+            {found?.name ?? (found?.code ?? "")}
           </Badge>
         );
       },
@@ -166,7 +173,7 @@ export default function ItemsPage() {
       align: "right",
       cell: (item) => (
         <span className="whitespace-nowrap text-xs pr-2">
-          {item.uomQty != null ? formatNumber(item.uomQty) : "—"}
+          {item.uomQty != null ? formatNumber(item.uomQty) : ""}
         </span>
       ),
       className: "w-[110px] pr-8",
@@ -313,7 +320,7 @@ export default function ItemsPage() {
           setPageSize(ps);
           setPage(1);
         }}
-        minWidth={1310}
+        minWidth={1366}
         emptyIcon={<Package size={26} strokeWidth={2} />}
         emptyTitle="No items"
         emptyDescription="Add a new item or adjust your search filters."

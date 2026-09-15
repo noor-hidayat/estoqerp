@@ -464,6 +464,10 @@ async function checkTablePermission(req: Request, res: Response, tableName: stri
     if (await hasPermission(req.user.role, "master.items", "view")) return true;
     if (await hasPermission(req.user.role, "master", "view")) return true;
   }
+  // Departments — tidak perlu authorization (akses untuk semua user login, dipakai dropdown PR/MR)
+  if (tableName === "departments" && req.user) {
+    return true;
+  }
   if (action === "view" && OPNAME_SUPPORT_READ.has(tableName) && req.user && (await canViewOpnameContext(req.user.role))) {
     return true;
   }
@@ -1220,7 +1224,7 @@ crudRouter.get("/opname-scan-details/check", async (req, res) => {
     if (!detail) { res.json({ exists: false }); return; }
     const [user] = detail.scannedBy ? await db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, detail.scannedBy)).limit(1) : [null];
     const [loc] = detail.locationId ? await db.select({ code: schema.locations.code }).from(schema.locations).where(eq(schema.locations.id, detail.locationId)).limit(1) : [null];
-    res.json({ exists: true, record: { scanId: detail.scanId, scannedBy: user?.name ?? "—", locationCode: loc?.code ?? "—", scannedAt: detail.scannedAt } });
+    res.json({ exists: true, record: { scanId: detail.scanId, scannedBy: user?.name ?? "", locationCode: loc?.code ?? "", scannedAt: detail.scannedAt } });
   } catch (e) { res.status(500).json({ error: messageOf(e) }); }
 });
 crudRouter.get("/batch-formats/parse", async (req, res) => {

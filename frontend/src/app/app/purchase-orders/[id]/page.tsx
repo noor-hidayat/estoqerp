@@ -201,9 +201,9 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 function formatDdMmmYyyy(dateStr?: string | null): string {
-  if (!dateStr) return "-";
+  if (!dateStr) return "";
   const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return "-";
+  if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 const CURRENCY_SYMBOLS: Record<string, string> = { IDR: "Rp", USD: "$", EUR: "€", SGD: "S$", JPY: "¥", CNY: "¥", MYR: "RM", THB: "฿", AUD: "A$" };
@@ -229,8 +229,8 @@ export default function PurchaseOrderDetailPage() {
   const [editing, setEditing] = useState(false);
 
   const lines = po?.lines ?? [];
-  const supplierName = (sid?: string) => suppliers.find((s) => s.id === sid)?.name ?? "—";
-  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "—";
+  const supplierName = (sid?: string) => suppliers.find((s) => s.id === sid)?.name ?? "";
+  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "";
 
   if (isLoading) {
     return (
@@ -808,7 +808,7 @@ function POBody({
 
           <Input
             label="Purchaser Name"
-            value={editable ? (user?.name ?? "—") : ((po as unknown as { createdByName?: string }).createdByName ?? supplierName(po.supplierId) ?? "—")}
+            value={editable ? (user?.name ?? "") : ((po as unknown as { createdByName?: string }).createdByName ?? supplierName(po.supplierId) ?? "")}
             disabled
             placeholder="Auto dari akun"
           />
@@ -841,7 +841,7 @@ function POBody({
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none">Department</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {(po as any).department ?? "—"}
+                    {(po as any).department ?? ""}
                   </div>
                 </div>
               )}
@@ -863,7 +863,7 @@ function POBody({
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none">Branch</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {branches.find((b) => b.id === (po as any).branchId)?.name ?? (po as any).branchId ?? "—"}
+                    {branches.find((b) => b.id === (po as any).branchId)?.name ?? (po as any).branchId ?? ""}
                   </div>
                 </div>
               )}
@@ -880,7 +880,7 @@ function POBody({
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none">Cost Center</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {(po as any).costCenter ?? "—"}
+                    {(po as any).costCenter ?? ""}
                   </div>
                 </div>
               )}
@@ -966,7 +966,7 @@ function POBody({
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium leading-none">Payment Terms</label>
               <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                {(po as any).paymentTerms ?? "—"}
+                {(po as any).paymentTerms ?? ""}
               </div>
             </div>
           )}
@@ -990,7 +990,7 @@ function POBody({
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium leading-none">Price List</label>
               <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                {(po as any).priceListName ?? priceLists.find((p) => p.id === (po as any).priceListId)?.name ?? "—"}
+                {(po as any).priceListName ?? priceLists.find((p) => p.id === (po as any).priceListId)?.name ?? ""}
               </div>
             </div>
           )}
@@ -1003,7 +1003,7 @@ function POBody({
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               disabled={!editable}
-              placeholder={editable ? "Optional notes..." : "—"}
+              placeholder={editable ? "Optional notes..." : ""}
             />
           </div>
           {editable ? (
@@ -1103,7 +1103,7 @@ function POBody({
                               }
                             />
                           ) : (
-                            <div className="px-3 py-2 text-[13px] capitalize">{c.type || "—"}</div>
+                            <div className="px-3 py-2 text-[13px] capitalize">{c.type || ""}</div>
                           )}
                         </TableCell>
                         <TableCell className="p-0">
@@ -1188,7 +1188,7 @@ function POBody({
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium leading-none">Tax Category</label>
                 <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                  {(po as any).taxCategoryName ?? "—"}
+                  {(po as any).taxCategoryName ?? ""}
                 </div>
               </div>
             )}
@@ -1329,12 +1329,12 @@ function POBody({
           <div className="mt-4 grid grid-cols-2 gap-4 text-[11px]">
             <div className="space-y-1">
               <div className="flex"><span className="w-24 text-zinc-600">No. PO</span><span className="text-black">{po.documentNo ?? (po as any).poNo ?? formatId(po.id)}</span></div>
-              <div className="flex"><span className="w-24 text-zinc-600">Referensi PR</span><span className="text-black">{(po as any).prNo ?? (po as any).referenceNo ?? (po as any).reference ?? "-"}</span></div>
-              <div className="flex"><span className="w-24 text-zinc-600">Payment Terms</span><span className="text-black">{(po as any).paymentTerms ?? "-"}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Referensi PR</span><span className="text-black">{(po as any).prNo ?? (po as any).referenceNo ?? (po as any).reference ?? ""}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Payment Terms</span><span className="text-black">{(po as any).paymentTerms ?? ""}</span></div>
             </div>
             <div className="space-y-1">
-              <div className="flex"><span className="w-24 text-zinc-600">Order Date</span><span className="text-black">{po.orderDate ? new Date(po.orderDate).toLocaleDateString("id-ID").replace(/\//g, "-") : "-"}</span></div>
-              <div className="flex"><span className="w-24 text-zinc-600">Delivery Date</span><span className="text-black">{po.expectedDate ? new Date(po.expectedDate).toLocaleDateString("id-ID").replace(/\//g, "-") : "-"}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Order Date</span><span className="text-black">{po.orderDate ? new Date(po.orderDate).toLocaleDateString("id-ID").replace(/\//g, "-") : ""}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Delivery Date</span><span className="text-black">{po.expectedDate ? new Date(po.expectedDate).toLocaleDateString("id-ID").replace(/\//g, "-") : ""}</span></div>
               <div className="flex"><span className="w-24 text-zinc-600">Currency</span><span className="text-black">{(po as any).currency ?? baseCurrency ?? "IDR"}</span></div>
               {String((po as any).currency ?? baseCurrency).toUpperCase() !== String((company as any)?.baseCurrency ?? baseCurrency).toUpperCase() ? (
                 <div className="flex"><span className="w-24 text-zinc-600">Exchange Rate</span><span className="text-black">{(po as any).exchangeRate ?? "1"}</span></div>
@@ -1345,14 +1345,14 @@ function POBody({
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wide text-black">TO</div>
               <div className="mt-2 font-medium text-black">{supplier?.name ?? supplierName(po.supplierId)}</div>
-              <div className="mt-1 leading-snug text-zinc-600">{(supplier as any)?.address ?? "-"}</div>
-              <div className="mt-2 space-y-0.5 text-zinc-600"><div>PIC : {(supplier as any)?.contactPerson ?? "-"}</div><div>Telp : {(supplier as any)?.phone ?? "-"}</div><div>Email : {(supplier as any)?.email ?? "-"}</div></div>
+              <div className="mt-1 leading-snug text-zinc-600">{(supplier as any)?.address ?? ""}</div>
+              <div className="mt-2 space-y-0.5 text-zinc-600"><div>PIC : {(supplier as any)?.contactPerson ?? ""}</div><div>Telp : {(supplier as any)?.phone ?? ""}</div><div>Email : {(supplier as any)?.email ?? ""}</div></div>
             </div>
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wide text-black">SHIP TO</div>
               <div className="mt-2 font-medium text-black">{warehouse?.name ?? warehouseName(po.warehouseId)}</div>
-              <div className="mt-1 leading-snug text-zinc-600">{(warehouse as any)?.address ?? (company as any)?.address ?? "-"}</div>
-              <div className="mt-2 space-y-0.5 text-zinc-600"><div>PIC : {(warehouse as any)?.pic ?? (warehouse as any)?.contactPerson ?? "-"}</div><div>Telp : {(warehouse as any)?.phone ?? "-"}</div></div>
+              <div className="mt-1 leading-snug text-zinc-600">{(warehouse as any)?.address ?? (company as any)?.address ?? ""}</div>
+              <div className="mt-2 space-y-0.5 text-zinc-600"><div>PIC : {(warehouse as any)?.pic ?? (warehouse as any)?.contactPerson ?? ""}</div><div>Telp : {(warehouse as any)?.phone ?? ""}</div></div>
             </div>
           </div>
           <table className="mt-6 w-full border-collapse text-[11px]">
@@ -1398,7 +1398,7 @@ function POBody({
           </div>
           <div className="mt-6 border-t border-zinc-200 pt-3 text-[11px]">
             <div className="font-bold uppercase tracking-wide">Notes</div>
-            <div className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-700">{(po as any).notes?.trim() ? (po as any).notes : po.notes?.trim() ? po.notes : "-"}</div>
+            <div className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-700">{(po as any).notes?.trim() ? (po as any).notes : po.notes?.trim() ? po.notes : ""}</div>
           </div>
           <div className="mt-10 grid grid-cols-2 gap-8 text-center text-[11px]">
             <div className="flex flex-col items-center">
@@ -1409,7 +1409,7 @@ function POBody({
                 ) : null}
               </div>
               <div className="h-px w-[180px] bg-zinc-900" />
-              <div className="mt-2 text-[10px] font-medium text-black">{(po as any).preparedByName ?? (po as any).createdByName ?? supplierName(po.supplierId) ?? "-"}</div>
+              <div className="mt-2 text-[10px] font-medium text-black">{(po as any).preparedByName ?? (po as any).createdByName ?? supplierName(po.supplierId) ?? ""}</div>
               <div className="text-[10px] text-zinc-600">{formatDdMmmYyyy((po as any).preparedSignedAt ?? po.orderDate)}</div>
             </div>
             <div className="flex flex-col items-center">
@@ -1420,9 +1420,9 @@ function POBody({
                 ) : null}
               </div>
               <div className="h-px w-[180px] bg-zinc-900" />
-              <div className="mt-2 text-[10px] font-medium text-black">{(po as any).approvedByName ?? "-"}</div>
+              <div className="mt-2 text-[10px] font-medium text-black">{(po as any).approvedByName ?? ""}</div>
               {(po as any).approvedByRole ? <div className="text-[10px] text-zinc-600">{(po as any).approvedByRole}</div> : null}
-              <div className="text-[10px] text-zinc-600">{(po as any).approvedSignedAt ? formatDdMmmYyyy((po as any).approvedSignedAt) : (po as any).status === "APPROVED" ? formatDdMmmYyyy((po as any).updatedAt) : "-"}</div>
+              <div className="text-[10px] text-zinc-600">{(po as any).approvedSignedAt ? formatDdMmmYyyy((po as any).approvedSignedAt) : (po as any).status === "APPROVED" ? formatDdMmmYyyy((po as any).updatedAt) : ""}</div>
             </div>
           </div>
         </div>

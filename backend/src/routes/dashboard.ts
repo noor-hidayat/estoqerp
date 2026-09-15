@@ -95,14 +95,14 @@ dashboardRouter.get("/dashboard", async (req: Request, res, next) => {
         .select({ totalQty: sql<number>`COALESCE(SUM(${s.opnameScanDetails.quantity}), 0)` })
         .from(s.opnameScanDetails)
         .where(eq(s.opnameScanDetails.scanId, ses.id));
-      let product = "—";
+      let product = "";
       if (lastRec?.itemId) {
         const [it] = await db.select({ name: s.items.name }).from(s.items).where(eq(s.items.id, lastRec.itemId)).limit(1);
-        product = it?.name ?? "—";
+        product = it?.name ?? "";
       }
       return {
         id: ses.id, code: ses.id, product, qty: Number(totalQty),
-        scannedBy: ses.userName ?? "—", at: ses.startedAt,
+        scannedBy: ses.userName ?? "", at: ses.startedAt,
       };
     }));
 
@@ -142,7 +142,7 @@ dashboardRouter.get("/dashboard", async (req: Request, res, next) => {
       const pct = parentTotal > 0 ? Math.round((parentCounted / parentTotal) * 100) : 0;
 
       const whNames = [...new Set(whs.map((w) => w.warehouseId).filter(Boolean))];
-      const warehouseLabel = whNames.length > 1 ? `${whNames.length} gudang` : (whIdToName.get(whNames[0]) ?? "—");
+      const warehouseLabel = whNames.length > 1 ? `${whNames.length} gudang` : (whIdToName.get(whNames[0]) ?? "");
 
       progressRows.push({ id: parent.id, name: parent.name, pct, warehouse: warehouseLabel, counted: parentCounted, total: parentTotal, status: parent.status });
       if (parent.status === "IN_PROGRESS") {
@@ -176,7 +176,7 @@ dashboardRouter.get("/dashboard", async (req: Request, res, next) => {
 
       let countedQty = 0;
       let systemQty = 0;
-      let projectName = "—";
+      let projectName = "";
 
       if (opwh) {
         const [parent] = await db
@@ -184,7 +184,7 @@ dashboardRouter.get("/dashboard", async (req: Request, res, next) => {
           .from(s.opnameProjects)
           .where(eq(s.opnameProjects.id, opwh.opnameId))
           .limit(1);
-        projectName = parent?.name ?? "—";
+        projectName = parent?.name ?? "";
         const [{ cq }] = await db
           .select({ cq: sql<number>`COALESCE(SUM(${s.opnameScanDetails.quantity}), 0)` })
           .from(s.opnameScanDetails)

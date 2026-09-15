@@ -140,7 +140,7 @@ export default function WorkflowDetailPage() {
     return s ? `${s.code} — ${s.name}` : id;
   };
   const roleNames = (ids: string[]) => {
-    if (!ids.length) return "—";
+    if (!ids.length) return "";
     return ids.map((rid) => roles.find((r) => r.id === rid)?.name ?? rid).join(", ");
   };
 
@@ -273,7 +273,7 @@ export default function WorkflowDetailPage() {
                         />
                       ) : (
                         <div className="flex h-9 items-center text-[13px] text-foreground">
-                          {roles.find((r: any) => r.id === ap.roleId)?.name ?? "—"}
+                          {roles.find((r: any) => r.id === ap.roleId)?.name ?? ""}
                         </div>
                       )}
                     </TableCell>
@@ -292,7 +292,7 @@ export default function WorkflowDetailPage() {
                 {approvers.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={4} className="px-3 py-8 text-center text-xs text-muted-foreground">
-                      Belum ada approval — {isEditable ? "klik Add Approval untuk tambah level" : "—"}
+                      Belum ada approval — {isEditable ? "klik Add Approval untuk tambah level" : ""}
                     </TableCell>
                   </TableRow>
                 )}

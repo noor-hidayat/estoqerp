@@ -688,6 +688,7 @@ export interface MaterialRequest {
   urgency?: "LOW" | "MEDIUM" | "HIGH" | string | null;
   notes?: string | null;
   department?: string | null;
+  toDepartment?: string | null;
   costCenter?: string | null;
   status: DocStatus;
   needApproval?: boolean;

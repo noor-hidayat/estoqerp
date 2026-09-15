@@ -1016,9 +1016,9 @@ export function MovementForm({
                       <tr key={h.key} className="hover:bg-muted/30">
                         <td className="px-4 py-2.5 text-xs text-muted-foreground">{scanHistory.length - idx}</td>
                         <td className="break-all px-4 py-2.5 text-xs text-foreground">{h.barcode}</td>
-                        <td className="break-all px-3 py-2.5 text-[11.5px] text-muted-foreground">{h.batch || "—"}</td>
-                        <td className="px-3 py-2.5 text-[11.5px] font-medium text-foreground">{h.itemCode || "—"}</td>
-                        <td className="px-3 py-2.5 text-[11.5px] text-muted-foreground">{h.serial || "—"}</td>
+                        <td className="break-all px-3 py-2.5 text-[11.5px] text-muted-foreground">{h.batch || ""}</td>
+                        <td className="px-3 py-2.5 text-[11.5px] font-medium text-foreground">{h.itemCode || ""}</td>
+                        <td className="px-3 py-2.5 text-[11.5px] text-muted-foreground">{h.serial || ""}</td>
                         <td className="px-4 py-2.5 text-right text-[12px] font-semibold tabular-nums text-foreground">{qtyFromRow}</td>
                       </tr>
                     );
@@ -1362,7 +1362,7 @@ export function MovementForm({
                           <input
                             type="text"
                             value={r.batchNumber}
-                            placeholder="—"
+                            placeholder=""
                             disabled={readOnly}
                             ref={registerCell(`${r.key}:batch`)}
                             onChange={(e) => setRow(r.key, { batchNumber: e.target.value })}

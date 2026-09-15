@@ -55,7 +55,7 @@ import {
 export interface DataTableColumn<T> {
   id: string;
   header: string;
-  cell: (row: T) => ReactNode;
+  cell: (row: T, index?: number) => ReactNode;
   /** Return the value used for client-side sorting. Omit to make the column non-sortable. */
   sortValue?: (row: T) => string | number;
   /** Return the raw value used by the built-in filter. Falls back to `sortValue` when omitted. */
@@ -683,9 +683,10 @@ export function DataTable<T>({
           </TableBody>
         ) : (
           <TableBody className="[&_tr]:border-border/70">
-            {pagedRows.map((row) => {
+            {pagedRows.map((row, rowIndex) => {
               const id = getRowId(row);
               const isSelected = selected.has(id);
+              const globalRowIndex = pagination !== "none" ? (safePage - 1) * pageSize + rowIndex + 1 : rowIndex + 1;
               return (
                 <TableRow
                   key={id}
@@ -724,7 +725,7 @@ export function DataTable<T>({
                         )}
                         style={col.minWidth ? { minWidth: col.minWidth } : undefined}
                       >
-                        {col.cell(row)}
+                        {col.cell(row, globalRowIndex)}
                       </TableCell>
                     );
                   })}

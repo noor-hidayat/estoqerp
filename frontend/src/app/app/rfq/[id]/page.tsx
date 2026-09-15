@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Printer, Save, Award, FileText, Plus, Trash2, ShoppingCart } from "lucide-react";
+import { Printer, Save, Award, ShoppingCart, Plus, Trash2 } from "lucide-react";
 import {
   useRfq,
   useAllWarehouses,
@@ -24,12 +24,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { FormPage, FormSection } from "@/components/ui/form-page";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableInput } from "@/components/ui/table-input";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SearchableSelect as TableSearchableSelect } from "@/components/ui/searchable-select";
+import { OrderLineTable, type OrderLineInput } from "@/components/supply/order-line-table";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatNumber } from "@/lib/utils";
 import { toast } from "sonner";
@@ -137,11 +141,11 @@ export default function RfqDetailPage() {
   const isAwarded = rfq?.status === "AWARDED";
   const canEdit = isDraft && editing;
 
-  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? wid ?? "—";
-  const uomName = (uid?: string) => uoms.find((u) => u.id === uid)?.name ?? "—";
+  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? wid ?? "";
+  const uomName = (uid?: string) => uoms.find((u) => u.id === uid)?.name ?? "";
   const itemLabel = (iid?: string) => {
     const it = (items as any[]).find((x) => x.id === iid);
-    return it ? `${it.code}: ${it.name}` : iid ?? "—";
+    return it ? `${it.code}: ${it.name}` : iid ?? "";
   };
 
   useEffect(() => {
@@ -189,8 +193,10 @@ export default function RfqDetailPage() {
   }, [showQuotDialog, rfq]);
 
   const [editForm, setEditForm] = useState<any>(null);
-  const [editLines, setEditLines] = useState<any[]>([]);
-  const [editSuppliers, setEditSuppliers] = useState<string[]>([]);
+  const [editLines, setEditLines] = useState<OrderLineInput[]>([]);
+  // Supplier rows: same UX as Items table — default 1 empty row, typeable inside table cell
+  const [editSupplierRows, setEditSupplierRows] = useState<string[]>([""]);
+  const [editSelectedSupplierRows, setEditSelectedSupplierRows] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (rfq && editing) {
@@ -202,15 +208,32 @@ export default function RfqDetailPage() {
         notes: rfq.notes ?? "",
         currency: rfq.currency ?? "IDR",
       });
-      setEditLines(rfq.lines ?? []);
-      setEditSuppliers((rfq.suppliers ?? []).map((s) => s.supplierId));
+      setEditLines(
+        (rfq.lines ?? []).map((l: any) => ({
+          itemId: l.itemId,
+          uomId: l.uomId,
+          qty: String(l.qty ?? ""),
+          unitPrice: (l as any).unitPrice ?? "",
+          discount: (l as any).discount ?? "",
+          batchNumber: (l as any).batchNumber ?? "",
+          note: l.note ?? "",
+          deliveryDate: (l as any).deliveryDate ?? "",
+        }))
+      );
+      const supIds = (rfq.suppliers ?? []).map((s: any) => s.supplierId);
+      setEditSupplierRows(supIds.length ? supIds : [""]);
+      setEditSelectedSupplierRows(new Set());
     }
   }, [rfq, editing]);
 
   const handleSaveEdit = async () => {
     try {
-      const validLines = editLines.filter((l: any) => l.itemId && l.uomId && l.qty);
+      const validLines = (editLines as any[]).filter((l: any) => l.itemId && l.qty);
       if (validLines.length === 0) return setErr("Minimal 1 line");
+      const validSuppliers = editSupplierRows.map((s) => String(s).trim()).filter(Boolean);
+      const uniqueSuppliers = [...new Set(validSuppliers)];
+      if (validSuppliers.length === 0) return setErr("Pilih minimal 1 supplier.");
+      if (uniqueSuppliers.length !== validSuppliers.length) return setErr("Supplier duplikat tidak diizinkan.");
       await update.mutateAsync({
         id: rfq!.id,
         patch: {
@@ -221,7 +244,7 @@ export default function RfqDetailPage() {
           notes: editForm.notes || null,
           currency: editForm.currency,
           lines: validLines.map((l: any) => ({ itemId: l.itemId, uomId: l.uomId, qty: l.qty, note: l.note ?? null })),
-          supplierIds: editSuppliers,
+          supplierIds: uniqueSuppliers,
         },
       });
       setEditing(false);
@@ -330,7 +353,7 @@ export default function RfqDetailPage() {
   const cheapestOverall = (compare as any)?.cheapestOverall as string | null;
 
   return (
-    <RoleGuard roles={[]} menus={["supply.purchaseRequests"]}>
+    <RoleGuard roles={[]} menus={["supply.purchaseOrders"]}>
       <div className="print:hidden">
         <FormPage
           title={`${rfq.documentNo ?? rfq.id}`}
@@ -390,7 +413,7 @@ export default function RfqDetailPage() {
               <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium">PR Reference</label>
-                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.purchaseRequestNo ?? rfq.purchaseRequestId ?? "—"}</div>
+                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.purchaseRequestNo ?? rfq.purchaseRequestId ?? ""}</div>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium">Warehouse</label>
@@ -402,11 +425,11 @@ export default function RfqDetailPage() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium">Quotation Deadline</label>
-                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.quotationDeadline?.slice(0, 10) ?? "—"}</div>
+                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.quotationDeadline?.slice(0, 10) ?? ""}</div>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium">Expected Delivery</label>
-                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.expectedDate?.slice(0, 10) ?? "—"}</div>
+                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.expectedDate?.slice(0, 10) ?? ""}</div>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium">Currency</label>
@@ -414,7 +437,7 @@ export default function RfqDetailPage() {
                 </div>
                 <div className="sm:col-span-2">
                   <label className="text-sm font-medium">Notes</label>
-                  <div className="mt-1 rounded-md border bg-zinc-100 p-3 text-sm whitespace-pre-wrap">{rfq.notes ?? "—"}</div>
+                  <div className="mt-1 rounded-md border bg-zinc-100 p-3 text-sm whitespace-pre-wrap">{rfq.notes ?? ""}</div>
                 </div>
                 {rfq.awardedSupplierId && (
                   <div className="flex flex-col gap-1.5">
@@ -452,15 +475,85 @@ export default function RfqDetailPage() {
                   <Textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="text-sm font-medium">Suppliers</label>
-                  <div className="rounded border p-3">
-                    {(suppliers as any[]).map((s) => (
-                      <label key={s.id} className="flex items-center gap-2 py-1 text-sm">
-                        <input type="checkbox" checked={editSuppliers.includes(s.id)} onChange={(e) => setEditSuppliers((prev) => (e.target.checked ? [...prev, s.id] : prev.filter((x) => x !== s.id)))} />
-                        {s.code}: {s.name}
-                      </label>
-                    ))}
-                  </div>
+                  <label className="text-sm font-medium">Suppliers (min 1)</label>
+                  {(() => {
+                    const supplierOptions = (suppliers as any[])
+                      .filter((s: any) => s.isActive !== false)
+                      .map((s: any) => ({
+                        value: s.id,
+                        label: s.code ? `${s.code} — ${s.name}` : s.name,
+                      }));
+                    const allCheckedEdit = editSupplierRows.length > 0 && editSelectedSupplierRows.size === editSupplierRows.length;
+                    const someCheckedEdit = editSelectedSupplierRows.size > 0 && editSelectedSupplierRows.size < editSupplierRows.length;
+                    return (
+                      <div className="overflow-hidden rounded-lg border border-border">
+                        <Table className="table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0">
+                          <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
+                            <TableRow className="border-border hover:bg-transparent">
+                              <TableHead className="w-8 px-2 text-center">
+                                <Checkbox
+                                  checked={allCheckedEdit ? true : someCheckedEdit ? "indeterminate" : false}
+                                  onCheckedChange={(v) => {
+                                    if (v) setEditSelectedSupplierRows(new Set(editSupplierRows.map((_, i) => i)));
+                                    else setEditSelectedSupplierRows(new Set());
+                                  }}
+                                  aria-label="select all suppliers"
+                                />
+                              </TableHead>
+                              <TableHead className="w-10 px-3 text-center">No</TableHead>
+                              <TableHead className="px-3">Supplier</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody className="[&_tr]:border-border/70">
+                            {editSupplierRows.map((sid, idx) => {
+                              const rowOptions = supplierOptions.filter((o) => !editSupplierRows.includes(o.value) || o.value === sid);
+                              return (
+                                <TableRow key={idx} className="border-border/70 hover:bg-transparent data-[state=selected]:bg-muted" data-state={editSelectedSupplierRows.has(idx) ? "selected" : undefined}>
+                                  <TableCell className="px-2 text-center">
+                                    <Checkbox
+                                      checked={editSelectedSupplierRows.has(idx)}
+                                      onCheckedChange={(v) => {
+                                        const next = new Set(editSelectedSupplierRows);
+                                        if (v) next.add(idx);
+                                        else next.delete(idx);
+                                        setEditSelectedSupplierRows(next);
+                                      }}
+                                      aria-label={`select supplier row ${idx + 1}`}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
+                                  <TableCell className="p-0">
+                                    <TableSearchableSelect table value={sid} onChange={(v) => setEditSupplierRows((prev) => prev.map((val, i) => (i === idx ? v : val)))} options={rowOptions} placeholder="Ketik nama / kode supplier..." columnTitle="Supplier" />
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                        <div className="border-t border-border p-3">
+                          {editSelectedSupplierRows.size > 0 ? (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="h-7 gap-1 px-2.5 text-xs"
+                              onClick={() => {
+                                const next = editSupplierRows.filter((_, i) => !editSelectedSupplierRows.has(i));
+                                setEditSupplierRows(next.length ? next : [""]);
+                                setEditSelectedSupplierRows(new Set());
+                              }}
+                            >
+                              <Trash2 size={13} strokeWidth={2} /> Delete
+                            </Button>
+                          ) : (
+                            <Button variant="outline" size="sm" className="h-7 gap-1 px-2.5 text-xs" onClick={() => setEditSupplierRows((prev) => [...prev, ""])}>
+                              <Plus size={13} strokeWidth={2} /> Add Row
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <p className="mt-1.5 text-xs text-muted-foreground">Ketik di kolom Supplier untuk mencari — sama seperti kolom Item.</p>
                 </div>
               </div>
             )}
@@ -479,54 +572,69 @@ export default function RfqDetailPage() {
           </div>
 
           {activeTab === "items" && (
-            <FormSection title="Items">
-              <div className="overflow-hidden rounded-lg border">
-                <Table>
-                  <TableHeader className="bg-zinc-100">
-                    <TableRow>
-                      <TableHead className="w-10 text-center">No</TableHead>
-                      <TableHead>Item</TableHead>
-                      <TableHead className="w-24">UOM</TableHead>
-                      <TableHead className="w-28 text-right">Qty</TableHead>
-                      <TableHead>Note</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(canEdit ? editLines : rfq.lines ?? []).map((l: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="text-center">{idx + 1}</TableCell>
-                        <TableCell>{itemLabel(l.itemId)}</TableCell>
-                        <TableCell>{uomName(l.uomId)}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {canEdit ? <TableInput value={l.qty} onChange={(v) => setEditLines((prev) => prev.map((r, i) => (i === idx ? { ...r, qty: v } : r)))} isNumeric /> : formatNumber(l.qty)}
-                        </TableCell>
-                        <TableCell>{canEdit ? <TableInput value={l.note ?? ""} onChange={(v) => setEditLines((prev) => prev.map((r, i) => (i === idx ? { ...r, note: v } : r)))} /> : l.note ?? "—"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {canEdit && (
-                  <div className="border-t p-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setEditLines((prev) => [...prev, { itemId: "", uomId: "", qty: "", note: "" }])}
-                    >
-                      <Plus size={14} /> Add Item
-                    </Button>
-                  </div>
-                )}
+            <FormSection title="Lines">
+              <OrderLineTable
+                value={
+                  canEdit
+                    ? editLines
+                    : (rfq.lines ?? []).map((l: any) => ({
+                        itemId: l.itemId,
+                        uomId: l.uomId,
+                        qty: String(l.qty ?? ""),
+                        unitPrice: (l as any).unitPrice ?? "",
+                        discount: (l as any).discount ?? "",
+                        batchNumber: (l as any).batchNumber ?? "",
+                        note: l.note ?? "",
+                        deliveryDate: (l as any).deliveryDate ?? "",
+                      }))
+                }
+                onChange={canEdit ? setEditLines : () => {}}
+                readOnly={!canEdit}
+                currency={(canEdit ? editForm?.currency : rfq.currency) ?? "IDR"}
+                baseCurrency={(company as any)?.baseCurrency ?? "IDR"}
+                variant="rfq"
+              />
+              <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                <Input
+                  label="Total Quantity"
+                  value={formatNumber(
+                    (canEdit ? editLines : (rfq.lines ?? [])).reduce((s: number, l: any) => s + Number(l.qty || 0), 0)
+                  )}
+                  disabled
+                  className="h-8 bg-zinc-100 text-sm"
+                />
               </div>
               {!canEdit && (
-                <div className="mt-4 rounded-lg border p-3">
-                  <div className="text-sm font-medium">Invited Suppliers</div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {(rfq.suppliers ?? []).map((s) => (
-                      <Badge key={s.id} variant="secondary">
-                        {s.supplierName}
-                      </Badge>
-                    ))}
+                <div className="mt-6">
+                  <div className="mb-3 flex items-center gap-4">
+                    <h3 className="whitespace-nowrap text-[11.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Invited Suppliers</h3>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                  <div className="overflow-hidden rounded-lg border border-border">
+                    <Table className="table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0">
+                      <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
+                        <TableRow className="border-border hover:bg-transparent">
+                          <TableHead className="w-10 px-3 text-center">No</TableHead>
+                          <TableHead className="px-3">Supplier</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody className="[&_tr]:border-border/70">
+                        {(rfq.suppliers ?? []).length === 0 ? (
+                          <TableRow className="border-border/70 hover:bg-transparent">
+                            <TableCell colSpan={2} className="px-3 py-6 text-center text-muted-foreground">
+                              Belum ada supplier.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          (rfq.suppliers ?? []).map((s, idx) => (
+                            <TableRow key={s.id} className="border-border/70 hover:bg-transparent">
+                              <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
+                              <TableCell className="px-3 font-medium">{s.supplierName}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
                   </div>
                 </div>
               )}
@@ -554,10 +662,10 @@ export default function RfqDetailPage() {
                       return (
                         <TableRow key={s.id}>
                           <TableCell className="font-medium">{s.supplierName}</TableCell>
-                          <TableCell>{q?.quotationNo ?? "—"}</TableCell>
-                          <TableCell>{q?.quotationDate?.slice(0, 10) ?? "—"}</TableCell>
-                          <TableCell>{q?.validUntil?.slice(0, 10) ?? "—"}</TableCell>
-                          <TableCell className="text-right tabular-nums">{q ? `Rp ${formatNumber(q.totalAmount)}` : "—"}</TableCell>
+                          <TableCell>{q?.quotationNo ?? ""}</TableCell>
+                          <TableCell>{q?.quotationDate?.slice(0, 10) ?? ""}</TableCell>
+                          <TableCell>{q?.validUntil?.slice(0, 10) ?? ""}</TableCell>
+                          <TableCell className="text-right tabular-nums">{q ? `Rp ${formatNumber(q.totalAmount)}` : ""}</TableCell>
                           <TableCell>{q ? <Badge>{q.status}</Badge> : <Badge variant="outline">Not quoted</Badge>}</TableCell>
                           <TableCell>
                             <Button size="sm" className="h-7 text-xs" onClick={() => setShowQuotDialog(s.supplierId)} disabled={rfq.status === "CANCELED" || rfq.status === "CLOSED"}>
@@ -617,7 +725,7 @@ export default function RfqDetailPage() {
                                 <TableCell className="p-0">
                                   <TableInput value={l.discount} onChange={(v) => setQuotForm({ ...quotForm, lines: quotForm.lines.map((x: any, i: number) => (i === idx ? { ...x, discount: v } : x)) })} isNumeric />
                                 </TableCell>
-                                <TableCell className="text-right tabular-nums">{subtotal ? `Rp ${formatNumber(subtotal)}` : "—"}</TableCell>
+                                <TableCell className="text-right tabular-nums">{subtotal ? `Rp ${formatNumber(subtotal)}` : ""}</TableCell>
                                 <TableCell className="p-0">
                                   <TableInput value={l.note} onChange={(v) => setQuotForm({ ...quotForm, lines: quotForm.lines.map((x: any, i: number) => (i === idx ? { ...x, note: v } : x)) })} />
                                 </TableCell>
@@ -726,6 +834,10 @@ export default function RfqDetailPage() {
               )}
             </FormSection>
           )}
+
+          <FormSection title="Activity Log">
+            <ActivityTimeline documentType="RFQ" documentId={rfq.id} />
+          </FormSection>
         </FormPage>
       </div>
 
@@ -745,7 +857,7 @@ export default function RfqDetailPage() {
                   )}
                   <div className="leading-tight">
                     <div className="text-[15px] font-bold tracking-tight">{(company as any)?.companyName ?? "PT CONTOH"}</div>
-                    <div className="mt-0.5 max-w-[360px] whitespace-pre-wrap break-words text-[10px] leading-snug text-zinc-600">{(company as any)?.address ?? "-"}</div>
+                    <div className="mt-0.5 max-w-[360px] whitespace-pre-wrap break-words text-[10px] leading-snug text-zinc-600">{(company as any)?.address ?? ""}</div>
                     <div className="mt-1 text-[10px] text-zinc-600">{(company as any)?.phone ?? ""} · {(company as any)?.email ?? ""}</div>
                   </div>
                 </div>
@@ -766,7 +878,7 @@ export default function RfqDetailPage() {
                   </div>
                   <div className="flex">
                     <span className="w-24 text-zinc-600">Deadline</span>
-                    <span>{rfq.quotationDeadline?.slice(0, 10) ?? "-"}</span>
+                    <span>{rfq.quotationDeadline?.slice(0, 10) ?? ""}</span>
                   </div>
                   {rfq.purchaseRequestNo && (
                     <div className="flex">
@@ -782,7 +894,7 @@ export default function RfqDetailPage() {
                   </div>
                   <div className="flex">
                     <span className="w-24 text-zinc-600">Expected Delivery</span>
-                    <span>{rfq.expectedDate?.slice(0, 10) ?? "-"}</span>
+                    <span>{rfq.expectedDate?.slice(0, 10) ?? ""}</span>
                   </div>
                 </div>
               </div>
@@ -808,12 +920,12 @@ export default function RfqDetailPage() {
                       <td className="px-2 py-2">{itemLabel(l.itemId)}</td>
                       <td className="px-2 py-2 text-center">{formatNumber(l.qty)}</td>
                       <td className="px-2 py-2 text-center">{uomName(l.uomId)}</td>
-                      <td className="px-2 py-2">{l.note ?? "-"}</td>
+                      <td className="px-2 py-2">{l.note ?? ""}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div className="mt-4 text-[11px]">Notes: {rfq.notes ?? "-"}</div>
+              <div className="mt-4 text-[11px]">Notes: {rfq.notes ?? ""}</div>
               <div className="mt-10 grid grid-cols-2 gap-8 text-center text-[11px]">
                 <div>
                   <div className="font-semibold">Prepared By</div>

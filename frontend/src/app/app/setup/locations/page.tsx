@@ -78,7 +78,7 @@ export default function LocationsPage() {
       header: "Location",
       sortValue: (l) => `${l.name} : ${warehouseOf(l.warehouseId)?.name ?? ""}`,
       cell: (l) => {
-        const whName = warehouseOf(l.warehouseId)?.name ?? "—";
+        const whName = warehouseOf(l.warehouseId)?.name ?? "";
         return (
           <span className="inline-flex items-center gap-1.5 font-medium truncate whitespace-nowrap" title={`${l.name} : ${whName}`}>
             <span className="truncate">{l.name}</span>
@@ -93,7 +93,7 @@ export default function LocationsPage() {
       id: "branch",
       header: "Branch",
       sortValue: (l) => branchOf(warehouseOf(l.warehouseId)?.branchId ?? "")?.name ?? "",
-      cell: (l) => <Badge tone="neutral" className="rounded-md">{branchOf(warehouseOf(l.warehouseId)?.branchId ?? "")?.name ?? "—"}</Badge>,
+      cell: (l) => <Badge tone="neutral" className="rounded-md">{branchOf(warehouseOf(l.warehouseId)?.branchId ?? "")?.name ?? ""}</Badge>,
       className: "w-[180px] pr-6",
     },
     {

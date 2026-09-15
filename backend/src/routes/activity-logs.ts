@@ -14,6 +14,7 @@ function isUuid(v: string): boolean {
 const DOC_TABLE_MAP: Record<string, any> = {
   PR: s.purchaseRequests,
   MR: s.materialRequests,
+  RFQ: (s as any).rfqs,
   PO: s.purchaseOrders,
   SO: s.salesOrders,
   GR: s.goodsReceipts,
@@ -52,6 +53,7 @@ const DOC_TABLE_MAP: Record<string, any> = {
 const DOC_MENU_MAP: Record<string, string> = {
   PR: "supply.purchaseRequests",
   MR: "supply.materialRequests",
+  RFQ: "supply.purchaseRequests",
   PO: "supply.purchaseOrders",
   SO: "supply.salesOrders",
   GR: "supply.goodsReceipts",
@@ -102,13 +104,13 @@ async function resolveInternalId(table: any, pid: string): Promise<number | null
   return null;
 }
 
-async function enrichUsers(userIds: number[]): Promise<Map<number, { name: string; publicId: string }>> {
+async function enrichUsers(userIds: number[]): Promise<Map<number, { name: string; email: string; publicId: string }>> {
   if (userIds.length === 0) return new Map();
   const uniq = [...new Set(userIds.filter(Boolean))];
   if (uniq.length === 0) return new Map();
-  const rows = await db.select({ id: s.users.id, name: s.users.name, publicId: s.users.publicId }).from(s.users).where(inArray(s.users.id, uniq));
+  const rows = await db.select({ id: s.users.id, name: s.users.name, email: s.users.email, publicId: s.users.publicId }).from(s.users).where(inArray(s.users.id, uniq));
   const map = new Map();
-  for (const r of rows) map.set(r.id, { name: r.name, publicId: r.publicId });
+  for (const r of rows) map.set(r.id, { name: r.name, email: (r as any).email ?? null, publicId: r.publicId });
   return map;
 }
 
@@ -270,6 +272,7 @@ activityLogsRouter.get("/activity-logs", async (req, res, next) => {
       documentId: internalId,
       actorUserId: r.actorUserId,
       actorName: r.actorUserId ? (userMap.get(r.actorUserId)?.name ?? null) : null,
+      actorEmail: r.actorUserId ? (userMap.get(r.actorUserId)?.email ?? null) : null,
       actorRole: r.actorRole ?? null,
       action: r.action,
       fromStatus: r.fromStatus ?? null,
@@ -329,6 +332,7 @@ activityLogsRouter.get("/activity-logs/:documentType/:documentId", async (req, r
       documentId: internalId,
       actorUserId: r.actorUserId,
       actorName: r.actorUserId ? (userMap.get(r.actorUserId)?.name ?? null) : null,
+      actorEmail: r.actorUserId ? (userMap.get(r.actorUserId)?.email ?? null) : null,
       actorRole: r.actorRole ?? null,
       action: r.action,
       fromStatus: r.fromStatus ?? null,

@@ -20,8 +20,8 @@ export default function SalesOrdersPage() {
   const { data: customers = [] } = useCustomers();
   const { data: warehouses = [] } = useAllWarehouses();
 
-  const customerName = (id: string) => customers.find((c) => c.id === id)?.name ?? "—";
-  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "—";
+  const customerName = (id: string) => customers.find((c) => c.id === id)?.name ?? "";
+  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "";
 
   const filtered = useMemo(
     () =>

@@ -76,7 +76,7 @@ export default function DocumentTypesPage() {
       id: "type",
       header: "Document Type",
       sortValue: (s) => s.typeName ?? "",
-      cell: (s) => <Badge tone="neutral" className="rounded-md">{s.typeName ?? "—"}</Badge>,
+      cell: (s) => <Badge tone="neutral" className="rounded-md">{s.typeName ?? ""}</Badge>,
       className: "w-[180px] pr-8",
     },
     {

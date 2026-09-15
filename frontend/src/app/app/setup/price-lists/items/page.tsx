@@ -109,7 +109,7 @@ export default function ItemPricelistPage() {
             className="text-left"
           >
             <div className="text-xs font-medium text-primary hover:underline">{pl ? `${pl.code}` : r.priceListId.slice(0, 8)}</div>
-            <div className="text-xs text-muted-foreground">{pl?.name ?? "—"}</div>
+            <div className="text-xs text-muted-foreground">{pl?.name ?? ""}</div>
           </button>
         );
       },
@@ -123,7 +123,7 @@ export default function ItemPricelistPage() {
         return (
           <div>
             <div className="text-xs font-medium">{it ? it.code : r.itemId.slice(0, 8)}</div>
-            <div className="text-xs text-muted-foreground">{it?.name ?? "—"}</div>
+            <div className="text-xs text-muted-foreground">{it?.name ?? ""}</div>
           </div>
         );
       },

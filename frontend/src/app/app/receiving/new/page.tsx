@@ -234,7 +234,7 @@ export default function NewReceivingPage() {
                     {lines.map((r, idx) => {
                       const item = items.find((i) => i.id === r.itemId);
                       const poLine = (poDetail as any)?.lines?.[idx] as { qty?: string } | undefined;
-                      const qtyPo = poLine?.qty ?? r.qty ?? "—";
+                      const qtyPo = poLine?.qty ?? r.qty ?? "";
                       const qtyReceived = r.qty;
                       const rate = r.unitPrice ?? "";
                       const amount = Number(qtyReceived || 0) * Number(rate || 0);
@@ -243,10 +243,10 @@ export default function NewReceivingPage() {
                           <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
                           <TableCell className="px-3">
                             <span className="font-medium text-foreground">
-                              {item ? `${item.code}: ${item.name}` : r.itemId || "—"}
+                              {item ? `${item.code}: ${item.name}` : r.itemId || ""}
                             </span>
                           </TableCell>
-                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo !== "—" ? formatNumber(qtyPo) : "0"}</TableCell>
+                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo !== "" ? formatNumber(qtyPo) : "0"}</TableCell>
                           <TableCell className="p-0 border-r border-border">
                             <TableInput value={qtyReceived} onChange={(v) => setLines((prev) => prev.map((line, i) => (i === idx ? { ...line, qty: v } : line)))} columnTitle="Qty Received" isNumeric />
                           </TableCell>

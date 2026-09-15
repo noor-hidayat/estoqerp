@@ -19,7 +19,7 @@ export default function InboundQcPage() {
 
   const qcNo = (q: QcInspection) => {
     const doc = q.documentNo ?? formatId(q.id);
-    return doc && doc !== "—" ? String(doc) : formatId(q.id);
+    return doc && doc !== "" ? String(doc) : formatId(q.id);
   };
 
   const filtered = useMemo(() => inspections.filter((q) => statusFilter === "all" || q.status === statusFilter), [inspections, statusFilter]);
@@ -34,7 +34,7 @@ export default function InboundQcPage() {
     {
       id: "posting",
       header: "Posting date",
-      cell: (q) => <span className="whitespace-nowrap text-muted-foreground text-xs">{q.inspectionDate?.slice(0, 10) ?? "—"}</span>,
+      cell: (q) => <span className="whitespace-nowrap text-muted-foreground text-xs">{q.inspectionDate?.slice(0, 10) ?? ""}</span>,
       sortValue: (q) => q.inspectionDate ?? "",
     },
     {
@@ -46,7 +46,7 @@ export default function InboundQcPage() {
     {
       id: "created",
       header: "Created",
-      cell: (q) => <span className="text-muted-foreground text-xs">{(q as any).createdAt ? timeAgo((q as any).createdAt) : "—"}</span>,
+      cell: (q) => <span className="text-muted-foreground text-xs">{(q as any).createdAt ? timeAgo((q as any).createdAt) : ""}</span>,
       sortValue: (q) => (q as any).createdAt ?? "",
     },
   ];

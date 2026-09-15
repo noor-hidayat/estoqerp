@@ -224,7 +224,7 @@ export default function EditWarehousePage() {
                 <label className="text-sm font-medium leading-none">Branch</label>
                 <div>
                   <Badge tone="neutral" className="rounded-md px-2.5 py-1 text-xs">
-                    {branches.find((b) => b.id === form.branchId)?.name ?? "—"}
+                    {branches.find((b) => b.id === form.branchId)?.name ?? ""}
                   </Badge>
                 </div>
               </div>
@@ -252,7 +252,7 @@ export default function EditWarehousePage() {
                 ))}
               </Select>
               {!editing && form.parentId && (
-                <p className="mt-1 text-[11px] text-muted-foreground">Parent: {warehouses.find((x) => x.id === form.parentId)?.name ?? "—"}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">Parent: {warehouses.find((x) => x.id === form.parentId)?.name ?? ""}</p>
               )}
             </div>
             <div className="sm:col-span-2 flex items-center justify-between rounded-md border border-border px-3 py-2.5">

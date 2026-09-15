@@ -117,7 +117,7 @@ async function validateRfqAgainstPr(tx: any, prId: number, newLines: any[]) {
 
 // POST /rfqs
 rfqRouter.post("/rfqs", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const b = req.body ?? {};
     if (!b.warehouseId || !b.requestDate) return res.status(400).json({ error: "warehouseId, requestDate wajib." });
@@ -147,6 +147,12 @@ rfqRouter.post("/rfqs", async (req, res, next) => {
       if (!iid) return res.status(400).json({ error: `Supplier ${sid} tidak ditemukan.` });
     }
     const actor = await getActorInfo(req);
+    // fetch PR details for activity metadata if needed
+    let prForLog: { id: number; documentNo: string; publicId: string; status: string } | null = null;
+    if (purchaseRequestId) {
+      const [prRow] = await db.select({ id: s.purchaseRequests.id, documentNo: s.purchaseRequests.documentNo, publicId: s.purchaseRequests.publicId, status: s.purchaseRequests.status }).from(s.purchaseRequests).where(eq(s.purchaseRequests.id, purchaseRequestId)).limit(1);
+      if (prRow) prForLog = prRow as any;
+    }
     const { documentNo, seriesId, id: newId, publicId } = await db.transaction(async (tx) => {
       if (purchaseRequestId) {
         // For create, validate against PR total existing + new
@@ -190,7 +196,19 @@ rfqRouter.post("/rfqs", async (req, res, next) => {
       await replaceRfqSuppliers(tx, ins.id, supplierIds);
       return { documentNo: doc.documentNo, seriesId: doc.seriesId, id: ins.id, publicId: ins.publicId };
     });
-    try { await logActivity({ documentType: "RFQ", documentId: newId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: actor.internalId, actorRole: actor.role, metadata: { documentNo } }); } catch {}
+    try {
+      const rfqMeta: Record<string, unknown> = { documentNo };
+      if (prForLog) {
+        rfqMeta.sourceType = "PR";
+        rfqMeta.sourceDocumentNo = prForLog.documentNo;
+        rfqMeta.sourcePublicId = prForLog.publicId;
+        rfqMeta.sourceId = prForLog.id;
+      }
+      await logActivity({ documentType: "RFQ", documentId: newId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: actor.internalId, actorRole: actor.role, metadata: rfqMeta });
+      if (prForLog) {
+        await logActivity({ documentType: "PR", documentId: prForLog.id, action: "convert", fromStatus: prForLog.status, toStatus: prForLog.status, actorUserId: actor.internalId, actorRole: actor.role, metadata: { targetType: "RFQ", targetDocumentNo: documentNo, targetPublicId: publicId, targetId: newId } });
+      }
+    } catch {}
     res.status(201).json({ id: publicId, documentNo, seriesId });
   } catch (e: any) {
     const msg = e?.message ?? "";
@@ -203,7 +221,7 @@ rfqRouter.post("/rfqs", async (req, res, next) => {
 
 // GET /rfqs
 rfqRouter.get("/rfqs", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "view"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
   try {
     const conds: any[] = [];
     if (req.query.status) conds.push(eq(s.rfqs.status as any, String(req.query.status)));
@@ -275,7 +293,7 @@ rfqRouter.get("/rfqs", async (req, res, next) => {
 
 // GET /rfqs/:id
 rfqRouter.get("/rfqs/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "view"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
   try {
     const pid = String(req.params.id);
     const [row] = await db.select().from(s.rfqs).where(rfqWhere(pid)).limit(1);
@@ -391,7 +409,7 @@ rfqRouter.get("/rfqs/:id", async (req, res, next) => {
 
 // PATCH /rfqs/:id (only DRAFT)
 rfqRouter.patch("/rfqs/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
     const [cur] = await db.select().from(s.rfqs).where(rfqWhere(pid)).limit(1);
@@ -464,7 +482,7 @@ rfqRouter.patch("/rfqs/:id", async (req, res, next) => {
 
 // POST /rfqs/:id/send -> DRAFT -> SENT
 rfqRouter.post("/rfqs/:id/send", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
     const [cur] = await db.select().from(s.rfqs).where(rfqWhere(pid)).limit(1);
@@ -481,7 +499,7 @@ rfqRouter.post("/rfqs/:id/send", async (req, res, next) => {
 });
 
 rfqRouter.post("/rfqs/:id/cancel", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
     const [cur] = await db.select().from(s.rfqs).where(rfqWhere(pid)).limit(1);
@@ -495,7 +513,7 @@ rfqRouter.post("/rfqs/:id/cancel", async (req, res, next) => {
 });
 
 rfqRouter.post("/rfqs/:id/close", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
     const [cur] = await db.select().from(s.rfqs).where(rfqWhere(pid)).limit(1);
@@ -508,7 +526,7 @@ rfqRouter.post("/rfqs/:id/close", async (req, res, next) => {
 });
 
 rfqRouter.delete("/rfqs/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
     const [cur] = await db.select().from(s.rfqs).where(rfqWhere(pid)).limit(1);
@@ -521,7 +539,7 @@ rfqRouter.delete("/rfqs/:id", async (req, res, next) => {
 
 // Quotations: POST /rfqs/:id/quotations
 rfqRouter.post("/rfqs/:id/quotations", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
     const [rfq] = await db.select().from(s.rfqs).where(rfqWhere(pid)).limit(1);
@@ -627,7 +645,7 @@ rfqRouter.post("/rfqs/:id/quotations", async (req, res, next) => {
 });
 
 rfqRouter.get("/rfqs/:id/compare", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "view"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
   try {
     const pid = String(req.params.id);
     const [rfq] = await db.select().from(s.rfqs).where(rfqWhere(pid)).limit(1);
@@ -731,7 +749,7 @@ rfqRouter.get("/rfqs/:id/compare", async (req, res, next) => {
 
 // POST /rfqs/:id/award
 rfqRouter.post("/rfqs/:id/award", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const pid = String(req.params.id);
     const [rfq] = await db.select().from(s.rfqs).where(rfqWhere(pid)).limit(1);
@@ -778,7 +796,7 @@ rfqRouter.post("/rfqs/:id/create-po", async (req, res, next) => {
     }
 
     const actor = await getActorInfo(req);
-    const { documentNo, publicId } = await db.transaction(async (tx)=>{
+    const { documentNo, publicId, id: poInternalId } = await db.transaction(async (tx)=>{
       const doc = await nextDocumentNo(tx as any, "PO", { branchId: rfq.branchId ?? undefined, date: new Date() });
       const [po] = await tx.insert(s.purchaseOrders).values({
         documentNo: doc.documentNo,
@@ -812,7 +830,29 @@ rfqRouter.post("/rfqs/:id/create-po", async (req, res, next) => {
       }
       return { documentNo: doc.documentNo, publicId: po.publicId, id: po.id };
     });
-    try { await logActivity({ documentType: "RFQ", documentId: rfq.id, action: "create_po", fromStatus: rfq.status, toStatus: rfq.status, actorUserId: actor.internalId, actorRole: actor.role, metadata: { documentNo, supplierId: rfq.awardedSupplierId } }); } catch {}
+    try {
+      const rfqMeta: Record<string, unknown> = { documentNo, targetType: "PO", targetDocumentNo: documentNo, targetPublicId: publicId, supplierId: rfq.awardedSupplierId };
+      if (rfq.purchaseRequestId) rfqMeta.sourcePrId = rfq.purchaseRequestId;
+      await logActivity({ documentType: "RFQ", documentId: rfq.id, action: "create_po", fromStatus: rfq.status, toStatus: rfq.status, actorUserId: actor.internalId, actorRole: actor.role, metadata: rfqMeta });
+      // Also record on PO side
+      const poMeta: Record<string, unknown> = { documentNo, sourceType: "RFQ", sourceDocumentNo: rfq.documentNo, sourcePublicId: rfq.publicId, sourceId: rfq.id, supplierId: rfq.awardedSupplierId };
+      if (rfq.purchaseRequestId) {
+        const [prRow] = await db.select({ id: s.purchaseRequests.id, documentNo: s.purchaseRequests.documentNo, publicId: s.purchaseRequests.publicId }).from(s.purchaseRequests).where(eq(s.purchaseRequests.id, rfq.purchaseRequestId)).limit(1);
+        if (prRow) {
+          poMeta.sourcePrDocumentNo = prRow.documentNo;
+          poMeta.sourcePrPublicId = prRow.publicId;
+          poMeta.sourcePrId = prRow.id;
+        }
+      }
+      await logActivity({ documentType: "PO", documentId: poInternalId, action: "create", fromStatus: null, toStatus: "DRAFT", actorUserId: actor.internalId, actorRole: actor.role, metadata: poMeta });
+      // If RFQ linked to PR, also log on PR so PR timeline shows PO created via RFQ
+      if (rfq.purchaseRequestId) {
+        const [prRow] = await db.select({ id: s.purchaseRequests.id, documentNo: s.purchaseRequests.documentNo, publicId: s.purchaseRequests.publicId, status: s.purchaseRequests.status }).from(s.purchaseRequests).where(eq(s.purchaseRequests.id, rfq.purchaseRequestId)).limit(1);
+        if (prRow) {
+          await logActivity({ documentType: "PR", documentId: prRow.id, action: "convert", fromStatus: prRow.status, toStatus: prRow.status, actorUserId: actor.internalId, actorRole: actor.role, metadata: { targetType: "PO", targetDocumentNo: documentNo, targetPublicId: publicId, targetId: poInternalId, via: "RFQ", viaDocumentNo: rfq.documentNo, viaPublicId: rfq.publicId } });
+        }
+      }
+    } catch {}
     // optional: close RFQ after PO created? Keep AWARDED, let manual close
     res.status(201).json({ id: publicId, documentNo });
   } catch (e) { next(e); }
@@ -820,7 +860,7 @@ rfqRouter.post("/rfqs/:id/create-po", async (req, res, next) => {
 
 // supplier-quotations patch/submit
 rfqRouter.patch("/supplier-quotations/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const qid = String(req.params.id);
     let where:any = isUuid(qid) ? eq(s.supplierQuotations.publicId, qid) : eq(s.supplierQuotations.publicId, qid);
@@ -876,7 +916,7 @@ rfqRouter.patch("/supplier-quotations/:id", async (req, res, next) => {
 });
 
 rfqRouter.post("/supplier-quotations/:id/submit", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "manage"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "manage"))) return;
   try {
     const qid = String(req.params.id);
     const where = isUuid(qid) ? eq(s.supplierQuotations.publicId, qid) : eq(s.supplierQuotations.publicId, qid);
@@ -901,7 +941,7 @@ rfqRouter.post("/supplier-quotations/:id/submit", async (req, res, next) => {
 });
 
 rfqRouter.get("/supplier-quotations/:id", async (req, res, next) => {
-  if (!(await checkPermission(req, res, "supply.purchaseRequests", "view"))) return;
+  if (!(await checkPermission(req, res, "supply.purchaseOrders", "view"))) return;
   try {
     const qid = String(req.params.id);
     const where = isUuid(qid) ? eq(s.supplierQuotations.publicId, qid) : eq(s.supplierQuotations.publicId, qid);

@@ -154,7 +154,8 @@ materialRequestRouter.post("/material-requests", async (req, res, next) => {
         urgency: b.urgency ? String(b.urgency).toUpperCase() : "MEDIUM",
         status: "DRAFT",
         notes: b.notes ?? null,
-        department: b.department ?? null,
+        department: b.department ? String(b.department).trim() || null : null,
+        toDepartment: (b as any).toDepartment ? String((b as any).toDepartment).trim() || null : null,
         costCenter: b.costCenter ?? null,
         currency: b.currency ? String(b.currency).toUpperCase() : "IDR",
         exchangeRate: b.exchangeRate != null ? String(b.exchangeRate) : "1",
@@ -203,6 +204,7 @@ materialRequestRouter.get("/material-requests", async (req, res, next) => {
       status: s.materialRequests.status,
       notes: s.materialRequests.notes,
       department: (s as any).materialRequests.department,
+      toDepartment: (s as any).materialRequests.toDepartment,
       costCenter: (s as any).materialRequests.costCenter,
       currency: (s as any).materialRequests.currency,
       exchangeRate: (s as any).materialRequests.exchangeRate,
@@ -231,6 +233,7 @@ materialRequestRouter.get("/material-requests", async (req, res, next) => {
       status: r.status,
       notes: r.notes,
       department: (r as any).department ?? null,
+      toDepartment: (r as any).toDepartment ?? null,
       costCenter: (r as any).costCenter ?? null,
       currency: (r as any).currency ?? "IDR",
       exchangeRate: (r as any).exchangeRate ?? "1",
@@ -339,6 +342,7 @@ materialRequestRouter.get("/material-requests/:id", async (req, res, next) => {
       status: row.status,
       notes: row.notes,
       department: (row as any).department ?? null,
+      toDepartment: (row as any).toDepartment ?? null,
       costCenter: (row as any).costCenter ?? null,
       currency: (row as any).currency ?? "IDR",
       exchangeRate: (row as any).exchangeRate ?? "1",
@@ -388,6 +392,7 @@ putAndPatch("/material-requests/:id", async (req, res, next) => {
     if (b.urgency !== undefined) patch.urgency = b.urgency ? String(b.urgency).toUpperCase() : "MEDIUM";
     if (b.notes !== undefined) patch.notes = b.notes ?? null;
     if (b.department !== undefined) patch.department = b.department ? String(b.department).trim() : null;
+    if ((b as any).toDepartment !== undefined) patch.toDepartment = (b as any).toDepartment ? String((b as any).toDepartment).trim() : null;
     if (b.costCenter !== undefined) patch.costCenter = b.costCenter ? String(b.costCenter).trim() : null;
     if (b.branchId !== undefined) patch.branchId = b.branchId ? await resolveInternalId(s.branches, String(b.branchId)) : null;
     if (b.needApproval !== undefined) patch.needApproval = !!b.needApproval;

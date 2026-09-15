@@ -44,8 +44,8 @@ export default function SalesOrderDetailPage() {
   useErrorToast(error);
   const [editing, setEditing] = useState(false);
 
-  const customerName = (cid?: string) => customers.find((c) => c.id === cid)?.name ?? "—";
-  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "—";
+  const customerName = (cid?: string) => customers.find((c) => c.id === cid)?.name ?? "";
+  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "";
 
   if (isLoading) {
     return (
@@ -235,9 +235,9 @@ export default function SalesOrderDetailPage() {
             <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
               <Detail label="Customer" value={customerName(so.customerId)} />
               <Detail label="Warehouse" value={warehouseName(so.warehouseId)} />
-              <Detail label="Order Date" value={so.orderDate?.slice(0, 10) ?? "—"} />
-              <Detail label="Expected Date" value={so.expectedDate?.slice(0, 10) ?? "—"} />
-              <Detail label="Notes" value={so.notes || "—"} />
+              <Detail label="Order Date" value={so.orderDate?.slice(0, 10) ?? ""} />
+              <Detail label="Expected Date" value={so.expectedDate?.slice(0, 10) ?? ""} />
+              <Detail label="Notes" value={so.notes || ""} />
             </dl>
           </div>
           <div>

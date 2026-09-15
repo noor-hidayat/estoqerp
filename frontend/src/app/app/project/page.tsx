@@ -73,7 +73,7 @@ export default function ProjectsPage() {
       sortValue: (p) => p.deadline ?? "",
       cell: (p) => (
         <span className="text-muted-foreground">
-            {p.deadline ? new Date(p.deadline).toLocaleDateString("id-ID") : "—"}
+            {p.deadline ? new Date(p.deadline).toLocaleDateString("id-ID") : ""}
         </span>
       ),
     },

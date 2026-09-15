@@ -51,7 +51,7 @@ export default function InboundReceivingPage() {
       const s = suppliers.find((x) => x.id === po.supplierId);
       if (s) return s.name;
     }
-    return "—";
+    return "";
   };
   const rcvNo = (r: Receiving) =>
     r.documentNo ?? (r as unknown as { rcvNo?: string }).rcvNo ?? formatId(r.id);
@@ -104,7 +104,7 @@ export default function InboundReceivingPage() {
     {
       id: "created",
       header: "Created",
-      cell: (r) => <span className="text-muted-foreground text-xs">{r.createdAt ? timeAgo(r.createdAt) : "—"}</span>,
+      cell: (r) => <span className="text-muted-foreground text-xs">{r.createdAt ? timeAgo(r.createdAt) : ""}</span>,
       sortValue: (r) => r.createdAt ?? "",
     },
   ];

@@ -84,7 +84,7 @@ export default function WarehousesPage() {
       id: "branch",
       header: "Branch",
       sortValue: (w) => branchOf(w.branchId)?.name ?? "",
-      cell: (w) => <Badge tone="neutral" className="rounded-md">{branchOf(w.branchId)?.name ?? "—"}</Badge>,
+      cell: (w) => <Badge tone="neutral" className="rounded-md">{branchOf(w.branchId)?.name ?? ""}</Badge>,
       className: "w-[200px] pr-10",
     },
     {

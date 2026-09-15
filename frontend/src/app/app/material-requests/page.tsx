@@ -20,8 +20,8 @@ export default function MaterialRequestsPage() {
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: branches = [] } = useBranches();
 
-  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "—";
-  const branchName = (id: string | null | undefined) => (id ? (branches.find((b) => b.id === id)?.name ?? "—") : "—");
+  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "";
+  const branchName = (id: string | null | undefined) => (id ? (branches.find((b) => b.id === id)?.name ?? "") : "");
 
   const filtered = useMemo(
     () =>
@@ -53,14 +53,14 @@ export default function MaterialRequestsPage() {
     },    {
       id: "department",
       header: "From Department",
-      cell: (o) => <span className="text-xs text-muted-foreground">{(o as any).department ?? "—"}</span>,
+      cell: (o) => <span className="text-xs text-muted-foreground">{(o as any).department ?? ""}</span>,
       sortValue: (o) => String((o as any).department ?? ""),
     },
     {
-      id: "branch",
+      id: "toDepartment",
       header: "To Department",
-      cell: (o) => <span className="text-xs text-muted-foreground">{branchName((o as any).branchId)}</span>,
-      sortValue: (o) => branchName((o as any).branchId),
+      cell: (o) => <span className="text-xs text-muted-foreground">{(o as any).toDepartment ?? ""}</span>,
+      sortValue: (o) => String((o as any).toDepartment ?? ""),
     },
     {
       id: "status",
@@ -105,7 +105,7 @@ export default function MaterialRequestsPage() {
         onRowClick={(o) => navigate(`/app/material-requests/${o.id}`)}
         searchPlaceholder="Search purchase requests..."
         getSearchText={(o) =>
-          `${o.documentNo ?? (o as any).mrNo ?? formatId(o.id)} ${warehouseName(o.warehouseId)} ${(o as any).department ?? ""} ${branchName((o as any).branchId)}`
+          `${o.documentNo ?? (o as any).mrNo ?? formatId(o.id)} ${warehouseName(o.warehouseId)} ${(o as any).department ?? ""} ${(o as any).toDepartment ?? ""}`
         }
         filters={
           <div className="flex gap-2">

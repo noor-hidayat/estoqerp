@@ -68,8 +68,8 @@ export default function ReceivingDetailPage() {
   useEffect(() => { if (isError) console.error("[ReceivingDetail] fetchError", id, fetchError); }, [isError, fetchError, id]);
   const [editing, setEditing] = useState(false);
 
-  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "—";
-  const supplierName = (sid?: string) => suppliers.find((s) => s.id === sid)?.name ?? "—";
+  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "";
+  const supplierName = (sid?: string) => suppliers.find((s) => s.id === sid)?.name ?? "";
   const poLabel = (pid?: string) => {
     const p = pos.find((x) => x.id === pid);
     return p ? `${p.documentNo ?? p.poNo ?? formatId(p.id)} · ${p.status}` : formatId(pid);
@@ -323,14 +323,14 @@ export default function ReceivingDetailPage() {
               <FormGrid>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none">Document</label>
-                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{(() => { const pid = form.purchaseOrderId ?? (gr as any).purchaseOrderId; const p = pos.find((x) => x.id === pid); if (p?.documentNo) return String(p.documentNo); if ((p as any)?.poNo) return String((p as any).poNo); if (pid && /[A-Z]+\//.test(pid)) return pid; return p ? formatId(p.id) : "—"; })()}</div>
+                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{(() => { const pid = form.purchaseOrderId ?? (gr as any).purchaseOrderId; const p = pos.find((x) => x.id === pid); if (p?.documentNo) return String(p.documentNo); if ((p as any)?.poNo) return String((p as any).poNo); if (pid && /[A-Z]+\//.test(pid)) return pid; return p ? formatId(p.id) : ""; })()}</div>
               </div>
               <DatePicker label="Posting Date" value={form.receiptDate} onChange={(v) => setForm({ ...form, receiptDate: v })} />
               <div aria-hidden="true" />
               <TimePicker label="Posting Time" value={toTimeStr(gr.createdAt)} onChange={() => {}} disabled />
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium leading-none">Supplier Name</label>
-                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{supplierIdForGr ? suppliers.find((s) => s.id === supplierIdForGr)?.name ?? "—" : "—"}</div>
+                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{supplierIdForGr ? suppliers.find((s) => s.id === supplierIdForGr)?.name ?? "" : ""}</div>
               </div>
               <SearchableSelect
                 label="Target Warehouse"
@@ -363,14 +363,14 @@ export default function ReceivingDetailPage() {
                     {lines.map((r, idx) => {
                       const item = items.find((i) => i.id === r.itemId);
                       const poLine = (poDetail as any)?.lines?.[idx] as { qty?: string } | undefined;
-                      const qtyPo = poLine?.qty ?? "—";
+                      const qtyPo = poLine?.qty ?? "";
                       const rate = r.unitPrice ?? "";
                       const amount = Number(r.qty || 0) * Number(rate || 0);
                       return (
                         <TableRow key={idx} className="border-border/70 hover:bg-transparent">
                           <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
-                          <TableCell className="px-3 font-medium text-foreground">{item ? `${item.code}: ${item.name}` : r.itemId || "—"}</TableCell>
-                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo !== "—" ? formatNumber(qtyPo) : "0"}</TableCell>
+                          <TableCell className="px-3 font-medium text-foreground">{item ? `${item.code}: ${item.name}` : r.itemId || ""}</TableCell>
+                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo !== "" ? formatNumber(qtyPo) : "0"}</TableCell>
                           <TableCell className="px-3">
                             <TableInput value={r.qty} onChange={(v) => setLines(prev => prev.map((line, i) => (i === idx ? { ...line, qty: v } : line)))} columnTitle="Qty Received" isNumeric />
                           </TableCell>
@@ -402,27 +402,27 @@ export default function ReceivingDetailPage() {
             <FormGrid>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium leading-none">Document</label>
-                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{(() => { const p = pos.find((x) => x.id === gr.purchaseOrderId); if (p?.documentNo) return String(p.documentNo); if ((p as any)?.poNo) return String((p as any).poNo); if (gr.purchaseOrderId && /[A-Z]+\//.test(gr.purchaseOrderId)) return gr.purchaseOrderId; return p ? formatId(p.id) : "—"; })()}</div>
+                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{(() => { const p = pos.find((x) => x.id === gr.purchaseOrderId); if (p?.documentNo) return String(p.documentNo); if ((p as any)?.poNo) return String((p as any).poNo); if (gr.purchaseOrderId && /[A-Z]+\//.test(gr.purchaseOrderId)) return gr.purchaseOrderId; return p ? formatId(p.id) : ""; })()}</div>
               </div>
               <DatePicker label="Posting Date" value={gr.receiptDate?.slice(0, 10) ?? ""} onChange={() => {}} disabled />
               <div aria-hidden="true" />
               <TimePicker label="Posting Time" value={toTimeStr(gr.createdAt)} onChange={() => {}} disabled />
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium leading-none">Supplier Name</label>
-                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{supplierIdForGr ? suppliers.find((s) => s.id === supplierIdForGr)?.name ?? "—" : "—"}</div>
+                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{supplierIdForGr ? suppliers.find((s) => s.id === supplierIdForGr)?.name ?? "" : ""}</div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium leading-none">Target Warehouse</label>
-                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{warehouses.find((w) => w.id === gr.warehouseId)?.name ?? "—"}</div>
+                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{warehouses.find((w) => w.id === gr.warehouseId)?.name ?? ""}</div>
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
-                <Textarea value={gr.notes ?? ""} onChange={() => {}} disabled placeholder="—" />
+                <Textarea value={gr.notes ?? ""} onChange={() => {}} disabled placeholder="" />
               </div>
               {(gr as any).qcNotes && (
                 <div>
                   <label className="mb-1.5 block text-sm font-medium leading-none">QC Notes</label>
-                  <Textarea value={(gr as any).qcNotes ?? ""} disabled placeholder="—" />
+                  <Textarea value={(gr as any).qcNotes ?? ""} disabled placeholder="" />
                 </div>
               )}
             </FormGrid>
@@ -447,7 +447,7 @@ export default function ReceivingDetailPage() {
                     {lines.map((r: any, idx) => {
                       const item = items.find((i) => i.id === r.itemId);
                       const poLine = (poDetail as any)?.lines?.[idx] as { qty?: string } | undefined;
-                      const qtyPo = poLine?.qty ?? "—";
+                      const qtyPo = poLine?.qty ?? "";
                       const rate = r.unitPrice ?? "";
                       const qtyReceived = Number(r.qty || 0);
                       const qtyRejected = r.qtyRejected != null ? Number(r.qtyRejected) : isCompleted || isPendingQc ? 0 : null;
@@ -456,8 +456,8 @@ export default function ReceivingDetailPage() {
                       return (
                         <TableRow key={idx} className="border-border/70 hover:bg-transparent">
                           <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
-                          <TableCell className="px-3 font-medium text-foreground">{item ? `${item.code}: ${item.name}` : r.itemId || "—"}</TableCell>
-                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo !== "—" ? formatNumber(qtyPo) : "0"}</TableCell>
+                          <TableCell className="px-3 font-medium text-foreground">{item ? `${item.code}: ${item.name}` : r.itemId || ""}</TableCell>
+                          <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo !== "" ? formatNumber(qtyPo) : "0"}</TableCell>
                           <TableCell className="px-3 text-right tabular-nums text-foreground">{r.qty ? formatNumber(r.qty) : "0"}</TableCell>
                           {(isCompleted || isPendingQc) && <TableCell className="px-3 text-right font-medium tabular-nums text-emerald-700">{qtyAccepted != null ? formatNumber(qtyAccepted) : "0"}</TableCell>}
                           {(isCompleted || isPendingQc) && <TableCell className="px-3 text-right tabular-nums text-destructive">{qtyRejected != null ? formatNumber(qtyRejected) : "0"}</TableCell>}
@@ -503,7 +503,7 @@ export default function ReceivingDetailPage() {
                         <TableRow key={q.id} className="border-border/70 hover:bg-transparent">
                           <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
                           <TableCell className="px-3 font-medium text-foreground">{q.documentNo ?? formatId(q.id)}</TableCell>
-                          <TableCell className="px-3 text-muted-foreground">{q.inspectionDate?.slice(0, 10) ?? "—"}</TableCell>
+                          <TableCell className="px-3 text-muted-foreground">{q.inspectionDate?.slice(0, 10) ?? ""}</TableCell>
                           <TableCell className="px-3"><DocStatusBadge status={q.status} /></TableCell>
                           <TableCell className="px-3 text-right"><Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => navigate(`/app/qc/${encodeURIComponent(q.documentNo ?? q.id)}`)}>View</Button></TableCell>
                         </TableRow>

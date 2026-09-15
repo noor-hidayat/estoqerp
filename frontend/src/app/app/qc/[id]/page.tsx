@@ -102,7 +102,7 @@ export default function QcDetailPage() {
   const docNo = (qc as any).documentNo ?? formatId(qc.id);
   const receivingDocNo = (receiving as any)?.documentNo ?? (receiving ? formatId((receiving as any).id) : formatId(qc?.receivingId));
   const supplierIdForReceiving = (receiving as any)?.supplierId ?? (qc as any)?.supplierId ?? (pos.find((p: any) => p.id === (receiving as any)?.purchaseOrderId) as any)?.supplierId;
-  const supplierName = suppliers.find((s) => s.id === supplierIdForReceiving)?.name ?? "—";
+  const supplierName = suppliers.find((s) => s.id === supplierIdForReceiving)?.name ?? "";
   const displayPostingDate = editing ? editPostingDate : (qc.inspectionDate?.slice(0, 10) ?? todayISO());
 
   const hasAnyReject = editing ? editQtyReject.some((v) => Number(v) > 0) : (qc.lines ?? []).some((l: any) => Number(l.qtyRejected) > 0);
@@ -133,7 +133,7 @@ export default function QcDetailPage() {
       <div className="space-y-6">
         <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
           <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-            <SearchableSelect label="Document" placeholder="—" options={[{ value: qc.receivingId, label: receivingDocNo }]} value={qc.receivingId} onChange={()=>{}} disabled />
+            <SearchableSelect label="Document" placeholder="" options={[{ value: qc.receivingId, label: receivingDocNo }]} value={qc.receivingId} onChange={()=>{}} disabled />
             <DatePicker label="Posting Date" value={displayPostingDate} onChange={(v) => setEditPostingDate(v)} disabled={!editing} />
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium leading-none">Supplier Name</label>
@@ -142,7 +142,7 @@ export default function QcDetailPage() {
             <div aria-hidden="true" />
             <div className="flex flex-col gap-1.5">
               <label className="mb-1.5 block text-sm font-medium">Notes</label>
-              <Textarea value={editing ? formNotes : qc.notes ?? ""} onChange={(e)=>setFormNotes(e.target.value)} disabled={!editing} placeholder="—" />
+              <Textarea value={editing ? formNotes : qc.notes ?? ""} onChange={(e)=>setFormNotes(e.target.value)} disabled={!editing} placeholder="" />
             </div>
           </div>
         </div>

@@ -17,7 +17,7 @@ export default function RfqListPage() {
   const [warehouseFilter, setWarehouseFilter] = useState("all");
   const { data: rfqs = [], isLoading } = useRfqs();
   const { data: warehouses = [] } = useAllWarehouses();
-  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "—";
+  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "";
 
   const filtered = useMemo(
     () =>
@@ -39,7 +39,7 @@ export default function RfqListPage() {
     {
       id: "purchaseRequest",
       header: "PR Ref",
-      cell: (o) => <span className="text-xs text-muted-foreground">{o.purchaseRequestNo ?? o.purchaseRequestId ?? "—"}</span>,
+      cell: (o) => <span className="text-xs text-muted-foreground">{o.purchaseRequestNo ?? o.purchaseRequestId ?? ""}</span>,
       sortValue: (o) => String(o.purchaseRequestNo ?? ""),
     },
     {
@@ -57,7 +57,7 @@ export default function RfqListPage() {
     {
       id: "deadline",
       header: "Deadline",
-      cell: (o) => <span className="text-muted-foreground">{o.quotationDeadline?.slice(0, 10) ?? "—"}</span>,
+      cell: (o) => <span className="text-muted-foreground">{o.quotationDeadline?.slice(0, 10) ?? ""}</span>,
       sortValue: (o) => o.quotationDeadline ?? "",
     },
     {
@@ -91,7 +91,7 @@ export default function RfqListPage() {
   ];
 
   return (
-    <RoleGuard roles={[]} menus={["supply.purchaseRequests"]}>
+    <RoleGuard roles={[]} menus={["supply.purchaseOrders"]}>
       <PageHeader
         title="Request for Quotation"
         actions={

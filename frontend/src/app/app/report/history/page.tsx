@@ -84,14 +84,14 @@ export default function ScanHistoryPage() {
         const loc = locations.find((l) => l.id === r.locationId);
         return {
           waktu: formatDateTime(r.scannedAt),
-          project: project?.name ?? "—",
+          project: project?.name ?? "",
           barcode: r.barcode,
-          item: item?.name ?? "—",
+          item: item?.name ?? "",
           qty: r.quantity,
           qtyMode: r.qtyMode === "AUTO" ? "Auto" : "Manual",
           source: SOURCE_LABELS[r.source] ?? r.source,
-          user: user?.name ?? "—",
-          location: loc?.code ?? "—",
+          user: user?.name ?? "",
+          location: loc?.code ?? "",
         };
       });
       const base = "scan-history";
@@ -124,7 +124,7 @@ export default function ScanHistoryPage() {
       header: "Project",
       cell: (r) => (
         <span className="max-w-[160px] truncate text-[12.5px] text-muted-foreground">
-          {projects.find((p) => p.id === r.opnameId)?.name ?? "—"}
+          {projects.find((p) => p.id === r.opnameId)?.name ?? ""}
         </span>
       ),
       className: "max-w-[160px]",
@@ -172,7 +172,7 @@ export default function ScanHistoryPage() {
       header: "Location",
       cell: (r) => (
         <span className="text-xs">
-          {locations.find((l) => l.id === r.locationId)?.code ?? "—"}
+          {locations.find((l) => l.id === r.locationId)?.code ?? ""}
         </span>
       ),
     },

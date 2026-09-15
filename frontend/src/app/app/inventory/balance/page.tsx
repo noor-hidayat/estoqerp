@@ -99,7 +99,7 @@ export default function StockBalancePage() {
     { key: "name" as const, header: "Item Name" },
     { key: "itemGroup" as const, header: "Item Group" },
     { key: "warehouse" as const, header: "Warehouse" },
-    { key: "balanceDate" as const, header: "Date", format: (v: unknown) => (v ? formatDate(String(v)) : "—") },
+    { key: "balanceDate" as const, header: "Date", format: (v: unknown) => (v ? formatDate(String(v)) : "") },
     { key: "openingQty" as const, header: "Opening Stock", format: (v: unknown) => formatQty(v as any) },
     { key: "inQty" as const, header: "In Qty", format: (v: unknown) => formatQty(v as any) },
     { key: "outQty" as const, header: "Out Qty", format: (v: unknown) => formatQty(v as any) },
@@ -156,13 +156,13 @@ export default function StockBalancePage() {
     {
       id: "itemGroup",
       header: "Item Group",
-      sortValue: (r) => r.itemGroup ?? "—",
+      sortValue: (r) => r.itemGroup ?? "",
       cell: (r) => (
         <span
           className="block max-w-[160px] truncate text-xs text-muted-foreground"
           title={r.itemGroup ?? undefined}
         >
-          {r.itemGroup ?? "—"}
+          {r.itemGroup ?? ""}
         </span>
       ),
     },
@@ -186,7 +186,7 @@ export default function StockBalancePage() {
       sortValue: (r) => r.balanceDate,
       cell: (r) => (
         <span className="whitespace-nowrap text-xs text-muted-foreground">
-          {r.balanceDate ? formatDate(r.balanceDate) : "—"}
+          {r.balanceDate ? formatDate(r.balanceDate) : ""}
         </span>
       ),
       className: "whitespace-nowrap",
@@ -314,7 +314,7 @@ export default function StockBalancePage() {
                           <span className="text-xs text-muted-foreground">{it.code}</span>
                           <span className="min-w-0 flex-1 truncate font-medium">{it.name}</span>
                           <span className="shrink-0 text-xs text-muted-foreground">
-                            {it.uomId ? (uomById.get(it.uomId)?.name ?? "—") : "—"}
+                            {it.uomId ? (uomById.get(it.uomId)?.name ?? "") : ""}
                           </span>
                         </button>
                       ))

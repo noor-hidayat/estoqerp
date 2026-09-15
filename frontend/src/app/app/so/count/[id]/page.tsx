@@ -66,7 +66,7 @@ function CountScanHistoryTable({ history, items }: { history: { key: string; bar
                 <tr key={h.key} className="hover:bg-muted/30">
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">{history.length - idx}</td>
                   <td className="break-all px-4 py-2.5 text-xs text-foreground">{h.barcode}</td>
-                  <td className="px-4 py-2.5 text-xs text-muted-foreground">{item ? `${item.code}: ${item.name}` : "—"}</td>
+                  <td className="px-4 py-2.5 text-xs text-muted-foreground">{item ? `${item.code}: ${item.name}` : ""}</td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">—</td>
                   <td className="px-4 py-2.5 text-right text-xs text-foreground">1</td>
                 </tr>
@@ -114,7 +114,7 @@ export default function CountDetailPage() {
     const ids = new Set(selectedProject.warehouses.map((w) => w.warehouseId));
     return warehouses.filter((w) => ids.has(w.id));
   }, [warehouses, selectedProject]);
-  const selectedWarehouseName = warehouseMap.get(warehouseId) ?? "—";
+  const selectedWarehouseName = warehouseMap.get(warehouseId) ?? "";
 
   const isPosted = count?.status === "POSTED";
 
@@ -402,7 +402,7 @@ export default function CountDetailPage() {
                       <TableBody>
                         {rows.map((r, idx) => {
                           const item = itemMap.get(r.itemId);
-                          const uomName = r.uomId ? (uomMap.get(r.uomId) ?? r.uomId) : item?.uomId ? (uomMap.get(item.uomId) ?? item.uomId) : "—";
+                          const uomName = r.uomId ? (uomMap.get(r.uomId) ?? r.uomId) : item?.uomId ? (uomMap.get(item.uomId) ?? item.uomId) : "";
                           return (
                             <TableRow key={r.key} className={cn("border-border/70", selectedKeys.has(r.key) && "bg-muted/50")}>
                               <TableCell className="px-3">
@@ -416,7 +416,7 @@ export default function CountDetailPage() {
                                 <Input type="number" value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} disabled={isPosted} placeholder="0" className="h-8 w-full text-right text-sm shadow-none" />
                               </TableCell>
                               <TableCell className="px-4">
-                                <Input value={r.batch} onChange={(e) => setRow(r.key, { batch: e.target.value })} disabled={isPosted} placeholder="—" className="h-8 w-full text-sm shadow-none" />
+                                <Input value={r.batch} onChange={(e) => setRow(r.key, { batch: e.target.value })} disabled={isPosted} placeholder="" className="h-8 w-full text-sm shadow-none" />
                               </TableCell>
                               <TableCell className="px-4 text-xs text-muted-foreground">{uomName}</TableCell>
                               <TableCell className="px-4 text-xs text-muted-foreground">{selectedWarehouseName}</TableCell>

@@ -21,6 +21,7 @@ import {
   useWorkflows,
   useWorkflowStates,
   useUserSignature,
+  useDepartments,
 } from "@/lib/api/query";
 import { useSession } from "@/lib/session";
 import { RoleGuard } from "@/components/ui/role-guard";
@@ -35,6 +36,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -196,9 +198,9 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 function formatDdMmmYyyy(dateStr?: string | null): string {
-  if (!dateStr) return "-";
+  if (!dateStr) return "";
   const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return "-";
+  if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 const CURRENCY_SYMBOLS: Record<string, string> = { IDR: "Rp", USD: "$", EUR: "€", SGD: "S$", JPY: "¥", CNY: "¥", MYR: "RM", THB: "฿", AUD: "A$" };
@@ -219,7 +221,7 @@ export default function MaterialRequestDetailPage() {
   const remove = useRemoveMaterialRequest();
   const [editing, setEditing] = useState(false);
 
-  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "—";
+  const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "";
 
   if (isLoading) {
     return (
@@ -285,6 +287,15 @@ function PRBody({
   const { user } = useSession();
   const { data: taxCategories = [] } = useTaxCategories();
   const { data: branches = [] } = useBranches();
+  const { data: departments = [] } = useDepartments();
+  const departmentOptions = useMemo(
+    () =>
+      (departments as any[])
+        .filter((d) => d.isActive !== false)
+        .sort((a, b) => String(a.code).localeCompare(String(b.code)))
+        .map((d) => ({ value: d.name, label: d.code ? `${d.code} - ${d.name}` : d.name })),
+    [departments]
+  );
   const { data: company } = useCompanySettings();
   const { data: items = [] } = useItemsList();
   const { data: workflows = [] } = useWorkflows();
@@ -320,6 +331,7 @@ function PRBody({
     requestDate: pr.requestDate?.slice(0, 10) ?? todayISO(),
     expectedDate: pr.expectedDate?.slice(0, 10) ?? "",    notes: pr.notes ?? "",
     department: (pr as any).department ?? "",
+    toDepartment: (pr as any).toDepartment ?? "",
     costCenter: (pr as any).costCenter ?? "",
     branchId: (pr as any).branchId ?? "",
     currency: (pr as any).currency ?? (company as any)?.baseCurrency ?? "IDR",
@@ -384,6 +396,7 @@ function PRBody({
       requestDate: pr.requestDate?.slice(0, 10) ?? todayISO(),
       expectedDate: pr.expectedDate?.slice(0, 10) ?? "",      notes: pr.notes ?? "",
       department: (pr as any).department ?? "",
+      toDepartment: (pr as any).toDepartment ?? "",
       costCenter: (pr as any).costCenter ?? "",
       branchId: (pr as any).branchId ?? "",
       currency: (pr as any).currency ?? baseCurrency ?? "IDR",
@@ -413,6 +426,7 @@ function PRBody({
       requestDate: pr.requestDate?.slice(0, 10) ?? "",
       expectedDate: pr.expectedDate?.slice(0, 10) ?? "",      notes: pr.notes ?? "",
       department: (pr as any).department ?? "",
+      toDepartment: (pr as any).toDepartment ?? "",
       costCenter: (pr as any).costCenter ?? "",
       branchId: (pr as any).branchId ?? "",
       currency: (pr as any).currency ?? "IDR",
@@ -462,6 +476,7 @@ function PRBody({
           requestDate: form.requestDate,
           expectedDate: form.expectedDate || null,          notes: form.notes.trim() || null,
           department: form.department.trim() || null,
+          toDepartment: form.toDepartment.trim() || null,
           costCenter: form.costCenter.trim() || null,
           branchId: form.branchId || null,
           currency: form.currency || baseCurrency,
@@ -681,7 +696,7 @@ function PRBody({
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none">Branch</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {branches.find((b) => b.id === (pr as any).branchId)?.name ?? "—"}
+                    {branches.find((b) => b.id === (pr as any).branchId)?.name ?? ""}
                   </div>
                 </div>
               )}
@@ -704,39 +719,38 @@ function PRBody({
             </div>
             <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
               {editable ? (
-                <Input
+                <SearchableSelect
                   label="From Department"
-                  placeholder="e.g. Budi - Warehouse"
+                  options={departmentOptions}
                   value={form.department}
-                  onChange={(e) => setForm({ ...form, department: e.target.value })}
+                  onChange={(v) => setForm({ ...form, department: v })}
+                  placeholder="Select department..."
+                  emptyText="No department found"
+                  emptyLabel="— No Department —"
                 />
               ) : (
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none">From Department</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {(pr as any).department ?? "—"}
+                    {(pr as any).department ?? ""}
                   </div>
                 </div>
               )}
               {editable ? (
-                <Select
+                <SearchableSelect
                   label="To Department"
-                  value={form.branchId}
-                  onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-                  className="h-8"
-                >
-                  <option value="">Select branch...</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </Select>
+                  options={departmentOptions}
+                  value={form.toDepartment}
+                  onChange={(v) => setForm({ ...form, toDepartment: v })}
+                  placeholder="Select department..."
+                  emptyText="No department found"
+                  emptyLabel="— No Department —"
+                />
               ) : (
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium leading-none">To Department</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {branches.find((b) => b.id === (pr as any).branchId)?.name ?? "—"}
+                    {(pr as any).toDepartment ?? ""}
                   </div>
                 </div>
               )}
@@ -748,7 +762,7 @@ function PRBody({
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   disabled={!editable}
-                  placeholder={editable ? "Optional notes..." : "—"}
+                  placeholder={editable ? "Optional notes..." : ""}
                 />
               </div>
               {editable ? (
@@ -785,11 +799,10 @@ function PRBody({
               currency={editable ? form.currency : (pr as any).currency}
               exchangeRate={editable ? form.exchangeRate : (pr as any).exchangeRate}
               baseCurrency={baseCurrency}
+              variant="material-request"
             />
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               <Input label="Total Quantity" value={formatNumber(editable ? totalQty : viewTotalQty)} disabled className="h-8 bg-zinc-100 text-sm" />
-              <div className="hidden sm:block" aria-hidden="true" />
-              <Input label="Total (IDR)" value={`Rp ${formatNumber(editable ? totalAmountIDR : viewTotalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
             </div>
           </FormSection>
 
@@ -831,8 +844,8 @@ function PRBody({
               <div className="flex"><span className="w-24 text-zinc-600">Urgency</span><span className="text-black">{String((pr as any).urgency ?? "MEDIUM")}</span></div>
             </div>
             <div className="space-y-1">
-              <div className="flex"><span className="w-24 text-zinc-600">Request Date</span><span className="text-black">{pr.requestDate ? new Date(pr.requestDate).toLocaleDateString("id-ID").replace(/\//g, "-") : "-"}</span></div>
-              <div className="flex"><span className="w-24 text-zinc-600">Expected Date</span><span className="text-black">{pr.expectedDate ? new Date(pr.expectedDate).toLocaleDateString("id-ID").replace(/\//g, "-") : "-"}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Request Date</span><span className="text-black">{pr.requestDate ? new Date(pr.requestDate).toLocaleDateString("id-ID").replace(/\//g, "-") : ""}</span></div>
+              <div className="flex"><span className="w-24 text-zinc-600">Expected Date</span><span className="text-black">{pr.expectedDate ? new Date(pr.expectedDate).toLocaleDateString("id-ID").replace(/\//g, "-") : ""}</span></div>
               <div className="flex"><span className="w-24 text-zinc-600">Currency</span><span className="text-black">{(pr as any).currency ?? baseCurrency ?? "IDR"}</span></div>
             </div>
           </div>
@@ -840,14 +853,14 @@ function PRBody({
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wide text-black">SHIP TO</div>
               <div className="mt-2 font-medium text-black">{warehouse?.name ?? warehouseName(pr.warehouseId)}</div>
-              <div className="mt-1 leading-snug text-zinc-600">{(warehouse as any)?.address ?? (company as any)?.address ?? "-"}</div>
-              <div className="mt-2 space-y-0.5 text-zinc-600"><div>PIC : {(warehouse as any)?.pic ?? (warehouse as any)?.contactPerson ?? "-"}</div><div>Telp : {(warehouse as any)?.phone ?? "-"}</div></div>
+              <div className="mt-1 leading-snug text-zinc-600">{(warehouse as any)?.address ?? (company as any)?.address ?? ""}</div>
+              <div className="mt-2 space-y-0.5 text-zinc-600"><div>PIC : {(warehouse as any)?.pic ?? (warehouse as any)?.contactPerson ?? ""}</div><div>Telp : {(warehouse as any)?.phone ?? ""}</div></div>
             </div>
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wide text-black">REQUESTER</div>
-              <div className="mt-2 font-medium text-black">{(pr as any).createdByName ?? (pr as any).requesterName ?? "—"}</div>
-              <div className="mt-1 leading-snug text-zinc-600">{(pr as any).department ? `Dept: ${(pr as any).department}` : "-"}</div>
-              <div className="mt-2 space-y-0.5 text-zinc-600"><div>Notes : {(pr as any).notes ? String((pr as any).notes).slice(0, 80) : "-"}</div></div>
+              <div className="mt-2 font-medium text-black">{(pr as any).createdByName ?? (pr as any).requesterName ?? ""}</div>
+              <div className="mt-1 leading-snug text-zinc-600">{(pr as any).department ? `Dept: ${(pr as any).department}` : ""}</div>
+              <div className="mt-2 space-y-0.5 text-zinc-600"><div>Notes : {(pr as any).notes ? String((pr as any).notes).slice(0, 80) : ""}</div></div>
             </div>
           </div>
           <table className="mt-6 w-full border-collapse text-[11px]">
@@ -892,7 +905,7 @@ function PRBody({
           </div>
           <div className="mt-6 border-t border-zinc-200 pt-3 text-[11px]">
             <div className="font-bold uppercase tracking-wide">Notes</div>
-            <div className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-700">{(pr as any).notes?.trim() ? (pr as any).notes : pr.notes?.trim() ? pr.notes : "-"}</div>
+            <div className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-700">{(pr as any).notes?.trim() ? (pr as any).notes : pr.notes?.trim() ? pr.notes : ""}</div>
           </div>
           <div className="mt-10 grid grid-cols-2 gap-8 text-center text-[11px]">
             <div className="flex flex-col items-center">
@@ -903,7 +916,7 @@ function PRBody({
                 ) : null}
               </div>
               <div className="h-px w-[180px] bg-zinc-900" />
-              <div className="mt-2 text-[10px] font-medium text-black">{(pr as any).preparedByName ?? (pr as any).createdByName ?? "—"}</div>
+              <div className="mt-2 text-[10px] font-medium text-black">{(pr as any).preparedByName ?? (pr as any).createdByName ?? ""}</div>
               <div className="text-[10px] text-zinc-600">{formatDdMmmYyyy((pr as any).preparedSignedAt ?? pr.requestDate)}</div>
             </div>
             <div className="flex flex-col items-center">
@@ -914,8 +927,8 @@ function PRBody({
                 ) : null}
               </div>
               <div className="h-px w-[180px] bg-zinc-900" />
-              <div className="mt-2 text-[10px] font-medium text-black">{(pr as any).approvedByName ?? "-"}</div>
-              <div className="text-[10px] text-zinc-600">{(pr as any).approvedSignedAt ? formatDdMmmYyyy((pr as any).approvedSignedAt) : (pr as any).status === "APPROVED" ? formatDdMmmYyyy((pr as any).updatedAt) : "-"}</div>
+              <div className="mt-2 text-[10px] font-medium text-black">{(pr as any).approvedByName ?? ""}</div>
+              <div className="text-[10px] text-zinc-600">{(pr as any).approvedSignedAt ? formatDdMmmYyyy((pr as any).approvedSignedAt) : (pr as any).status === "APPROVED" ? formatDdMmmYyyy((pr as any).updatedAt) : ""}</div>
             </div>
           </div>
         </div>

@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Pencil, Plus, Trash2, Truck, Users } from "lucide-react";
+import { MoreVertical, Pencil, Plus, Power, Trash, Trash2, Truck, Users } from "lucide-react";
 import { useInsert, useUpdate, useRemove, useResourceList } from "@/lib/api/query";
 import type { Party } from "@/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,6 +16,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { timeAgo } from "@/lib/utils";
 import { useErrorToast } from "@/hooks/use-error-toast";
 
 interface PartyManagerProps {
@@ -53,7 +59,6 @@ function blankForm(): PartyForm {
 }
 
 export function PartyManager({ kind, title, menu, singular, icon: Icon }: PartyManagerProps) {
-  const navigate = useNavigate();
   const { data: rows = [], isLoading } = useResourceList<Party>(kind);
   const insert = useInsert(kind as "suppliers" | "customers");
   const update = useUpdate(kind as "suppliers" | "customers");
@@ -61,6 +66,7 @@ export function PartyManager({ kind, title, menu, singular, icon: Icon }: PartyM
 
   const [editing, setEditing] = useState<PartyForm | null>(null);
   const [error, setError] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   useErrorToast(error);
 
   const openNew = () => setEditing(blankForm());
@@ -114,67 +120,114 @@ export function PartyManager({ kind, title, menu, singular, icon: Icon }: PartyM
     }
   };
 
+  const handleToggleActive = async (p: Party) => {
+    const next = p.isActive === false;
+    if (!confirm(next ? `Activate ${singular.toLowerCase()} "${p.name}"?` : `Deactivate ${singular.toLowerCase()} "${p.name}"?`)) return;
+    try {
+      await update.mutateAsync({ id: p.id, patch: { isActive: next } });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to update status.");
+    }
+  };
+
+  const handleBulkRemove = async () => {
+    const n = selected.size;
+    if (n === 0) return;
+    if (!confirm(`Delete ${n} selected ${singular.toLowerCase()}${n > 1 ? "s" : ""}?`)) return;
+    try {
+      await Promise.all([...selected].map((id) => remove.mutateAsync(id)));
+      setSelected(new Set());
+    } catch (e) {
+      alert(e instanceof Error ? e.message : `Failed to delete ${singular.toLowerCase()}s.`);
+    }
+  };
+
   const columns: DataTableColumn<Party>[] = [
     {
+      id: "no",
+      header: "No",
+      align: "center",
+      cell: (_r, index) => <span className="text-xs tabular-nums text-muted-foreground">{index ?? ""}</span>,
+      className: "w-[56px] pr-8 text-center tabular-nums",
+    },
+    {
       id: "code",
-      header: "Code",
-      cell: (r) => <span className="text-xs text-muted-foreground">{r.code}</span>,
+      header: `${singular} Code`,
+      cell: (r) => <span className="whitespace-nowrap text-xs text-muted-foreground">{r.code}</span>,
+      sortValue: (r) => r.code,
+      className: "w-[130px] pr-8 whitespace-nowrap",
     },
     {
       id: "name",
-      header: "Name",
-      cell: (r) => <span className="font-medium text-foreground">{r.name}</span>,
+      header: singular,
+      cell: (r) => (
+        <span className="truncate font-medium whitespace-nowrap text-foreground" title={r.name}>
+          {r.name}
+        </span>
+      ),
       sortValue: (r) => r.name,
+      className: "min-w-[280px] pr-8 whitespace-nowrap",
     },
     {
       id: "contactPerson",
       header: "Contact",
-      cell: (r) => <span className="text-muted-foreground">{r.contactPerson || "—"}</span>,
+      cell: (r) => <span className="whitespace-nowrap text-xs text-muted-foreground">{r.contactPerson || ""}</span>,
+      className: "w-[160px] pr-8 whitespace-nowrap",
     },
     {
       id: "phone",
       header: "Phone",
-      cell: (r) => <span className="text-muted-foreground">{r.phone || "—"}</span>,
+      cell: (r) => <span className="whitespace-nowrap text-xs text-muted-foreground">{r.phone || ""}</span>,
+      className: "w-[140px] pr-8 whitespace-nowrap",
     },
     {
       id: "email",
       header: "Email",
-      cell: (r) => <span className="text-muted-foreground">{r.email || "—"}</span>,
+      cell: (r) => <span className="truncate whitespace-nowrap text-xs text-muted-foreground" title={r.email ?? ""}>{r.email || ""}</span>,
+      className: "w-[200px] pr-8 whitespace-nowrap",
     },
     {
       id: "status",
       header: "Status",
       cell: (r) => (
-        <Badge tone={r.isActive === false ? "red" : "neutral"}>
+        <Badge tone={r.isActive === false ? "neutral" : "success"} className="rounded-md text-[11px]">
           {r.isActive === false ? "Inactive" : "Active"}
         </Badge>
       ),
+      className: "w-[110px] pr-8",
+    },
+    {
+      id: "created",
+      header: "Created",
+      cell: (r) => <span className="whitespace-nowrap text-xs text-muted-foreground">{r.createdAt ? timeAgo(r.createdAt) : ""}</span>,
+      sortValue: (r) => r.createdAt ?? "",
+      className: "w-[150px] pr-8",
     },
     {
       id: "actions",
-      header: "",
-      align: "right",
+      header: "Action",
+      align: "center",
       cell: (r) => (
-        <div className="flex justify-end gap-1">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => openEdit(r)}
-            aria-label={`Edit ${singular}`}
-          >
-            <Pencil size={14} strokeWidth={2} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-destructive hover:bg-destructive/10"
-            onClick={() => handleRemove(r)}
-            aria-label={`Delete ${singular}`}
-          >
-            <Trash2 size={14} strokeWidth={2} />
-          </Button>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()}>
+              <MoreVertical size={14} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEdit(r); }} className="gap-2">
+              <Pencil size={14} /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleToggleActive(r); }} className="gap-2">
+              <Power size={14} /> {r.isActive === false ? "Activate" : "Deactivate"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleRemove(r); }} className="gap-2 text-destructive focus:text-destructive">
+              <Trash size={14} /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
+      className: "w-[70px] text-center",
     },
   ];
 
@@ -200,6 +253,24 @@ export function PartyManager({ kind, title, menu, singular, icon: Icon }: PartyM
         emptyIcon={<Icon size={26} strokeWidth={2} />}
         emptyTitle={`No ${title.toLowerCase()}`}
         emptyDescription={`Add a new ${singular.toLowerCase()} to get started.`}
+        selectable
+        selectedKeys={selected}
+        onSelectionChange={setSelected}
+        toolbarRight={
+          selected.size > 0 ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={handleBulkRemove}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete ({selected.size})
+            </Button>
+          ) : null
+        }
+        minWidth={1200}
+        onRowClick={(r) => openEdit(r)}
       />
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>

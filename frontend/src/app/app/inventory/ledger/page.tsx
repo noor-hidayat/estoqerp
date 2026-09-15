@@ -107,7 +107,7 @@ export default function StockLedgerPage() {
       header: "Item Code",
       sortValue: (r) => r.itemCode ?? "",
       cell: (r) => (
-        <span className="text-xs text-muted-foreground">{r.itemCode ?? "—"}</span>
+        <span className="text-xs text-muted-foreground">{r.itemCode ?? ""}</span>
       ),
       className: "whitespace-nowrap",
     },
@@ -120,7 +120,7 @@ export default function StockLedgerPage() {
           className="block max-w-[280px] truncate text-[13px] font-medium text-foreground"
           title={r.itemName}
         >
-          {r.itemName ?? "—"}
+          {r.itemName ?? ""}
         </span>
       ),
       className: "min-w-[160px]",
@@ -134,7 +134,7 @@ export default function StockLedgerPage() {
           className="block max-w-[220px] truncate text-xs text-muted-foreground"
           title={r.warehouseName}
         >
-          {r.warehouseName ?? "—"}
+          {r.warehouseName ?? ""}
         </span>
       ),
       className: "min-w-[120px]",
@@ -144,7 +144,7 @@ export default function StockLedgerPage() {
       header: "UOM",
       sortValue: (r) => r.unit ?? "",
       cell: (r) => (
-        <span className="text-xs text-muted-foreground">{r.unit ?? "—"}</span>
+        <span className="text-xs text-muted-foreground">{r.unit ?? ""}</span>
       ),
       className: "whitespace-nowrap",
     },
@@ -155,7 +155,7 @@ export default function StockLedgerPage() {
       sortValue: (r) => r.qtyIn,
       cell: (r) => (
         <span className="text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
-          {r.qtyIn > 0 ? `+${formatQty(r.qtyIn)}` : "—"}
+          {r.qtyIn > 0 ? `+${formatQty(r.qtyIn)}` : ""}
         </span>
       ),
     },
@@ -166,7 +166,7 @@ export default function StockLedgerPage() {
       sortValue: (r) => r.qtyOut,
       cell: (r) => (
         <span className="text-xs font-medium tabular-nums text-destructive">
-          {r.qtyOut > 0 ? `−${formatQty(r.qtyOut)}` : "—"}
+          {r.qtyOut > 0 ? `−${formatQty(r.qtyOut)}` : ""}
         </span>
       ),
     },
@@ -188,7 +188,7 @@ export default function StockLedgerPage() {
       sortValue: (r) => r.valuationRate ?? 0,
       cell: (r) => (
         <span className="text-xs text-muted-foreground">
-          {r.valuationRate ? `Rp ${formatNumber(r.valuationRate)}` : "—"}
+          {r.valuationRate ? `Rp ${formatNumber(r.valuationRate)}` : ""}
         </span>
       ),
     },
@@ -199,7 +199,7 @@ export default function StockLedgerPage() {
       sortValue: (r) => r.stockValue ?? 0,
       cell: (r) => (
         <span className="text-xs font-semibold tabular-nums">
-          {r.stockValue ? `Rp ${formatNumber(r.stockValue)}` : "—"}
+          {r.stockValue ? `Rp ${formatNumber(r.stockValue)}` : ""}
         </span>
       ),
     },

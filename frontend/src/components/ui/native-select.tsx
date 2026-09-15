@@ -120,7 +120,7 @@ const NativeSelect = React.forwardRef<HTMLButtonElement, React.SelectHTMLAttribu
           ) : (
             options.map((o) => (
               <NativeSelectItem key={o.value || `empty-${o.label}`} value={o.value}>
-                {o.label || "—"}
+                {o.label || ""}
               </NativeSelectItem>
             ))
           )}

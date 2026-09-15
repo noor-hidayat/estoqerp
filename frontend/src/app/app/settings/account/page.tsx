@@ -353,7 +353,7 @@ export default function AccountSignaturePage() {
                   )}
                 </div>
                 <div className="mt-2 h-px w-[220px] bg-zinc-900" />
-                <div className="mt-2 text-[11px] font-medium text-black">{user?.name ?? "-"}</div>
+                <div className="mt-2 text-[11px] font-medium text-black">{user?.name ?? ""}</div>
                 <div className="text-[10px] text-zinc-600">{previewDate}</div>
               </div>
             </div>

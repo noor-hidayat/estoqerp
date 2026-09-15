@@ -141,11 +141,11 @@ router.get("/", async (req: Request, res: Response) => {
     documentNo: r.documentNo,
     projectId: pMap.get(r.projectId)?.publicId ?? String(r.projectId),
     warehouseId: wMap.get(r.warehouseId)?.publicId ?? String(r.warehouseId),
-    projectName: pMap.get(r.projectId)?.name ?? "—",
+    projectName: pMap.get(r.projectId)?.name ?? "",
     projectPublicId: pMap.get(r.projectId)?.publicId ?? null,
-    warehouseName: wMap.get(r.warehouseId)?.name ?? "—",
+    warehouseName: wMap.get(r.warehouseId)?.name ?? "",
     warehousePublicId: wMap.get(r.warehouseId)?.publicId ?? null,
-    auditor: r.createdBy ? (uMap.get(r.createdBy) ?? String(r.createdBy)) : "—",
+    auditor: r.createdBy ? (uMap.get(r.createdBy) ?? String(r.createdBy)) : "",
   }));
   res.json(result);
 });

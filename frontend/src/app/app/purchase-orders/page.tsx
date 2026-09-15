@@ -20,8 +20,8 @@ export default function PurchaseOrdersPage() {
   const { data: suppliers = [] } = useSuppliers();
   const { data: warehouses = [] } = useAllWarehouses();
 
-  const supplierName = (id: string) => suppliers.find((s) => s.id === id)?.name ?? "—";
-  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "—";
+  const supplierName = (id: string) => suppliers.find((s) => s.id === id)?.name ?? "";
+  const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "";
 
   const filtered = useMemo(
     () =>
@@ -61,7 +61,7 @@ export default function PurchaseOrdersPage() {
     {
       id: "purchaser",
       header: "Purchaser",
-      cell: (o) => <span className="text-xs text-muted-foreground">{(o as unknown as { createdByName?: string }).createdByName ?? "—"}</span>,
+      cell: (o) => <span className="text-xs text-muted-foreground">{(o as unknown as { createdByName?: string }).createdByName ?? ""}</span>,
       sortValue: (o) => (o as unknown as { createdByName?: string }).createdByName ?? "",
     },
     {
