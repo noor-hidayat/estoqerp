@@ -59,6 +59,7 @@ async function replaceRfqLines(tx: any, rfqId: number, lines: any[]) {
       itemId,
       uomId,
       qty: String(l.qty),
+      specification: (l as any).specification ?? (l as any).spec ?? null,
       note: l.note ?? null,
     });
   }
@@ -354,6 +355,7 @@ rfqRouter.get("/rfqs/:id", async (req, res, next) => {
           qty: ql.qty,
           unitPrice: ql.unitPrice,
           discount: ql.discount,
+          tax: (ql as any).tax ?? "0",
           subtotal: ql.subtotal,
           note: ql.note,
         })),
@@ -388,6 +390,7 @@ rfqRouter.get("/rfqs/:id", async (req, res, next) => {
         itemId: itemMap.get(l.itemId) ?? String(l.itemId),
         uomId: uomMap.get(l.uomId) ?? String(l.uomId),
         qty: l.qty,
+        specification: (l as any).specification ?? null,
         note: l.note,
       })),
       suppliers: suppliers.map(su=> {
@@ -575,10 +578,12 @@ rfqRouter.post("/rfqs/:id/quotations", async (req, res, next) => {
     const existing = await db.select().from(s.supplierQuotations).where(and(eq(s.supplierQuotations.rfqId, rfq.id), eq(s.supplierQuotations.supplierId, supplierInternal))).limit(1).then(r=> r[0]);
     let quotationId: number;
     let quotationPublicId: string;
+    const genQuotationNo = () => `QT-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${String(supplierInternal).slice(-4)}-${String(rfq.id).slice(-4)}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
     await db.transaction(async (tx)=>{
       if (existing) {
+        const qNo = b.quotationNo != null && String(b.quotationNo).trim() ? String(b.quotationNo).trim() : (existing.quotationNo ?? genQuotationNo());
         await tx.update(s.supplierQuotations).set({
-          quotationNo: b.quotationNo ?? null,
+          quotationNo: qNo,
           quotationDate: b.quotationDate,
           validUntil: b.validUntil ?? null,
           currency: b.currency ? String(b.currency).toUpperCase() : rfq.currency,
@@ -592,10 +597,11 @@ rfqRouter.post("/rfqs/:id/quotations", async (req, res, next) => {
         quotationId = existing.id;
         quotationPublicId = existing.publicId;
       } else {
+        const qNo = b.quotationNo != null && String(b.quotationNo).trim() ? String(b.quotationNo).trim() : genQuotationNo();
         const [ins] = await tx.insert(s.supplierQuotations).values({
           rfqId: rfq.id,
           supplierId: supplierInternal,
-          quotationNo: b.quotationNo ?? null,
+          quotationNo: qNo,
           quotationDate: b.quotationDate,
           validUntil: b.validUntil ?? null,
           currency: b.currency ? String(b.currency).toUpperCase() : rfq.currency,
@@ -617,7 +623,8 @@ rfqRouter.post("/rfqs/:id/quotations", async (req, res, next) => {
         const qtyNum = Number(l.qty ?? rfqLine?.qty ?? 0);
         const priceNum = l.unitPrice != null && String(l.unitPrice).trim()!=="" ? Number(l.unitPrice) : null;
         const discountNum = l.discount != null && String(l.discount).trim()!=="" ? Number(l.discount) : 0;
-        const subtotal = priceNum != null && Number.isFinite(priceNum) ? (qtyNum * priceNum - (discountNum||0)) : 0;
+        const taxNum = (l as any).tax != null && String((l as any).tax).trim()!=="" ? Number((l as any).tax) : 0;
+        const subtotal = priceNum != null && Number.isFinite(priceNum) ? (qtyNum * priceNum - (discountNum||0) + (taxNum||0)) : 0;
         if (priceNum != null) total += subtotal;
         await tx.insert(s.supplierQuotationLines).values({
           quotationId,
@@ -627,19 +634,34 @@ rfqRouter.post("/rfqs/:id/quotations", async (req, res, next) => {
           qty: String(qtyNum),
           unitPrice: priceNum != null ? String(priceNum) : null,
           discount: String(discountNum||0),
+          tax: String(taxNum||0),
           subtotal: String(subtotal),
-          note: l.note ?? null,
+          note: (l as any).note ?? null,
         });
       }
       await tx.update(s.supplierQuotations).set({ totalAmount: String(total), updatedAt: new Date() }).where(eq(s.supplierQuotations.id, quotationId));
-      // update rfq status to QUOTED if needed
-      if (rfq.status === "SENT") {
-        await tx.update(s.rfqs).set({ status: "QUOTED", updatedAt: new Date() }).where(eq(s.rfqs.id, rfq.id));
+      // update rfq status otomatis: SENT -> QUOTATION_RECEIVED (partial) -> EVALUATION (all)
+      const suppliersForRfq = await tx.select().from(s.rfqSuppliers).where(eq(s.rfqSuppliers.rfqId, rfq.id));
+      const quotationsForRfq = await tx.select().from(s.supplierQuotations).where(eq(s.supplierQuotations.rfqId, rfq.id));
+      const suppliersCount = suppliersForRfq.length;
+      const quotedSupplierIds = new Set(quotationsForRfq.map((q: any) => q.supplierId));
+      const quotedCount = quotedSupplierIds.size;
+      let newRfqStatus: string | null = null;
+      if (quotedCount === 0) newRfqStatus = null;
+      else if (quotedCount < suppliersCount) newRfqStatus = "QUOTATION_RECEIVED";
+      else if (quotedCount === suppliersCount && suppliersCount > 0) newRfqStatus = "EVALUATION";
+      if (newRfqStatus && newRfqStatus !== rfq.status && ["SENT", "QUOTED", "QUOTATION_RECEIVED", "EVALUATION"].includes(rfq.status)) {
+        await tx.update(s.rfqs).set({ status: newRfqStatus as any, updatedAt: new Date() }).where(eq(s.rfqs.id, rfq.id));
+      } else if (newRfqStatus === "EVALUATION" && rfq.status === "QUOTATION_RECEIVED") {
+        await tx.update(s.rfqs).set({ status: "EVALUATION" as any, updatedAt: new Date() }).where(eq(s.rfqs.id, rfq.id));
       }
       await tx.update(s.rfqSuppliers).set({ status: "QUOTED" }).where(and(eq(s.rfqSuppliers.rfqId, rfq.id), eq(s.rfqSuppliers.supplierId, supplierInternal)));
     });
     // update PR status? For MVP we don't auto-update PR status derived; frontend will compute.
-    try { await logActivity({ documentType: "RFQ", documentId: rfq.id, action: existing ? "update_quotation" : "create_quotation", fromStatus: rfq.status, toStatus: rfq.status, actorUserId: actor.internalId, actorRole: actor.role, metadata: { supplierId: supplierInternal, quotationId } }); } catch {}
+    try {
+      const [supRowLog] = await db.select({ name: s.suppliers.name }).from(s.suppliers).where(eq(s.suppliers.id, supplierInternal)).limit(1);
+      await logActivity({ documentType: "RFQ", documentId: rfq.id, action: existing ? "update_quotation" : "create_quotation", fromStatus: rfq.status, toStatus: rfq.status, actorUserId: actor.internalId, actorRole: actor.role, metadata: { supplierId: supplierInternal, supplierName: supRowLog?.name ?? String(supplierInternal), quotationId, rfqDocumentNo: rfq.documentNo } });
+    } catch {}
     res.status(existing ? 200 : 201).json({ id: quotationPublicId, quotationId });
   } catch (e) { next(e); }
 });
@@ -693,6 +715,7 @@ rfqRouter.get("/rfqs/:id/compare", async (req, res, next) => {
           quotationStatus: q.status,
           unitPrice: match?.unitPrice ?? null,
           discount: match?.discount ?? "0",
+          tax: (match as any)?.tax ?? "0",
           subtotal: match?.subtotal ?? null,
           qty: match?.qty ?? rl.qty,
         };
@@ -780,15 +803,31 @@ rfqRouter.post("/rfqs/:id/create-po", async (req, res, next) => {
     const pid = String(req.params.id);
     const [rfq] = await db.select().from(s.rfqs).where(rfqWhere(pid)).limit(1);
     if (!rfq) return res.status(404).json({ error: "RFQ tidak ditemukan." });
-    if (rfq.status !== "AWARDED") return res.status(400).json({ error: "RFQ harus AWARDED untuk buat PO." });
+    if (!["EVALUATION", "AWARDED"].includes(rfq.status)) return res.status(400).json({ error: "RFQ harus EVALUATION untuk buat PO." });
     if (!rfq.awardedSupplierId) return res.status(400).json({ error: "RFQ belum ada awarded supplier." });
     const [quotation] = await db.select().from(s.supplierQuotations).where(and(eq(s.supplierQuotations.rfqId, rfq.id), eq(s.supplierQuotations.supplierId, rfq.awardedSupplierId), eq(s.supplierQuotations.status, "AWARDED"))).limit(1);
     if (!quotation) return res.status(400).json({ error: "Quotation awarded tidak ditemukan." });
     const qLines = await db.select().from(s.supplierQuotationLines).where(eq(s.supplierQuotationLines.quotationId, quotation.id));
     if (qLines.length===0) return res.status(400).json({ error: "Quotation tidak punya lines." });
-    // check if PO already created for this RFQ? prevent duplicate? Allow multiple? Check existing PO with notes contains RFQ? For MVP prevent duplicate via checking if any PO created after award with same rfq? We'll check via activity log or allow.
-    const existingPos = await db.select({ id: s.purchaseOrders.id }).from(s.purchaseOrders).where(eq(s.purchaseOrders.supplierId, rfq.awardedSupplierId)).limit(1);
-    // simple guard: if already has PO created from this RFQ via checking purchaseOrders created after RFQ awardedAt and same warehouse? Skip for now.
+    // Hanya boleh 1 PO per RFQ — cek PO valid (tidak CANCELED) sudah ada, bila PO di-cancel boleh buat lagi
+    const rfqPoActs2 = await db.select().from(s.documentActivities).where(and(eq(s.documentActivities.documentType, "RFQ"), eq(s.documentActivities.documentId, rfq.id), eq(s.documentActivities.action, "create_po"))).orderBy(desc(s.documentActivities.createdAt));
+    let hasValidPo = false;
+    for (const act2 of rfqPoActs2) {
+      const meta2: any = (act2 as any).metadata ?? {};
+      const tpid = meta2.targetPublicId ?? meta2.targetId ?? meta2.documentNo;
+      if (!tpid) continue;
+      try {
+        const [byPub] = await db.select({ status: s.purchaseOrders.status }).from(s.purchaseOrders).where(eq(s.purchaseOrders.publicId, String(tpid))).limit(1);
+        if (byPub && byPub.status !== "CANCELED") { hasValidPo = true; break; }
+        const [byId] = await db.select({ status: s.purchaseOrders.status }).from(s.purchaseOrders).where(eq(s.purchaseOrders.id, Number(tpid))).limit(1);
+        if (byId && (byId as any).status !== "CANCELED") { hasValidPo = true; break; }
+      } catch {}
+    }
+    if (hasValidPo) return res.status(400).json({ error: "RFQ ini sudah pernah membuat PO, hanya boleh 1 kali." });
+    if (rfq.status === "PO_CREATED" || (rfq as any).status === "CLOSED") {
+      // jika RFQ sudah PO_CREATED tapi PO-nya sudah CANCELED (hasValidPo false), boleh buat lagi — jangan block
+      if (hasValidPo) return res.status(400).json({ error: "RFQ sudah PO Created." });
+    }
 
     // validate against PR sisa if RFQ has PR
     if (rfq.purchaseRequestId) {
@@ -796,6 +835,16 @@ rfqRouter.post("/rfqs/:id/create-po", async (req, res, next) => {
     }
 
     const actor = await getActorInfo(req);
+    // Hitung expectedDate dari Lead Time (days) quotation awarded
+    const orderDateStr = new Date().toISOString().slice(0, 10);
+    const leadDaysRaw = String((quotation as any).deliveryLeadTime ?? "").trim();
+    const leadDaysParsed = parseInt(leadDaysRaw.match(/\d+/)?.[0] ?? "", 10);
+    let expectedDateStr: string | null = rfq.expectedDate ?? null;
+    if (Number.isFinite(leadDaysParsed) && leadDaysParsed > 0) {
+      const d = new Date(orderDateStr);
+      d.setDate(d.getDate() + leadDaysParsed);
+      expectedDateStr = d.toISOString().slice(0, 10);
+    }
     const { documentNo, publicId, id: poInternalId } = await db.transaction(async (tx)=>{
       const doc = await nextDocumentNo(tx as any, "PO", { branchId: rfq.branchId ?? undefined, date: new Date() });
       const [po] = await tx.insert(s.purchaseOrders).values({
@@ -803,8 +852,8 @@ rfqRouter.post("/rfqs/:id/create-po", async (req, res, next) => {
         seriesId: doc.seriesId,
         supplierId: rfq.awardedSupplierId,
         warehouseId: rfq.warehouseId,
-        orderDate: new Date().toISOString().slice(0,10),
-        expectedDate: rfq.expectedDate ?? null,
+        orderDate: orderDateStr,
+        expectedDate: expectedDateStr,
         status: "DRAFT",
         notes: rfq.notes ?? null,
         currency: quotation.currency ?? rfq.currency ?? "IDR",
@@ -828,6 +877,8 @@ rfqRouter.post("/rfqs/:id/create-po", async (req, res, next) => {
           note: ql.note ?? null,
         });
       }
+      // Tandai RFQ sebagai PO_CREATED setelah PO dibuat — hanya 1 PO per RFQ, select jadi permanen
+      await tx.update(s.rfqs).set({ status: "PO_CREATED", updatedAt: new Date() }).where(eq(s.rfqs.id, rfq.id));
       return { documentNo: doc.documentNo, publicId: po.publicId, id: po.id };
     });
     try {
@@ -894,7 +945,8 @@ rfqRouter.patch("/supplier-quotations/:id", async (req, res, next) => {
           const qtyNum = Number(l.qty ?? rfqLine?.qty ?? 0);
           const priceNum = l.unitPrice != null && String(l.unitPrice).trim()!=="" ? Number(l.unitPrice) : null;
           const discountNum = l.discount != null && String(l.discount).trim()!=="" ? Number(l.discount) : 0;
-          const subtotal = priceNum != null ? (qtyNum * priceNum - (discountNum||0)) : 0;
+          const taxNum = (l as any).tax != null && String((l as any).tax).trim()!=="" ? Number((l as any).tax) : 0;
+          const subtotal = priceNum != null ? (qtyNum * priceNum - (discountNum||0) + (taxNum||0)) : 0;
           if (priceNum != null) total += subtotal;
           await tx.insert(s.supplierQuotationLines).values({
             quotationId: cur.id,
@@ -904,8 +956,9 @@ rfqRouter.patch("/supplier-quotations/:id", async (req, res, next) => {
             qty: String(qtyNum),
             unitPrice: priceNum != null ? String(priceNum) : null,
             discount: String(discountNum||0),
+            tax: String(taxNum||0),
             subtotal: String(subtotal),
-            note: l.note ?? null,
+            note: (l as any).note ?? null,
           });
         }
         await tx.update(s.supplierQuotations).set({ totalAmount: String(total), updatedAt: new Date() }).where(eq(s.supplierQuotations.id, cur.id));

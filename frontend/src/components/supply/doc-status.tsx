@@ -11,6 +11,13 @@ const TONE: Record<string, string> = {
   PENDING_APPROVAL: "warning",
   REJECTED: "destructive",
   CANCELED: "destructive",
+  SENT: "info",
+  QUOTED: "warning",
+  QUOTATION_RECEIVED: "warning",
+  EVALUATION: "violet",
+  AWARDED: "violet",
+  PO_CREATED: "success",
+  CLOSED: "secondary",
 };
 
 const LABEL: Record<string, string> = {
@@ -23,6 +30,13 @@ const LABEL: Record<string, string> = {
   PENDING_APPROVAL: "Pending Approval",
   REJECTED: "Rejected",
   CANCELED: "Canceled",
+  SENT: "Sent",
+  QUOTED: "Quotation Received",
+  QUOTATION_RECEIVED: "Quotation Received",
+  EVALUATION: "Evaluation",
+  AWARDED: "Awarded",
+  PO_CREATED: "PO Created",
+  CLOSED: "Closed",
 };
 
 export function DocStatusBadge({ status }: { status: DocStatus | ReceivingStatus | string }) {

@@ -560,7 +560,7 @@ putAndPatch("/purchase-orders/:id", async (req, res, next) => {
     let where: any = poWhere(pid);
     const [cur] = await db.select({ id: s.purchaseOrders.id, status: s.purchaseOrders.status }).from(s.purchaseOrders).where(where).limit(1);
     if (!cur) return res.status(404).json({ error: "Purchase Order tidak ditemukan." });
-    if (cur.status !== "DRAFT") return res.status(400).json({ error: "Hanya PO berstatus DRAFT yang dapat diubah." });
+    if (cur.status !== "DRAFT" && cur.status !== "CANCELED") return res.status(400).json({ error: "Hanya PO berstatus DRAFT atau CANCELED (amend) yang dapat diubah." });
     // fetch full old row + old lines for diff (per baris)
     const [oldRowFull] = await db.select().from(s.purchaseOrders).where(where).limit(1);
     let oldLines: any[] = [];
@@ -637,6 +637,7 @@ putAndPatch("/purchase-orders/:id", async (req, res, next) => {
         patch.priceListId = plid;
       }
     }
+    if (cur.status === "CANCELED") patch.status = "DRAFT";
     patch.updatedAt = new Date();
     await db.update(s.purchaseOrders).set(patch).where(eq(s.purchaseOrders.id, cur.id));
     let linesDiff: any = null;

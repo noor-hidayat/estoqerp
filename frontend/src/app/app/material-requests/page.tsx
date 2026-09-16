@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, ShoppingCart } from "lucide-react";
-import { useMaterialRequests, useAllWarehouses, useBranches } from "@/lib/api/query";
+import { useMaterialRequests, useAllWarehouses, useDepartments } from "@/lib/api/query";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { MaterialRequest } from "@/types";
-import { formatId } from "@/lib/utils";
+import { formatId, timeAgo } from "@/lib/utils";
 
 export default function MaterialRequestsPage() {
   const navigate = useNavigate();
@@ -18,10 +18,9 @@ export default function MaterialRequestsPage() {
 
   const { data: requests = [], isLoading } = useMaterialRequests();
   const { data: warehouses = [] } = useAllWarehouses();
-  const { data: branches = [] } = useBranches();
+  const { data: departments = [] } = useDepartments();
 
   const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "";
-  const branchName = (id: string | null | undefined) => (id ? (branches.find((b) => b.id === id)?.name ?? "") : "");
 
   const filtered = useMemo(
     () =>
@@ -41,26 +40,27 @@ export default function MaterialRequestsPage() {
       sortValue: (o) => String(o.documentNo ?? (o as any).mrNo ?? o.id),
     },
     {
-      id: "warehouse",
-      header: "Warehouse",
-      cell: (o) => <span className="text-muted-foreground">{warehouseName(o.warehouseId)}</span>,
-      sortValue: (o) => warehouseName(o.warehouseId),
-    },    {
       id: "requestDate",
       header: "Request Date",
-      cell: (o) => <span className="text-muted-foreground">{o.requestDate?.slice(0, 10)}</span>,
-      sortValue: (o) => o.requestDate,
-    },    {
+      cell: (o) => <span className="whitespace-nowrap text-xs text-muted-foreground">{o.requestDate?.slice(0, 10) ?? ""}</span>,
+      sortValue: (o) => o.requestDate ?? "",
+    },
+    {
       id: "department",
-      header: "From Department",
-      cell: (o) => <span className="text-xs text-muted-foreground">{(o as any).department ?? ""}</span>,
+      header: "Request By",
+      cell: (o) => {
+        const name = (o as any).department ?? "";
+        const dept = (departments as any[]).find((d) => d.name === name);
+        const label = dept ? (dept.code ? `${dept.code} - ${dept.name}` : dept.name) : name;
+        return <span className="text-xs text-muted-foreground">{label || "-"}</span>;
+      },
       sortValue: (o) => String((o as any).department ?? ""),
     },
     {
-      id: "toDepartment",
-      header: "To Department",
-      cell: (o) => <span className="text-xs text-muted-foreground">{(o as any).toDepartment ?? ""}</span>,
-      sortValue: (o) => String((o as any).toDepartment ?? ""),
+      id: "warehouse",
+      header: "Warehouse",
+      cell: (o) => <span className="text-xs text-muted-foreground">{warehouseName(o.warehouseId) || "-"}</span>,
+      sortValue: (o) => warehouseName(o.warehouseId),
     },
     {
       id: "status",
@@ -69,19 +69,10 @@ export default function MaterialRequestsPage() {
       sortValue: (o) => o.status,
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (o) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2.5 text-xs"
-          onClick={() => navigate(`/app/material-requests/${o.id}`)}
-        >
-          View
-        </Button>
-      ),
+      id: "created",
+      header: "Created",
+      cell: (o) => <span className="whitespace-nowrap text-xs text-muted-foreground">{(o as any).createdAt ? timeAgo((o as any).createdAt) : ""}</span>,
+      sortValue: (o) => (o as any).createdAt ?? "",
     },
   ];
 
@@ -103,9 +94,9 @@ export default function MaterialRequestsPage() {
         getRowId={(o) => o.id}
         loading={isLoading}
         onRowClick={(o) => navigate(`/app/material-requests/${o.id}`)}
-        searchPlaceholder="Search purchase requests..."
+        searchPlaceholder="Search material requests..."
         getSearchText={(o) =>
-          `${o.documentNo ?? (o as any).mrNo ?? formatId(o.id)} ${warehouseName(o.warehouseId)} ${(o as any).department ?? ""} ${(o as any).toDepartment ?? ""}`
+          `${o.documentNo ?? (o as any).mrNo ?? formatId(o.id)} ${o.requestDate ?? ""} ${(o as any).department ?? ""} ${warehouseName(o.warehouseId)} ${o.status}`
         }
         filters={
           <div className="flex gap-2">
@@ -137,8 +128,8 @@ export default function MaterialRequestsPage() {
           </div>
         }
         emptyIcon={<ShoppingCart size={26} strokeWidth={2} />}
-        emptyTitle="No purchase requests"
-        emptyDescription="Create a new purchase request to get started."
+        emptyTitle="No material requests"
+        emptyDescription="Create a new material request to get started."
       />
     </RoleGuard>
   );

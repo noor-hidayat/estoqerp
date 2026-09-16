@@ -668,7 +668,7 @@ function PRBody({
     <>
       <div className="print:hidden">
         <FormPage
-          title={`PR ${pr.documentNo ?? (pr as any).prNo ?? formatId(pr.id)}`}
+          title={pr.documentNo ?? (pr as any).prNo ?? `PR ${formatId(pr.id)}`}
           titleBadge={
             isDraft && dirty ? (
               <Badge tone="destructive">Not save</Badge>
@@ -800,37 +800,37 @@ function PRBody({
             <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
               {editable ? (
                 <SearchableSelect
-                  label="From Department"
+                  label="Request By"
                   options={departmentOptions}
                   value={form.department}
                   onChange={(v) => setForm({ ...form, department: v })}
                   placeholder="Select department..."
                   emptyText="No department found"
-                  emptyLabel="— No Department —"
+                  emptyLabel=""
                 />
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium leading-none">From Department</label>
+                  <label className="text-sm font-medium leading-none">Request By</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {(pr as any).department ?? ""}
+                    {(() => { const d = (departments as any[]).find((x: any) => x.name === (pr as any).department); return d ? (d.code ? `${d.code} - ${d.name}` : d.name) : (pr as any).department ?? ""; })()}
                   </div>
                 </div>
               )}
               {editable ? (
                 <SearchableSelect
-                  label="To Department"
+                  label="Request To"
                   options={departmentOptions}
                   value={form.toDepartment}
                   onChange={(v) => setForm({ ...form, toDepartment: v })}
                   placeholder="Select department..."
                   emptyText="No department found"
-                  emptyLabel="— No Department —"
+                  emptyLabel=""
                 />
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium leading-none">To Department</label>
+                  <label className="text-sm font-medium leading-none">Request To</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {(pr as any).toDepartment ?? ""}
+                    {(() => { const d = (departments as any[]).find((x: any) => x.name === (pr as any).toDepartment); return d ? (d.code ? `${d.code} - ${d.name}` : d.name) : (pr as any).toDepartment ?? ""; })()}
                   </div>
                 </div>
               )}

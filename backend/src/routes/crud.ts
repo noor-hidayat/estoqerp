@@ -6,6 +6,7 @@ import * as schema from "../db/schema";
 import { parseBatchNumber, type BatchFormatLike } from "../lib/batch-parse";
 import { canAccessEntity, canViewOpnameContext, checkAnyPermission, checkPermission, getRoleInternalId, hasPermission, isAdminUser } from "../middleware/rbac";
 import { logActivity, getActorInfo } from "../lib/activity-log";
+import { emitRealtime } from "../lib/realtime";
 import { computeDiff, DIFF_DENYLIST } from "../lib/diff";
 
 // small helper to check uuid
@@ -1528,6 +1529,7 @@ crudRouter.post("/:table", async (req, res) => {
         await logActivity({ documentType: docType, documentId: docId, action: "create", fromStatus: null, toStatus: null, actorUserId: internalId, actorRole: role, metadata: meta });
       }
     } catch {}
+    try { emitRealtime(tableName, "create", (row as any).publicId ?? (row as any).id); } catch {}
     if (tableName === "opnameScans") {
       const opnameId = (values as any).opnameId;
       if (opnameId) await db.update(schema.opnameProjects).set({ status: "IN_PROGRESS", updatedAt: new Date() }).where(eq(schema.opnameProjects.id, opnameId));
@@ -1725,6 +1727,7 @@ crudRouter.patch("/:table/:id", async (req, res) => {
         await logActivity({ documentType: docType, documentId: docId, action: "update", fromStatus: null, toStatus: null, actorUserId: internalId, actorRole: role, metadata: { patchKeys: Object.keys(values) } });
       }
     } catch {}
+    try { emitRealtime(tableName, "update", (row as any).publicId ?? (row as any).id); } catch {}
     res.json(sanitizeRow(table, row as Record<string, unknown>));
   } catch (e) { res.status(500).json({ error: messageOf(e) }); }
 });
@@ -1800,6 +1803,7 @@ crudRouter.delete("/:table/:id", async (req, res) => {
         await logActivity({ documentType: docType, documentId: docId, action: "delete", fromStatus: null, toStatus: null, actorUserId: internalId, actorRole: role, metadata: meta });
       }
     } catch {}
+    try { emitRealtime(tableName, "delete", paramId); } catch {}
     res.json(sanitizeRow(table, row as Record<string, unknown>));
   } catch (e) {
     if (isForeignKeyViolation(e)) { res.status(409).json({ error: DELETE_BLOCK_MESSAGES[tableName] ?? "Data masih dipakai oleh data lain — tidak dapat dihapus." }); return; }

@@ -1261,7 +1261,7 @@ export function MovementForm({
                 <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
                   <TableRow className="border-border hover:bg-transparent">
                     {!readOnly && (
-                      <TableHead className="w-10 px-3">
+                      <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3">
                         <Checkbox
                           checked={allSelected ? true : someSelected ? "indeterminate" : false}
                           onCheckedChange={toggleAll}
@@ -1269,7 +1269,7 @@ export function MovementForm({
                         />
                       </TableHead>
                     )}
-                    <TableHead className="w-10 px-3">No.</TableHead>
+                    <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">No.</TableHead>
                     {visibleCols.source && <TableHead className="w-[260px] px-4">Source Warehouse</TableHead>}
                     {visibleCols.target && <TableHead className="w-[260px] px-4">Target Warehouse</TableHead>}
                     {visibleCols.itemCode && <TableHead className="px-4">Item Code</TableHead>}
@@ -1288,7 +1288,7 @@ export function MovementForm({
                       )}
                     >
                       {!readOnly && (
-                        <TableCell className="px-3">
+                        <TableCell className="w-[40px] min-w-[40px] max-w-[40px] px-3">
                           <Checkbox
                             checked={selectedKeys.has(r.key)}
                             onCheckedChange={() => toggleRow(r.key)}
@@ -1296,7 +1296,8 @@ export function MovementForm({
                           />
                         </TableCell>
                       )}
-                      <TableCell className="px-3 text-sm text-muted-foreground">                        {idx + 1}
+                      <TableCell className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center text-sm text-muted-foreground">
+                        {idx + 1}
                       </TableCell>
                       {visibleCols.source && (
                         <TableCell className="px-4">

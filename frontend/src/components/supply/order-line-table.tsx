@@ -353,16 +353,26 @@ export function OrderLineTable({
                 const amount = calcAmount(r);
                 return (
                   <TableRow key={idx} className="border-border/70 hover:bg-transparent data-[state=selected]:bg-muted">
-                    <TableCell className="px-2 text-center">
-                      <Checkbox checked={selected.has(idx)} onCheckedChange={(v) => toggleRow(idx, !!v)} aria-label={`select row ${idx + 1}`} />
+                    <TableCell className="p-0">
+                      <div className="flex h-9 items-center justify-center px-2">
+                        <Checkbox checked={selected.has(idx)} onCheckedChange={(v) => toggleRow(idx, !!v)} aria-label={`select row ${idx + 1}`} />
+                      </div>
                     </TableCell>
-                    <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
-                    <TableCell className="px-3">{item ? `${item.code}: ${item.name}` : ""}</TableCell>
-                    <TableCell className="px-2 text-right tabular-nums">{r.qty ? formatNumber(r.qty) : "0"}</TableCell>
-                    <TableCell className="px-2 tabular-nums">{uom?.name ?? "UOM"}</TableCell>
+                    <TableCell className="p-0">
+                      <div className="flex h-9 items-center justify-center px-3 text-center text-[13px] text-muted-foreground">{idx + 1}</div>
+                    </TableCell>
+                    <TableCell className="p-0">
+                      <div className="flex h-9 items-center px-3 text-[13px]">{item ? `${item.code}: ${item.name}` : ""}</div>
+                    </TableCell>
+                    <TableCell className="p-0">
+                      <div className="flex h-9 items-center justify-end px-2 text-right tabular-nums text-[13px]">{r.qty ? formatNumber(r.qty) : "0"}</div>
+                    </TableCell>
+                    <TableCell className="p-0">
+                      <div className="flex h-9 items-center px-2 text-[13px] tabular-nums">{uom?.name ?? "UOM"}</div>
+                    </TableCell>
                     {!isSimple && (
                       <TableCell className="p-0">
-                        <div className="flex items-center justify-between gap-2 px-3">
+                        <div className="flex h-9 items-center justify-between gap-2 px-3">
                           <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
                           <span className="text-[13px] tabular-nums text-right">{r.unitPrice ? formatNumber(r.unitPrice) : "0"}</span>
                         </div>
@@ -370,7 +380,7 @@ export function OrderLineTable({
                     )}
                     {!isSimple && (
                       <TableCell className="p-0">
-                        <div className="flex items-center justify-between gap-2 px-3">
+                        <div className="flex h-9 items-center justify-between gap-2 px-3">
                           <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
                           <span className="text-[13px] tabular-nums text-right text-muted-foreground">{lastConverted ? formatNumber(lastConverted) : "0"}</span>
                         </div>
@@ -378,13 +388,13 @@ export function OrderLineTable({
                     )}
                     {!isSimple && (
                       <TableCell className="p-0">
-                        <div className="flex items-center justify-between gap-2 px-3">
+                        <div className="flex h-9 items-center justify-between gap-2 px-3">
                           <span className="text-[13px] font-medium tracking-wide text-muted-foreground">{curSym}</span>
                           <span className="text-[13px] tabular-nums text-right font-medium">{formatNumber(amount)}</span>
                         </div>
                       </TableCell>
                     )}
-                    {showNote && <TableCell className="px-3 text-sm truncate max-w-[180px]">{r.note?.trim() ? r.note : ""}</TableCell>}
+                    {showNote && <TableCell className="p-0"><div className="flex h-9 items-center px-3 text-[13px] w-full min-w-0 truncate">{r.note?.trim() ? r.note : ""}</div></TableCell>}
                   </TableRow>
                 );
               })

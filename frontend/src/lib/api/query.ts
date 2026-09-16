@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
+import { broadcast } from "@/lib/realtime";
 import type {
   Branch, Warehouse, Location, ItemGroup, Item, StockBalance,
   BarcodeFormat,
@@ -32,15 +33,59 @@ interface PaginatedResponse<T> {
   totalPages: number;
 }
 
+// ---- Master vs Realtime split ----
+const MASTER_TABLES = new Set<string>([
+  "suppliers",
+  "customers",
+  "branches",
+  "warehouses",
+  "locations",
+  "itemGroups",
+  "items",
+  "uom",
+  "departments",
+  "taxCategories",
+  "priceLists",
+  "priceListLines",
+  "movementTypes",
+  "barcodeFormats",
+  "batchFormats",
+  "batches",
+  "stockBatches",
+  "stockBarcodes",
+  "workspaces",
+  "roles",
+  "users",
+  "companySettings",
+]);
+
+function isMasterTable(table: string): boolean {
+  // table bisa "stock-balances/ledger" atau "transactions" — ambil segmen sebelum "/" dan "-"
+  // master hanya untuk setup data yang jarang berubah
+  if (MASTER_TABLES.has(table)) return true;
+  const base = table.split("/")[0];
+  if (MASTER_TABLES.has(base)) return true;
+  // cek tanpa dash: "itemGroups" vs "item-groups" sudah dicover exact di atas
+  return false;
+}
+
 // ---- Generic resource hooks ----
 
 export function useResourceList<T>(table: string, params?: Record<string, unknown>) {
+  const isMaster = isMasterTable(table);
   return useQuery({
     queryKey: [table, params],
     queryFn: async () => {
       const res = await api.get<T[]>(`/${table}${qs(params ?? {})}`);
       return res;
     },
+    // master: fetch sekali, cache lama, tanpa polling — cuma refetch kalau ada mutation lokal (invalidate)
+    // realtime: fetch pas masuk menu + dorongan SSE dari backend
+    staleTime: isMaster ? 5 * 60_000 : 0,
+    gcTime: isMaster ? 30 * 60_000 : 5 * 60_000,
+    refetchOnMount: isMaster ? false : true,
+    refetchOnWindowFocus: isMaster ? false : true,
+    refetchOnReconnect: isMaster ? false : true,
   });
 }
 
@@ -48,6 +93,7 @@ function usePaginatedList<T, R extends PaginatedResponse<T> = PaginatedResponse<
   table: string,
   params?: Record<string, unknown>
 ) {
+  const isMaster = isMasterTable(table);
   return useQuery({
     queryKey: [table, params],
     queryFn: async () => {
@@ -55,6 +101,11 @@ function usePaginatedList<T, R extends PaginatedResponse<T> = PaginatedResponse<
       return res;
     },
     placeholderData: (prev) => prev,
+    staleTime: isMaster ? 5 * 60_000 : 0,
+    gcTime: isMaster ? 30 * 60_000 : 5 * 60_000,
+    refetchOnMount: isMaster ? false : true,
+    refetchOnWindowFocus: isMaster ? false : true,
+    refetchOnReconnect: isMaster ? false : true,
   });
 }
 
@@ -72,7 +123,7 @@ export function useInsert<K extends string>(table: K) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (row: unknown) => api.post(`/${table}`, row),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: [table] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [table] }); broadcast(String(table), "create"); },
   });
 }
 
@@ -80,7 +131,7 @@ export function useUpdate<K extends string>(table: K) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/${table}/${id}`, patch),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: [table] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [table] }); broadcast(String(table), "update"); },
   });
 }
 
@@ -88,7 +139,7 @@ export function useRemove<K extends string>(table: K) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/${table}/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: [table] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [table] }); broadcast(String(table), "delete"); },
   });
 }
 
@@ -390,7 +441,7 @@ export function useUpdateCompanySettings() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: unknown) => api.put("/company-settings", patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["companySettings"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["companySettings"] }); broadcast("companySettings", "*"); },
   });
 }
 
@@ -437,7 +488,7 @@ export function useCreatePurchaseRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => api.post<{ id: string }>("/purchase-requests", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); broadcast("purchase-requests", "*"); },
   });
 }
 
@@ -445,7 +496,7 @@ export function useUpdatePurchaseRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/purchase-requests/${id}`, patch),
-    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); },
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); broadcast("purchase-requests", "*"); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); broadcast("purchase-requests", "*"); },
   });
 }
 
@@ -453,7 +504,7 @@ export function useRemovePurchaseRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/purchase-requests/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); broadcast("purchase-requests", "*"); },
   });
 }
 
@@ -461,7 +512,7 @@ export function usePostPurchaseRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/purchase-requests/${id}/post`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); broadcast("purchase-requests", "*"); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); broadcast("purchase-requests", "*"); },
   });
 }
 
@@ -469,7 +520,7 @@ export function useApprovePurchaseRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/purchase-requests/${id}/approve`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); broadcast("purchase-requests", "*"); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); broadcast("purchase-requests", "*"); },
   });
 }
 
@@ -477,7 +528,7 @@ export function useRejectPurchaseRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/purchase-requests/${id}/reject`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); broadcast("purchase-requests", "*"); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); broadcast("purchase-requests", "*"); },
   });
 }
 
@@ -485,7 +536,7 @@ export function useCancelPurchaseRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/purchase-requests/${id}/cancel`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); broadcast("purchase-requests", "*"); qc.invalidateQueries({ queryKey: ["purchase-requests", id] }); broadcast("purchase-requests", "*"); },
   });
 }
 
@@ -497,7 +548,7 @@ export function useCreatePOFromPR() {
       const supplierId = typeof arg === "string" ? undefined : arg.supplierId;
       return api.post<{ id: string; documentNo: string }>(`/purchase-requests/${id}/create-po`, supplierId ? { supplierId } : {});
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); qc.invalidateQueries({ queryKey: ["purchase-orders"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-requests"] }); broadcast("purchase-requests", "*"); qc.invalidateQueries({ queryKey: ["purchase-orders"] }); broadcast("purchase-orders", "*"); },
   });
 }
 
@@ -515,7 +566,7 @@ export function useCreateMaterialRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => api.post<{ id: string }>("/material-requests", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["material-requests"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["material-requests"] }); broadcast("material-requests", "*"); },
   });
 }
 
@@ -523,7 +574,7 @@ export function useUpdateMaterialRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/material-requests/${id}`, patch),
-    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); qc.invalidateQueries({ queryKey: ["material-requests", id] }); },
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); broadcast("material-requests", "*"); qc.invalidateQueries({ queryKey: ["material-requests", id] }); broadcast("material-requests", "*"); },
   });
 }
 
@@ -531,7 +582,7 @@ export function useRemoveMaterialRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/material-requests/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["material-requests"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["material-requests"] }); broadcast("material-requests", "*"); },
   });
 }
 
@@ -539,7 +590,7 @@ export function usePostMaterialRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/material-requests/${id}/post`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); qc.invalidateQueries({ queryKey: ["material-requests", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); broadcast("material-requests", "*"); qc.invalidateQueries({ queryKey: ["material-requests", id] }); broadcast("material-requests", "*"); },
   });
 }
 
@@ -547,7 +598,7 @@ export function useApproveMaterialRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/material-requests/${id}/approve`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); qc.invalidateQueries({ queryKey: ["material-requests", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); broadcast("material-requests", "*"); qc.invalidateQueries({ queryKey: ["material-requests", id] }); broadcast("material-requests", "*"); },
   });
 }
 
@@ -555,7 +606,7 @@ export function useRejectMaterialRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/material-requests/${id}/reject`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); qc.invalidateQueries({ queryKey: ["material-requests", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); broadcast("material-requests", "*"); qc.invalidateQueries({ queryKey: ["material-requests", id] }); broadcast("material-requests", "*"); },
   });
 }
 
@@ -563,7 +614,7 @@ export function useCancelMaterialRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/material-requests/${id}/cancel`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); qc.invalidateQueries({ queryKey: ["material-requests", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["material-requests"] }); broadcast("material-requests", "*"); qc.invalidateQueries({ queryKey: ["material-requests", id] }); broadcast("material-requests", "*"); },
   });
 }
 
@@ -602,7 +653,7 @@ export function useCreatePurchaseOrder() {
     mutationFn: (body: unknown) =>
       api.post<{ id: string }>("/purchase-orders", body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] }); broadcast("purchase-orders", "*");
     },
   });
 }
@@ -613,8 +664,8 @@ export function useUpdatePurchaseOrder() {
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) =>
       api.patch(`/purchase-orders/${id}`, patch),
     onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
-      qc.invalidateQueries({ queryKey: ["purchase-orders", id] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] }); broadcast("purchase-orders", "*");
+      qc.invalidateQueries({ queryKey: ["purchase-orders", id] }); broadcast("purchase-orders", "*");
     },
   });
 }
@@ -624,7 +675,7 @@ export function useRemovePurchaseOrder() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/purchase-orders/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] }); broadcast("purchase-orders", "*");
     },
   });
 }
@@ -634,8 +685,8 @@ export function usePostPurchaseOrder() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/purchase-orders/${id}/post`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
-      qc.invalidateQueries({ queryKey: ["purchase-orders", id] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] }); broadcast("purchase-orders", "*");
+      qc.invalidateQueries({ queryKey: ["purchase-orders", id] }); broadcast("purchase-orders", "*");
     },
   });
 }
@@ -645,8 +696,8 @@ export function useApprovePurchaseOrder() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/purchase-orders/${id}/approve`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
-      qc.invalidateQueries({ queryKey: ["purchase-orders", id] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] }); broadcast("purchase-orders", "*");
+      qc.invalidateQueries({ queryKey: ["purchase-orders", id] }); broadcast("purchase-orders", "*");
     },
   });
 }
@@ -656,8 +707,8 @@ export function useRejectPurchaseOrder() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/purchase-orders/${id}/reject`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
-      qc.invalidateQueries({ queryKey: ["purchase-orders", id] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] }); broadcast("purchase-orders", "*");
+      qc.invalidateQueries({ queryKey: ["purchase-orders", id] }); broadcast("purchase-orders", "*");
     },
   });
 }
@@ -667,8 +718,8 @@ export function useCancelPurchaseOrder() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/purchase-orders/${id}/cancel`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
-      qc.invalidateQueries({ queryKey: ["purchase-orders", id] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] }); broadcast("purchase-orders", "*");
+      qc.invalidateQueries({ queryKey: ["purchase-orders", id] }); broadcast("purchase-orders", "*");
     },
   });
 }
@@ -679,8 +730,8 @@ export function useCreateReceiptFromPo() {
     mutationFn: ({ id, receiptDate }: { id: string; receiptDate: string }) =>
       api.post<{ id: string }>(`/purchase-orders/${id}/create-receipt`, { receiptDate }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
-      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] }); broadcast("purchase-orders", "*");
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] }); broadcast("goods-receipts", "*");
     },
   });
 }
@@ -696,63 +747,63 @@ export function useCreateRfq() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => api.post<{ id: string; documentNo: string }>("/rfqs", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["purchase-requests"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); qc.invalidateQueries({ queryKey: ["purchase-requests"] }); broadcast("purchase-requests", "*"); },
   });
 }
 export function useUpdateRfq() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/rfqs/${id}`, patch),
-    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", id] }); },
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); qc.invalidateQueries({ queryKey: ["rfqs", id] }); broadcast("rfqs", "*"); },
   });
 }
 export function useRemoveRfq() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/rfqs/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); },
   });
 }
 export function useSendRfq() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/rfqs/${id}/send`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); qc.invalidateQueries({ queryKey: ["rfqs", id] }); broadcast("rfqs", "*"); },
   });
 }
 export function useCancelRfq() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/rfqs/${id}/cancel`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); qc.invalidateQueries({ queryKey: ["rfqs", id] }); broadcast("rfqs", "*"); },
   });
 }
 export function useCloseRfq() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/rfqs/${id}/close`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); qc.invalidateQueries({ queryKey: ["rfqs", id] }); broadcast("rfqs", "*"); },
   });
 }
 export function useCreateQuotation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ rfqId, body }: { rfqId: string; body: unknown }) => api.post(`/rfqs/${rfqId}/quotations`, body),
-    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", vars.rfqId] }); },
+    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); qc.invalidateQueries({ queryKey: ["rfqs", vars.rfqId] }); broadcast("rfqs", "*"); },
   });
 }
 export function useUpdateQuotation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/supplier-quotations/${id}`, patch),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); },
   });
 }
 export function useSubmitQuotation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/supplier-quotations/${id}/submit`, {}),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); },
   });
 }
 export function useRfqCompare(id?: string) {
@@ -766,14 +817,14 @@ export function useAwardRfq() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, supplierId }: { id: string; supplierId: string }) => api.post(`/rfqs/${id}/award`, { supplierId }),
-    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["rfqs", vars.id] }); },
+    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); qc.invalidateQueries({ queryKey: ["rfqs", vars.id] }); broadcast("rfqs", "*"); },
   });
 }
 export function useCreatePoFromRfq() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post<{ id: string; documentNo: string }>(`/rfqs/${id}/create-po`, {}),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); qc.invalidateQueries({ queryKey: ["purchase-orders"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["rfqs"] }); broadcast("rfqs", "*"); qc.invalidateQueries({ queryKey: ["purchase-orders"] }); broadcast("purchase-orders", "*"); },
   });
 }
 export function useSupplierQuotation(id?: string) {
@@ -796,7 +847,7 @@ export function useCreateSalesOrder() {
     mutationFn: (body: unknown) =>
       api.post<{ id: string }>("/sales-orders", body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["sales-orders"] });
+      qc.invalidateQueries({ queryKey: ["sales-orders"] }); broadcast("sales-orders", "*");
     },
   });
 }
@@ -807,8 +858,8 @@ export function useUpdateSalesOrder() {
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) =>
       api.patch(`/sales-orders/${id}`, patch),
     onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: ["sales-orders"] });
-      qc.invalidateQueries({ queryKey: ["sales-orders", id] });
+      qc.invalidateQueries({ queryKey: ["sales-orders"] }); broadcast("sales-orders", "*");
+      qc.invalidateQueries({ queryKey: ["sales-orders", id] }); broadcast("sales-orders", "*");
     },
   });
 }
@@ -818,7 +869,7 @@ export function useRemoveSalesOrder() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/sales-orders/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["sales-orders"] });
+      qc.invalidateQueries({ queryKey: ["sales-orders"] }); broadcast("sales-orders", "*");
     },
   });
 }
@@ -828,8 +879,8 @@ export function usePostSalesOrder() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/sales-orders/${id}/post`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["sales-orders"] });
-      qc.invalidateQueries({ queryKey: ["sales-orders", id] });
+      qc.invalidateQueries({ queryKey: ["sales-orders"] }); broadcast("sales-orders", "*");
+      qc.invalidateQueries({ queryKey: ["sales-orders", id] }); broadcast("sales-orders", "*");
     },
   });
 }
@@ -839,8 +890,8 @@ export function useCancelSalesOrder() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/sales-orders/${id}/cancel`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["sales-orders"] });
-      qc.invalidateQueries({ queryKey: ["sales-orders", id] });
+      qc.invalidateQueries({ queryKey: ["sales-orders"] }); broadcast("sales-orders", "*");
+      qc.invalidateQueries({ queryKey: ["sales-orders", id] }); broadcast("sales-orders", "*");
     },
   });
 }
@@ -861,7 +912,7 @@ export function useCreateGoodsReceipt() {
     mutationFn: (body: unknown) =>
       api.post<{ id: string }>("/goods-receipts", body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] }); broadcast("goods-receipts", "*");
     },
   });
 }
@@ -872,8 +923,8 @@ export function useUpdateGoodsReceipt() {
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) =>
       api.patch(`/goods-receipts/${id}`, patch),
     onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
-      qc.invalidateQueries({ queryKey: ["goods-receipts", id] });
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] }); broadcast("goods-receipts", "*");
+      qc.invalidateQueries({ queryKey: ["goods-receipts", id] }); broadcast("goods-receipts", "*");
     },
   });
 }
@@ -883,7 +934,7 @@ export function useRemoveGoodsReceipt() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/goods-receipts/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] }); broadcast("goods-receipts", "*");
     },
   });
 }
@@ -893,8 +944,8 @@ export function usePostGoodsReceipt() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/goods-receipts/${id}/post`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
-      qc.invalidateQueries({ queryKey: ["goods-receipts", id] });
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] }); broadcast("goods-receipts", "*");
+      qc.invalidateQueries({ queryKey: ["goods-receipts", id] }); broadcast("goods-receipts", "*");
     },
   });
 }
@@ -904,8 +955,8 @@ export function useCancelGoodsReceipt() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/goods-receipts/${id}/cancel`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["goods-receipts"] });
-      qc.invalidateQueries({ queryKey: ["goods-receipts", id] });
+      qc.invalidateQueries({ queryKey: ["goods-receipts"] }); broadcast("goods-receipts", "*");
+      qc.invalidateQueries({ queryKey: ["goods-receipts", id] }); broadcast("goods-receipts", "*");
     },
   });
 }
@@ -926,7 +977,7 @@ export function useCreateReceiving() {
     mutationFn: (body: unknown) =>
       api.post<{ id: string }>("/receivings", body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["receivings"] });
+      qc.invalidateQueries({ queryKey: ["receivings"] }); broadcast("receivings", "*");
     },
   });
 }
@@ -937,8 +988,8 @@ export function useUpdateReceiving() {
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) =>
       api.patch(`/receivings/${id}`, patch),
     onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: ["receivings"] });
-      qc.invalidateQueries({ queryKey: ["receivings", id] });
+      qc.invalidateQueries({ queryKey: ["receivings"] }); broadcast("receivings", "*");
+      qc.invalidateQueries({ queryKey: ["receivings", id] }); broadcast("receivings", "*");
     },
   });
 }
@@ -948,7 +999,7 @@ export function useRemoveReceiving() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/receivings/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["receivings"] });
+      qc.invalidateQueries({ queryKey: ["receivings"] }); broadcast("receivings", "*");
     },
   });
 }
@@ -958,8 +1009,8 @@ export function usePostReceiving() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/receivings/${id}/post`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["receivings"] });
-      qc.invalidateQueries({ queryKey: ["receivings", id] });
+      qc.invalidateQueries({ queryKey: ["receivings"] }); broadcast("receivings", "*");
+      qc.invalidateQueries({ queryKey: ["receivings", id] }); broadcast("receivings", "*");
     },
   });
 }
@@ -969,8 +1020,8 @@ export function useSubmitReceiving() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/receivings/${id}/submit`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["receivings"] });
-      qc.invalidateQueries({ queryKey: ["receivings", id] });
+      qc.invalidateQueries({ queryKey: ["receivings"] }); broadcast("receivings", "*");
+      qc.invalidateQueries({ queryKey: ["receivings", id] }); broadcast("receivings", "*");
     },
   });
 }
@@ -981,8 +1032,8 @@ export function useQcReceiving() {
     mutationFn: ({ id, lines, qcNotes }: { id: string; lines: Array<{ id: string; qtyRejected: string | number; rejectReason?: string | null }>; qcNotes?: string | null }) =>
       api.post(`/receivings/${id}/qc`, { lines, qcNotes }),
     onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: ["receivings"] });
-      qc.invalidateQueries({ queryKey: ["receivings", id] });
+      qc.invalidateQueries({ queryKey: ["receivings"] }); broadcast("receivings", "*");
+      qc.invalidateQueries({ queryKey: ["receivings", id] }); broadcast("receivings", "*");
     },
   });
 }
@@ -992,8 +1043,8 @@ export function useCancelReceiving() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/receivings/${id}/cancel`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["receivings"] });
-      qc.invalidateQueries({ queryKey: ["receivings", id] });
+      qc.invalidateQueries({ queryKey: ["receivings"] }); broadcast("receivings", "*");
+      qc.invalidateQueries({ queryKey: ["receivings", id] }); broadcast("receivings", "*");
     },
   });
 }
@@ -1009,35 +1060,35 @@ export function useCreateQcInspection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => api.post<{ id: string; documentNo: string }>("/qc-inspections", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); qc.invalidateQueries({ queryKey: ["receivings"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); broadcast("qc-inspections", "*"); qc.invalidateQueries({ queryKey: ["receivings"] }); broadcast("receivings", "*"); },
   });
 }
 export function useUpdateQcInspection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/qc-inspections/${id}`, patch),
-    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); qc.invalidateQueries({ queryKey: ["qc-inspections", id] }); },
+    onSuccess: (_d, { id }) => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); broadcast("qc-inspections", "*"); qc.invalidateQueries({ queryKey: ["qc-inspections", id] }); broadcast("qc-inspections", "*"); },
   });
 }
 export function useSubmitQcInspection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/qc-inspections/${id}/submit`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); qc.invalidateQueries({ queryKey: ["qc-inspections", id] }); qc.invalidateQueries({ queryKey: ["receivings"] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); broadcast("qc-inspections", "*"); qc.invalidateQueries({ queryKey: ["qc-inspections", id] }); broadcast("qc-inspections", "*"); qc.invalidateQueries({ queryKey: ["receivings"] }); broadcast("receivings", "*"); },
   });
 }
 export function useCancelQcInspection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post(`/qc-inspections/${id}/cancel`, {}),
-    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); qc.invalidateQueries({ queryKey: ["qc-inspections", id] }); },
+    onSuccess: (_d, id) => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); broadcast("qc-inspections", "*"); qc.invalidateQueries({ queryKey: ["qc-inspections", id] }); broadcast("qc-inspections", "*"); },
   });
 }
 export function useRemoveQcInspection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/qc-inspections/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-inspections"] }); broadcast("qc-inspections", "*"); },
   });
 }
 export function useQcParameters() {
@@ -1047,21 +1098,21 @@ export function useCreateQcParameter() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => api.post("/qc-parameters", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-parameters"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-parameters"] }); broadcast("qc-parameters", "*"); },
   });
 }
 export function useUpdateQcParameter() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/qc-parameters/${id}`, patch),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-parameters"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-parameters"] }); broadcast("qc-parameters", "*"); },
   });
 }
 export function useDeleteQcParameter() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/qc-parameters/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-parameters"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["qc-parameters"] }); broadcast("qc-parameters", "*"); },
   });
 }
 
@@ -1079,7 +1130,7 @@ export function useCreateDelivery() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => api.post<{ id: string }>("/deliveries", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["deliveries"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["deliveries"] }); broadcast("deliveries", "*"); },
   });
 }
 
@@ -1088,8 +1139,8 @@ export function useUpdateDelivery() {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/deliveries/${id}`, patch),
     onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: ["deliveries"] });
-      qc.invalidateQueries({ queryKey: ["deliveries", id] });
+      qc.invalidateQueries({ queryKey: ["deliveries"] }); broadcast("deliveries", "*");
+      qc.invalidateQueries({ queryKey: ["deliveries", id] }); broadcast("deliveries", "*");
     },
   });
 }
@@ -1098,7 +1149,7 @@ export function useRemoveDelivery() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/deliveries/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["deliveries"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["deliveries"] }); broadcast("deliveries", "*"); },
   });
 }
 
@@ -1107,8 +1158,8 @@ export function usePostDelivery() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/deliveries/${id}/post`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["deliveries"] });
-      qc.invalidateQueries({ queryKey: ["deliveries", id] });
+      qc.invalidateQueries({ queryKey: ["deliveries"] }); broadcast("deliveries", "*");
+      qc.invalidateQueries({ queryKey: ["deliveries", id] }); broadcast("deliveries", "*");
     },
   });
 }
@@ -1118,8 +1169,8 @@ export function useCancelDelivery() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/deliveries/${id}/cancel`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["deliveries"] });
-      qc.invalidateQueries({ queryKey: ["deliveries", id] });
+      qc.invalidateQueries({ queryKey: ["deliveries"] }); broadcast("deliveries", "*");
+      qc.invalidateQueries({ queryKey: ["deliveries", id] }); broadcast("deliveries", "*");
     },
   });
 }
@@ -1130,8 +1181,8 @@ export function useCreateDeliveryFromSo() {
     mutationFn: ({ id, deliveryDate }: { id: string; deliveryDate: string }) =>
       api.post<{ id: string }>(`/sales-orders/${id}/create-delivery`, { deliveryDate }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["deliveries"] });
-      qc.invalidateQueries({ queryKey: ["sales-orders"] });
+      qc.invalidateQueries({ queryKey: ["deliveries"] }); broadcast("deliveries", "*");
+      qc.invalidateQueries({ queryKey: ["sales-orders"] }); broadcast("sales-orders", "*");
     },
   });
 }
@@ -1208,8 +1259,11 @@ export function useStockMovementsInfinite(params?: {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.hasNext ? lastPage.nextCursor ?? undefined : undefined),
     placeholderData: (prev) => prev,
-    staleTime: 30_000,
+    staleTime: 0,
     gcTime: 5 * 60_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 
@@ -1252,9 +1306,10 @@ export function useCreateMovement() {
   return useMutation({
     mutationFn: (body: MovementInput) => api.post("/transactions", body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
-      qc.invalidateQueries({ queryKey: ["stockBalances"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] }); broadcast("transactions", "*");
+      qc.invalidateQueries({ queryKey: ["transactions-cursor"] }); broadcast("transactions-cursor", "*");
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] }); broadcast("stock-ledger", "*");
+      qc.invalidateQueries({ queryKey: ["stockBalances"] }); broadcast("stockBalances", "*");
     },
   });
 }
@@ -1265,9 +1320,10 @@ export function useUpdateMovement() {
     mutationFn: ({ id, body }: { id: string; body: MovementInput }) =>
       api.patch(`/transactions/${id}`, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
-      qc.invalidateQueries({ queryKey: ["stockBalances"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] }); broadcast("transactions", "*");
+      qc.invalidateQueries({ queryKey: ["transactions-cursor"] }); broadcast("transactions-cursor", "*");
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] }); broadcast("stock-ledger", "*");
+      qc.invalidateQueries({ queryKey: ["stockBalances"] }); broadcast("stockBalances", "*");
     },
   });
 }
@@ -1277,9 +1333,10 @@ export function usePostMovement() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/transactions/${id}/post`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
-      qc.invalidateQueries({ queryKey: ["stockBalances"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] }); broadcast("transactions", "*");
+      qc.invalidateQueries({ queryKey: ["transactions-cursor"] }); broadcast("transactions-cursor", "*");
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] }); broadcast("stock-ledger", "*");
+      qc.invalidateQueries({ queryKey: ["stockBalances"] }); broadcast("stockBalances", "*");
     },
   });
 }
@@ -1289,9 +1346,10 @@ export function useUnpostMovement() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/transactions/${id}/unpost`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
-      qc.invalidateQueries({ queryKey: ["stockBalances"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] }); broadcast("transactions", "*");
+      qc.invalidateQueries({ queryKey: ["transactions-cursor"] }); broadcast("transactions-cursor", "*");
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] }); broadcast("stock-ledger", "*");
+      qc.invalidateQueries({ queryKey: ["stockBalances"] }); broadcast("stockBalances", "*");
     },
   });
 }
@@ -1301,9 +1359,10 @@ export function useAmendMovement() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/transactions/${id}/amend`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
-      qc.invalidateQueries({ queryKey: ["stockBalances"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] }); broadcast("transactions", "*");
+      qc.invalidateQueries({ queryKey: ["transactions-cursor"] }); broadcast("transactions-cursor", "*");
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] }); broadcast("stock-ledger", "*");
+      qc.invalidateQueries({ queryKey: ["stockBalances"] }); broadcast("stockBalances", "*");
     },
   });
 }
@@ -1313,8 +1372,9 @@ export function useDeleteMovement() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/transactions/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["stock-ledger"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] }); broadcast("transactions", "*");
+      qc.invalidateQueries({ queryKey: ["transactions-cursor"] }); broadcast("transactions-cursor", "*");
+      qc.invalidateQueries({ queryKey: ["stock-ledger"] }); broadcast("stock-ledger", "*");
     },
   });
 }
@@ -1468,8 +1528,8 @@ export function useCreateOpnameProject() {
       warehouses: { warehouseId: string; branchId: string }[];
     }) => api.post("/opname-projects", body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["opnameProjects"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["opnameProjects"] }); broadcast("opnameProjects", "*");
+      qc.invalidateQueries({ queryKey: ["dashboard"] }); broadcast("dashboard", "*");
     },
   });
 }
@@ -1480,8 +1540,8 @@ export function useUpdateOpnameProject() {
     mutationFn: ({ id, patch }: { id: string; patch: { name?: string; deadline?: string | null; cutOffDate?: string | null; cutOffTime?: string | null; status?: string } }) =>
       api.patch(`/opname-projects/${id}`, patch),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["opnameProjects"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["opnameProjects"] }); broadcast("opnameProjects", "*");
+      qc.invalidateQueries({ queryKey: ["dashboard"] }); broadcast("dashboard", "*");
     },
   });
 }
@@ -1491,8 +1551,8 @@ export function useDeleteOpnameProject() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/opname-projects/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["opnameProjects"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["opnameProjects"] }); broadcast("opnameProjects", "*");
+      qc.invalidateQueries({ queryKey: ["dashboard"] }); broadcast("dashboard", "*");
     },
   });
 }
@@ -1545,7 +1605,7 @@ export function useCreateOpnameCount() {
       details: { itemId: string; qty: number | string; batch?: string | null; uomId?: string | null }[];
     }) => api.post<{ id: string }>("/opname-counts", body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["opnameCounts"] });
+      qc.invalidateQueries({ queryKey: ["opnameCounts"] }); broadcast("opnameCounts", "*");
     },
   });
 }
@@ -1555,8 +1615,8 @@ export function useUpdateOpnameCount() {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/opname-counts/${id}`, patch),
     onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: ["opnameCounts"] });
-      qc.invalidateQueries({ queryKey: ["opnameCounts", id] });
+      qc.invalidateQueries({ queryKey: ["opnameCounts"] }); broadcast("opnameCounts", "*");
+      qc.invalidateQueries({ queryKey: ["opnameCounts", id] }); broadcast("opnameCounts", "*");
     },
   });
 }
@@ -1621,42 +1681,42 @@ export function useCreateDocumentType() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => api.post("/document-types", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentTypes"] }); qc.invalidateQueries({ queryKey: ["documentSeries"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentTypes"] }); broadcast("documentTypes", "*"); qc.invalidateQueries({ queryKey: ["documentSeries"] }); broadcast("documentSeries", "*"); },
   });
 }
 export function useUpdateDocumentType() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/document-types/${id}`, patch),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentTypes"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentTypes"] }); broadcast("documentTypes", "*"); },
   });
 }
 export function useRemoveDocumentType() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/document-types/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentTypes"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentTypes"] }); broadcast("documentTypes", "*"); },
   });
 }
 export function useCreateDocumentSeries() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => api.post("/document-series", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentSeries"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentSeries"] }); broadcast("documentSeries", "*"); },
   });
 }
 export function useUpdateDocumentSeries() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.patch(`/document-series/${id}`, patch),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentSeries"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentSeries"] }); broadcast("documentSeries", "*"); },
   });
 }
 export function useRemoveDocumentSeries() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/document-series/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentSeries"] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["documentSeries"] }); broadcast("documentSeries", "*"); },
   });
 }
 
@@ -1678,21 +1738,21 @@ export function useCreateWorkflow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => api.post("/workflows", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflows"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["workflows"] }); broadcast("workflows", "*"); },
   });
 }
 export function useUpdateWorkflow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.put(`/workflows/${id}`, patch),
-    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["workflows"] }); qc.invalidateQueries({ queryKey: ["workflows", (v as any).id] }); },
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["workflows"] }); broadcast("workflows", "*"); qc.invalidateQueries({ queryKey: ["workflows", (v as any).id] }); broadcast("workflows", "*"); },
   });
 }
 export function useRemoveWorkflow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/workflows/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflows"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["workflows"] }); broadcast("workflows", "*"); },
   });
 }
 export function useSubmitWorkflow() {
@@ -1700,8 +1760,8 @@ export function useSubmitWorkflow() {
   return useMutation({
     mutationFn: (id: string) => api.post(`/workflows/${id}/submit`, {}),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["workflows"] });
-      qc.invalidateQueries({ queryKey: ["workflows", id] });
+      qc.invalidateQueries({ queryKey: ["workflows"] }); broadcast("workflows", "*");
+      qc.invalidateQueries({ queryKey: ["workflows", id] }); broadcast("workflows", "*");
     },
   });
 }
@@ -1716,21 +1776,21 @@ export function useCreateWorkflowState() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ workflowId, body }: { workflowId: string; body: unknown }) => api.post(`/workflows/${workflowId}/states`, body),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["workflowStates", (v as any).workflowId] }),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["workflowStates", (v as any).workflowId] }); broadcast("workflowStates", "*"); },
   });
 }
 export function useUpdateWorkflowState() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.put(`/workflow-states/${id}`, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflowStates"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["workflowStates"] }); broadcast("workflowStates", "*"); },
   });
 }
 export function useRemoveWorkflowState() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/workflow-states/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflowStates"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["workflowStates"] }); broadcast("workflowStates", "*"); },
   });
 }
 export function useWorkflowTransitions(workflowId?: string) {
@@ -1744,21 +1804,21 @@ export function useCreateWorkflowTransition() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ workflowId, body }: { workflowId: string; body: unknown }) => api.post(`/workflows/${workflowId}/transitions`, body),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["workflowTransitions", (v as any).workflowId] }),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["workflowTransitions", (v as any).workflowId] }); broadcast("workflowTransitions", "*"); },
   });
 }
 export function useUpdateWorkflowTransition() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: unknown }) => api.put(`/workflow-transitions/${id}`, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflowTransitions"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["workflowTransitions"] }); broadcast("workflowTransitions", "*"); },
   });
 }
 export function useRemoveWorkflowTransition() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/workflow-transitions/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workflowTransitions"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["workflowTransitions"] }); broadcast("workflowTransitions", "*"); },
   });
 }
 
@@ -1772,14 +1832,14 @@ export function useUpsertUserSignature() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (signatureData: string) => api.put("/user-signatures/me", { signatureData }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["userSignature", "me"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["userSignature", "me"] }); broadcast("userSignature", "*"); },
   });
 }
 export function useDeleteUserSignature() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.del("/user-signatures/me"),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["userSignature", "me"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["userSignature", "me"] }); broadcast("userSignature", "*"); },
   });
 }
 
@@ -1789,9 +1849,9 @@ export function useUpdateMe() {
     mutationFn: (patch: { name?: string; email?: string; phone?: string | null; password?: string }) =>
       api.put<{ user: import("@/types").User }>("/auth/me", patch),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["me"] });
+      qc.invalidateQueries({ queryKey: ["me"] }); broadcast("me", "*");
       // session will refresh on focus, but also invalidate user queries
-      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["users"] }); broadcast("users", "*");
     },
   });
 }

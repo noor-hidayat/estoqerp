@@ -268,7 +268,7 @@ function PreviewStep({
               <Table style={{ minWidth: usedKeys.length * 130 + 60 }}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12 px-3 py-2 text-xs font-medium text-muted-foreground">#</TableHead>
+                    <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 py-2 text-xs font-medium text-muted-foreground text-center">#</TableHead>
                     {usedKeys.map((c) => (
                       <TableHead key={c.key} className="px-3 py-2 text-xs font-medium text-muted-foreground">
                         {c.label}

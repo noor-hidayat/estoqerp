@@ -222,7 +222,7 @@ export default function WorkflowDetailPage() {
             <Table className="table-fixed text-left text-[13px]">
               <TableHeader className="bg-zinc-100 dark:bg-zinc-800">
                 <TableRow className="border-b hover:bg-zinc-100 dark:hover:bg-zinc-800 divide-x divide-border">
-                  <TableHead className="w-11 px-2 text-center">
+                  <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">
                     <Checkbox
                       checked={
                         approvers.length > 0 && selectedApprovers.size === approvers.length
@@ -240,7 +240,7 @@ export default function WorkflowDetailPage() {
                       aria-label="select all"
                     />
                   </TableHead>
-                  <TableHead className="w-[56px] px-3 text-center text-[13px] font-semibold text-muted-foreground">No</TableHead>
+                  <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center text-[13px] font-semibold text-muted-foreground">No</TableHead>
                   <TableHead className="px-3 text-[13px] font-semibold text-muted-foreground">Role</TableHead>
                   <TableHead className="w-32 px-3 text-center text-[13px] font-semibold text-muted-foreground">Signature</TableHead>
                 </TableRow>

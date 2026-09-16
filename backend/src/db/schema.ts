@@ -1595,7 +1595,7 @@ export const documentActivities = pgTable(
 // RFQ tanpa harga, harga ada di supplier_quotations
 // ---------------------------------------------------------------------------
 
-export const rfqStatuses = ["DRAFT", "SENT", "QUOTED", "AWARDED", "CLOSED", "CANCELED"] as const;
+export const rfqStatuses = ["DRAFT", "SENT", "QUOTED", "QUOTATION_RECEIVED", "EVALUATION", "AWARDED", "PO_CREATED", "CLOSED", "CANCELED"] as const;
 export type RfqStatus = (typeof rfqStatuses)[number];
 
 export const quotationStatuses = ["DRAFT", "SUBMITTED", "REJECTED", "AWARDED"] as const;
@@ -1650,6 +1650,7 @@ export const rfqLines = pgTable(
       .notNull()
       .references(() => uom.id),
     qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
+    specification: text("specification"),
     note: text("note"),
   },
   (t) => [index("idx_rfq_lines_rfq").on(t.rfqId)]
@@ -1726,6 +1727,7 @@ export const supplierQuotationLines = pgTable(
     qty: numeric("qty", { precision: 15, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 15, scale: 2 }),
     discount: numeric("discount", { precision: 15, scale: 2 }).notNull().default("0"),
+    tax: numeric("tax", { precision: 15, scale: 2 }).notNull().default("0"),
     subtotal: numeric("subtotal", { precision: 15, scale: 2 }).notNull().default("0"),
     note: text("note"),
   },

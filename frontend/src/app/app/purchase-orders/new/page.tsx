@@ -602,35 +602,19 @@ export default function NewPurchaseOrderPage() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Select
-                label="Target Warehouse"
-                value={form.warehouseId}
-                onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
-                className="h-8"
-              >
-                <option value="">Select warehouse...</option>
-                {parentWarehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </Select>
-              {(() => {
-                const wh: any = warehouses.find((x) => x.id === form.warehouseId);
-                if (!wh || (!wh.picName && !wh.picPhone && !wh.picEmail && !wh.address && !wh.phone)) return null;
-                return (
-                  <div className="rounded-md border border-border bg-zinc-50 dark:bg-zinc-900/50 px-3 py-2 text-[11px] leading-relaxed">
-                    <div className="font-medium text-foreground">PIC & Kontak Gudang</div>
-                    {wh.picName ? <div>PIC: <span className="font-medium">{wh.picName}</span> {wh.picPhone ? `· ${wh.picPhone}` : ""} {wh.picEmail ? `· ${wh.picEmail}` : ""}</div> : null}
-                    {wh.phone ? <div>Telp Gudang: {wh.phone}</div> : null}
-                    {wh.email ? <div>Email Gudang: {wh.email}</div> : null}
-                    {wh.address ? <div>Alamat: {wh.address}</div> : null}
-                    {wh.parentId ? <div className="text-muted-foreground">Induk: {warehouses.find((x) => x.id === wh.parentId)?.name ?? ""}</div> : null}
-                  </div>
-                );
-              })()}
-            </div>
+            <Select
+              label="Target Warehouse"
+              value={form.warehouseId}
+              onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
+              className="h-8"
+            >
+              <option value="">Select warehouse...</option>
+              {parentWarehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </Select>
           </div>
         </FormSection>
 
@@ -651,7 +635,8 @@ export default function NewPurchaseOrderPage() {
             <div className="hidden sm:block" aria-hidden="true" />
             <Input label="Total (IDR)" value={`Rp ${formatNumber(totalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
           </div>
-          <Collapsible open={chargesOpen} onOpenChange={setChargesOpen} className="mt-6">
+          <div className="border-t border-border my-4" />
+          <Collapsible open={chargesOpen} onOpenChange={setChargesOpen}>
             <CollapsibleTrigger asChild>
               <button type="button" className="flex items-center gap-2 text-sm font-medium hover:text-primary">
                 <span>Additional Charges</span>
@@ -752,9 +737,8 @@ export default function NewPurchaseOrderPage() {
               </div>
             </CollapsibleContent>
           </Collapsible>
-          <div className="mt-6 grid gap-4 sm:grid-cols-3 sm:divide-x sm:divide-border border-t border-border pt-6">
-            {/* Tax Category & Tax Rate stacked di kolom 1 (no 1), ukuran 1/3 kayak Total Quantity */}
-            <div className="space-y-4 sm:pr-4">
+          <div className="mt-6 grid gap-4 sm:grid-cols-3 border-t border-border pt-6">
+            <div className="space-y-4">
               <Select
                 label="Tax Category"
                 value={form.taxCategoryId}
@@ -775,19 +759,6 @@ export default function NewPurchaseOrderPage() {
                     </option>
                   ))}
               </Select>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium leading-none">Tax Rate</label>
-                <Input
-                  value={form.taxRate ? String(Math.round(Number(form.taxRate))) : form.taxRate}
-                  onChange={(e) => setForm({ ...form, taxRate: e.target.value.replace(/[^0-9]/g, "") })}
-                  placeholder="0"
-                  className="h-8 text-sm"
-                  type="text"
-                  inputMode="numeric"
-                />
-              </div>
-            </div>
-            <div className="space-y-4 sm:px-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium leading-none">Discount (%)</label>
                 <Input
@@ -804,7 +775,8 @@ export default function NewPurchaseOrderPage() {
                 />
               </div>
             </div>
-            <div className="flex flex-col items-end sm:pl-8">
+            <div className="hidden sm:block" aria-hidden="true" />
+            <div className="flex flex-col items-end">
               <div className="w-full max-w-[320px] space-y-2 py-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>

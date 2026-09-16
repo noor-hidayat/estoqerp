@@ -312,7 +312,11 @@ function POBody({
   const workflowIdForPO = (po as any).approvalWorkflowId || (workflows as any[]).find((w: any) => String(w.documentType).toUpperCase() === "PO" && w.isDefault)?.id;
   const { data: workflowStates = [] } = useWorkflowStates(workflowIdForPO);
   const { data: mySignature } = useUserSignature();
-  const isDraft = po.status === "DRAFT";
+  const [optimisticDraft, setOptimisticDraft] = useState(false);
+  useEffect(() => {
+    if (po.status === "DRAFT") setOptimisticDraft(false);
+  }, [po.status]);
+  const isDraft = po.status === "DRAFT" || optimisticDraft;
   const isPendingApproval = String(po.status ?? "").toUpperCase() === "PENDING_APPROVAL";
   const isApproved = String(po.status ?? "").toUpperCase() === "APPROVED" || (! (po as any).needApproval && (String(po.status ?? "").toUpperCase() === "POSTED" || String(po.status ?? "").toUpperCase() === "POST"));
   const isRejected = String(po.status ?? "").toUpperCase() === "REJECTED";
@@ -499,6 +503,7 @@ function POBody({
 
   const saveEdit = async () => {
     const valid = lines.filter((l) => l.itemId);
+    const wasCanceled = po.status === "CANCELED";
     try {
       await update.mutateAsync({
         id: po.id,
@@ -534,6 +539,7 @@ function POBody({
           })),
         },
       });
+      if (wasCanceled) setOptimisticDraft(true);
       setEditing(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to save.");
@@ -660,14 +666,14 @@ function POBody({
     <>
       <div className="print:hidden">
         <FormPage
-          title={`PO ${po.documentNo ?? (po as any).poNo ?? formatId(po.id)}`}
+          title={po.documentNo ?? (po as any).poNo ?? `PO ${formatId(po.id)}`}
           titleBadge={
-            isDraft && dirty ? (
+            ((isDraft && dirty && !optimisticDraft) || (po.status === "CANCELED" && editing && !optimisticDraft)) ? (
               <Badge tone="destructive">Not save</Badge>
             ) : isPendingApproval && (po as any).needApproval && pendingRoleName ? (
               <Badge tone="warning">Pending for {pendingRoleName}</Badge>
             ) : (
-              <DocStatusBadge status={po.status} />
+              <DocStatusBadge status={optimisticDraft ? "DRAFT" : po.status} />
             )
           }
           actions={
@@ -725,6 +731,11 @@ function POBody({
                   cancelDisabled={po.status === "CANCELED" || post.isPending}
                 />
               )}
+              {po.status === "CANCELED" && !editing && (
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setEditing(true)}>
+                  Amend
+                </Button>
+              )}
               {isDraft && (
                 dirty ? (
                   <Button variant="primary" size="sm" onClick={saveEdit} disabled={update.isPending}>
@@ -737,7 +748,7 @@ function POBody({
                 )
               )}
               {editing && !isDraft && (
-                <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+                <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setOptimisticDraft(false); }}>
                   <X size={14} strokeWidth={2} /> Discard
                 </Button>
               )}
@@ -1043,12 +1054,13 @@ function POBody({
           priceListId={editable ? form.priceListId : (po as any).priceListId}
           supplierId={editable ? form.supplierId : po.supplierId}
         />
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <Input label="Total Quantity" value={formatNumber(editable ? totalQty : viewTotalQty)} disabled className="h-8 bg-zinc-100 text-sm" />
-          <div className="hidden sm:block" aria-hidden="true" />
-          <Input label="Total (IDR)" value={`Rp ${formatNumber(editable ? totalAmountIDR : viewTotalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
-        </div>
-        <Collapsible open={chargesOpen} onOpenChange={setChargesOpen} className="mt-6">
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <Input label="Total Quantity" value={formatNumber(editable ? totalQty : viewTotalQty)} disabled className="h-8 bg-zinc-100 text-sm" />
+            <div className="hidden sm:block" aria-hidden="true" />
+            <Input label="Total (IDR)" value={`Rp ${formatNumber(editable ? totalAmountIDR : viewTotalAmountIDR)}`} disabled className="h-8 bg-zinc-100 text-sm" />
+          </div>
+          <div className="border-t border-border my-4" />
+          <Collapsible open={chargesOpen} onOpenChange={setChargesOpen}>
           <CollapsibleTrigger asChild>
             <button type="button" className="flex items-center gap-2 text-sm font-medium hover:text-primary">
               <span>Additional Charges</span>
@@ -1161,8 +1173,8 @@ function POBody({
             </div>
           </CollapsibleContent>
         </Collapsible>
-        <div className="mt-6 grid gap-4 sm:grid-cols-3 sm:divide-x sm:divide-border border-t border-border pt-6">
-          <div className="space-y-4 sm:pr-4">
+        <div className="mt-6 grid gap-4 sm:grid-cols-3 border-t border-border pt-6">
+          <div className="space-y-4">
             {editable ? (
               <Select
                 label="Tax Category"
@@ -1192,25 +1204,6 @@ function POBody({
                 </div>
               </div>
             )}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium leading-none">Tax Rate</label>
-              {editable ? (
-                <Input
-                  value={form.taxRate ? String(Math.round(Number(form.taxRate))) : form.taxRate}
-                  onChange={(e) => setForm({ ...form, taxRate: e.target.value.replace(/[^0-9]/g, "") })}
-                  placeholder="0"
-                  className="h-8 text-sm"
-                  type="text"
-                  inputMode="numeric"
-                />
-              ) : (
-                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                  {viewTaxRate ? String(Math.round(Number(viewTaxRate))) : viewTaxRate}
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="space-y-4 sm:px-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium leading-none">Discount (%)</label>
               {editable ? (
@@ -1233,7 +1226,8 @@ function POBody({
               )}
             </div>
           </div>
-          <div className="flex flex-col items-end sm:pl-8">
+          <div className="hidden sm:block" aria-hidden="true" />
+          <div className="flex flex-col items-end">
             <div className="w-full max-w-[320px] space-y-2 py-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>

@@ -586,7 +586,7 @@ export function DataTable<T>({
         <TableHeader className="bg-muted/40 [&_tr]:border-border">
           <TableRow className="border-border hover:bg-transparent">
             {selectable && (
-              <TableHead className="w-10 px-3 py-2.5">
+              <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 py-2.5">
                 <Checkbox
                   checked={allSelected ? true : someSelected ? "indeterminate" : false}
                   onCheckedChange={toggleAll}
@@ -620,7 +620,7 @@ export function DataTable<T>({
             {Array.from({ length: Math.min(Math.max(pageSize, 4), 8) }).map((_, i) => (
               <TableRow key={i} className="border-border/70 hover:bg-transparent">
                 {selectable && (
-                  <TableCell className="px-3 py-2.5">
+                  <TableCell className="w-[40px] min-w-[40px] max-w-[40px] px-3 py-2.5">
                     <Skeleton className="h-4 w-4 rounded-sm" />
                   </TableCell>
                 )}
@@ -704,7 +704,7 @@ export function DataTable<T>({
                   )}
                 >
                   {selectable && (
-                    <TableCell className="px-3 py-2.5 align-middle">
+                    <TableCell className="w-[40px] min-w-[40px] max-w-[40px] px-3 py-2.5 align-middle">
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleRow(id)}

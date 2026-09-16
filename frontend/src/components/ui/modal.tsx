@@ -28,10 +28,11 @@ export function Modal({
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = prev;
     };
   }, [open, onClose]);
 
@@ -47,14 +48,13 @@ export function Modal({
       {open && (
         <motion.div
           className={cn(
-            "fixed inset-0 z-50 flex justify-center bg-black/50 p-0 backdrop-blur-sm sm:p-6",
-            align === "top"
-              ? "items-start sm:items-start"
-              : "items-end sm:items-center"
+            "fixed inset-0 z-50 flex justify-center bg-black/5 p-0 sm:p-6",
+            align === "top" ? "items-start sm:items-start" : "items-end sm:items-center"
           )}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
+          animate={{ opacity: 1, backdropFilter: "blur(1px)" }}
+          exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
+          transition={{ duration: 0.3 }}
           onClick={onClose}
         >
         <motion.div
@@ -66,7 +66,7 @@ export function Modal({
           exit={{ opacity: 0, y: 8, scale: 0.98 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
           className={cn(
-            "w-full bg-card p-6 shadow-2xl sm:rounded-xl",
+            "relative w-full border bg-card p-6 shadow-2xl sm:rounded-xl",
             align === "top" ? "rounded-b-xl sm:mt-6" : "rounded-t-xl",
             widths[size]
           )}

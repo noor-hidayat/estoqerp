@@ -154,7 +154,7 @@ export default function QcDetailPage() {
               <Table className="table-fixed text-left text-[13px] border border-border">
                 <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
                   <TableRow className="border-border hover:bg-transparent divide-x divide-border">
-                    <TableHead className="w-10 px-3 text-center">No</TableHead>
+                    <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">No</TableHead>
                     <TableHead className="min-w-[200px] px-3">Item Code</TableHead>
                     <TableHead className="w-[120px] px-3 text-right">Qty Reject</TableHead>
                     <TableHead className="w-[120px] px-3 text-right">Qty Accept</TableHead>
@@ -194,11 +194,11 @@ export default function QcDetailPage() {
                 <Table className="table-fixed text-left text-[13px] border border-border">
                   <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
                     <TableRow className="border-border hover:bg-transparent divide-x divide-border">
-                      <TableHead className="w-10 px-3 text-center">No</TableHead>
+                      <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">No</TableHead>
                       <TableHead className="min-w-[180px] px-3">Item Code</TableHead>
                       <TableHead className="px-3">Parameter</TableHead>
                       <TableHead className="w-[120px] px-3 text-right">Qty</TableHead>
-                      {editing && <TableHead className="w-10 px-3"></TableHead>}
+                      {editing && <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3"></TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody className="[&_tr]:border-border/70">

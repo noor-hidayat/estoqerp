@@ -224,6 +224,75 @@ async function syntheticEvents(documentType: string, docRow: any, table: any): P
   return events;
 }
 
+// SSE stream: push realtime saat ada log baru untuk dokumen tertentu
+// Frontend fetch saat mount + listen stream ini → tanpa polling 4s
+activityLogsRouter.get("/activity-logs/stream", async (req, res, next) => {
+  try {
+    const documentTypeRaw = String(req.query.documentType ?? "").trim();
+    const documentIdRaw = String(req.query.documentId ?? "").trim();
+    if (!documentTypeRaw || !documentIdRaw) return res.status(400).json({ error: "documentType & documentId wajib untuk stream." });
+    const dt = documentTypeRaw.toUpperCase();
+    const table = DOC_TABLE_MAP[dt];
+    if (!table) return res.status(400).json({ error: `documentType ${dt} tidak dikenal.` });
+    const menu = DOC_MENU_MAP[dt];
+    if (menu) {
+      const allowed = await checkPermission(req, res, menu, "view");
+      if (!allowed) return;
+    }
+    const internalId = await resolveInternalId(table, documentIdRaw);
+    if (!internalId) return res.status(404).json({ error: "Dokumen tidak ditemukan untuk stream." });
+
+    // Setup SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    // @ts-ignore
+    if (res.flushHeaders) res.flushHeaders();
+
+    // Kirim komentar awal agar connection dianggap aktif
+    res.write(`: connected ${dt}:${internalId}\n\n`);
+
+    // Lazy import emitter untuk hindari circular
+    const { activityEmitter } = await import("../lib/activity-log");
+
+    const channel = `${dt}:${internalId}`;
+
+    const send = (payload: any) => {
+      try {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      } catch {}
+    };
+
+    const onNew = (evt: any) => {
+      // channel sudah spesifik per dokumen, langsung kirim
+      send(evt);
+    };
+
+    // Listen ke channel spesifik dokumen
+    activityEmitter.on(channel, onNew);
+
+    // Heartbeat tiap 15s agar proxy tidak close
+    const hb = setInterval(() => {
+      try {
+        res.write(`: heartbeat\n\n`);
+      } catch {}
+    }, 15000);
+
+    // Cleanup saat client disconnect
+    const cleanup = () => {
+      clearInterval(hb);
+      try { activityEmitter.off(channel, onNew); } catch {}
+      try { res.end(); } catch {}
+    };
+    req.on("close", cleanup);
+    req.on("error", cleanup);
+    // Jangan next(), biarkan koneksi tetap open
+  } catch (e) {
+    next(e);
+  }
+});
+
 activityLogsRouter.get("/activity-logs", async (req, res, next) => {
   try {
     const documentTypeRaw = String(req.query.documentType ?? req.query.documenttype ?? "").trim();

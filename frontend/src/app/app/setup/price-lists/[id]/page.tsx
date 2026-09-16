@@ -251,8 +251,8 @@ export default function EditPriceListPage() {
                 <Table className="[&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0 border-collapse">
                   <TableHeader className="bg-zinc-100/80 dark:bg-zinc-800/50">
                     <TableRow className="hover:bg-transparent border-b divide-x divide-border">
-                      <TableHead className="w-8 text-center border-r"> <Checkbox disabled /></TableHead>
-                      <TableHead className="w-10 font-semibold text-xs text-center border-r">No</TableHead>
+                      <TableHead className="w-[40px] min-w-[40px] max-w-[40px] text-center border-r"> <Checkbox disabled /></TableHead>
+                      <TableHead className="w-[40px] min-w-[40px] max-w-[40px] font-semibold text-xs text-center border-r">No</TableHead>
                       <TableHead className="min-w-[220px] font-semibold text-xs border-r">Item Code</TableHead>
                       <TableHead className="min-w-[160px] font-semibold text-xs border-r">{(pl as any)?.type === "PURCHASE" ? "Supplier" : "Customer"}</TableHead>
                       <TableHead className="w-[110px] font-semibold text-xs border-r">Currency</TableHead>

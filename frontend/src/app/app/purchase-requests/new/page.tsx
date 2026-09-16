@@ -436,22 +436,22 @@ export default function NewPurchaseRequestPage() {
           </div>
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
             <SearchableSelect
-              label="From Department"
+              label="Request By"
               options={departmentOptions}
               value={form.department}
               onChange={(v) => setForm({ ...form, department: v })}
               placeholder="Select department..."
               emptyText="No department found"
-              emptyLabel="— No Department —"
+              emptyLabel=""
             />
             <SearchableSelect
-              label="To Department"
+              label="Request To"
               options={departmentOptions}
               value={form.toDepartment}
               onChange={(v) => setForm({ ...form, toDepartment: v })}
               placeholder="Select department..."
               emptyText="No department found"
-              emptyLabel="— No Department —"
+              emptyLabel=""
             />
           </div>
           {/* Notes | Urgency */}

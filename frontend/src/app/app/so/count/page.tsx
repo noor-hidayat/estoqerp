@@ -482,10 +482,10 @@ export default function CountPage() {
                     <Table className="table-fixed border-collapse text-left text-sm [&_th]:border-r [&_th]:border-border/60 [&_td]:border-r [&_td]:border-border/60 [&_th]:last:border-r-0 [&_td]:last:border-r-0">
                       <TableHeader className="bg-muted/40 [&_tr]:border-border">
                         <TableRow className="border-border hover:bg-transparent">
-                          <TableHead className="w-10 px-3">
+                          <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3">
                             <Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} onCheckedChange={toggleAll} aria-label="Select all" />
                           </TableHead>
-                          <TableHead className="w-12 px-3">No.</TableHead>
+                          <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">No.</TableHead>
                           <TableHead className="min-w-[220px] px-4">Item Code</TableHead>
                           <TableHead className="w-[100px] px-4 text-right">Qty</TableHead>
                           <TableHead className="w-[140px] px-4">Batch</TableHead>
@@ -499,10 +499,10 @@ export default function CountPage() {
                           const uomName = r.uomId ? (uomMap.get(r.uomId) ?? r.uomId) : item?.uomId ? (uomMap.get(item.uomId) ?? item.uomId) : "";
                           return (
                             <TableRow key={r.key} className={cn("border-border/70", selectedKeys.has(r.key) && "bg-muted/50")}>
-                              <TableCell className="px-3">
+                              <TableCell className="w-[40px] min-w-[40px] max-w-[40px] px-3">
                                 <Checkbox checked={selectedKeys.has(r.key)} onCheckedChange={() => toggleRow(r.key)} aria-label={`Select row ${idx + 1}`} />
                               </TableCell>
-                              <TableCell className="px-3 text-sm text-muted-foreground">{idx + 1}</TableCell>
+                              <TableCell className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center text-sm text-muted-foreground">{idx + 1}</TableCell>
                               <TableCell className="px-4">
                                 <SearchableSelect
                                   compact
@@ -513,7 +513,7 @@ export default function CountPage() {
                                   }}
                                   options={items.map((i) => ({ value: i.id, label: `${i.code}: ${i.name}` }))}
                                   placeholder="Select item..."
-                                  emptyLabel="No items"
+                                  emptyLabel=""
                                   className="w-full"
                                 />
                               </TableCell>

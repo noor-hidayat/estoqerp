@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { Rfq } from "@/types";
-import { formatId } from "@/lib/utils";
+import { formatId, timeAgo } from "@/lib/utils";
 
 export default function RfqListPage() {
   const navigate = useNavigate();
@@ -37,40 +37,22 @@ export default function RfqListPage() {
       sortValue: (o) => String(o.documentNo ?? o.id),
     },
     {
-      id: "purchaseRequest",
-      header: "PR Ref",
-      cell: (o) => <span className="text-xs text-muted-foreground">{o.purchaseRequestNo ?? o.purchaseRequestId ?? ""}</span>,
-      sortValue: (o) => String(o.purchaseRequestNo ?? ""),
-    },
-    {
-      id: "warehouse",
-      header: "Warehouse",
-      cell: (o) => <span className="text-muted-foreground">{warehouseName(o.warehouseId)}</span>,
-      sortValue: (o) => warehouseName(o.warehouseId),
-    },
-    {
       id: "requestDate",
       header: "Request Date",
-      cell: (o) => <span className="text-muted-foreground">{o.requestDate?.slice(0, 10)}</span>,
-      sortValue: (o) => o.requestDate,
-    },
-    {
-      id: "deadline",
-      header: "Deadline",
-      cell: (o) => <span className="text-muted-foreground">{o.quotationDeadline?.slice(0, 10) ?? ""}</span>,
-      sortValue: (o) => o.quotationDeadline ?? "",
+      cell: (o) => <span className="whitespace-nowrap text-xs text-muted-foreground">{o.requestDate?.slice(0, 10) ?? ""}</span>,
+      sortValue: (o) => o.requestDate ?? "",
     },
     {
       id: "suppliers",
-      header: "Suppliers",
-      cell: (o) => <span className="text-xs">{o.suppliersCount ?? 0}</span>,
-      sortValue: (o) => String(o.suppliersCount ?? 0),
+      header: "Supplier",
+      cell: (o) => <span className="text-xs text-muted-foreground">{(o as any).suppliersCount ?? o.suppliers?.length ?? 0}</span>,
+      sortValue: (o) => Number((o as any).suppliersCount ?? o.suppliers?.length ?? 0),
     },
     {
       id: "quotations",
-      header: "Quotations",
-      cell: (o) => <span className="text-xs">{o.quotationsCount ?? 0}</span>,
-      sortValue: (o) => String(o.quotationsCount ?? 0),
+      header: "Quotation",
+      cell: (o) => <span className="text-xs text-muted-foreground">{(o as any).quotationsCount ?? o.quotations?.length ?? 0}</span>,
+      sortValue: (o) => Number((o as any).quotationsCount ?? o.quotations?.length ?? 0),
     },
     {
       id: "status",
@@ -79,14 +61,10 @@ export default function RfqListPage() {
       sortValue: (o) => o.status,
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (o) => (
-        <Button variant="ghost" size="sm" className="h-7 px-2.5 text-xs" onClick={() => navigate(`/app/rfq/${o.id}`)}>
-          View
-        </Button>
-      ),
+      id: "created",
+      header: "Created",
+      cell: (o) => <span className="whitespace-nowrap text-xs text-muted-foreground">{(o as any).createdAt ? timeAgo((o as any).createdAt) : ""}</span>,
+      sortValue: (o) => (o as any).createdAt ?? "",
     },
   ];
 
@@ -108,15 +86,18 @@ export default function RfqListPage() {
         loading={isLoading}
         onRowClick={(o) => navigate(`/app/rfq/${o.id}`)}
         searchPlaceholder="Search RFQ..."
-        getSearchText={(o) => `${o.documentNo ?? formatId(o.id)} ${warehouseName(o.warehouseId)} ${o.purchaseRequestNo ?? ""}`}
+        getSearchText={(o) => `${o.documentNo ?? formatId(o.id)} ${o.requestDate ?? ""} ${o.status} ${warehouseName(o.warehouseId)} ${o.purchaseRequestNo ?? ""}`}
         filters={
           <div className="flex gap-2">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 w-40 text-xs">
               <option value="all">All status</option>
               <option value="DRAFT">Draft</option>
               <option value="SENT">Sent</option>
-              <option value="QUOTED">Quoted</option>
+              <option value="QUOTATION_RECEIVED">Quotation Received</option>
+              <option value="QUOTED">Quotation Received</option>
+              <option value="EVALUATION">Evaluation</option>
               <option value="AWARDED">Awarded</option>
+              <option value="PO_CREATED">PO Created</option>
               <option value="CLOSED">Closed</option>
               <option value="CANCELED">Canceled</option>
             </Select>

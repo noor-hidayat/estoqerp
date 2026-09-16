@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { DocMenu } from "@/components/ui/doc-menu";
 import { Badge } from "@/components/ui/badge";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { FormPage, FormSection } from "@/components/ui/form-page";
@@ -38,6 +39,7 @@ import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatNumber } from "@/lib/utils";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -131,14 +133,27 @@ export default function RfqDetailPage() {
     validUntil: "",
     currency: "IDR",
     notes: "",
+    tax: "",
     lines: [] as any[],
   });
   const [activeTab, setActiveTab] = useState<"items" | "quotations" | "compare">("items");
+  const [selectedQuotRows, setSelectedQuotRows] = useState<Set<number>>(new Set());
+  const [selectedCompareRows, setSelectedCompareRows] = useState<Set<number>>(new Set());
+  const [selectedInvitedRows, setSelectedInvitedRows] = useState<Set<number>>(new Set());
+  const [selectedCompareSupplier, setSelectedCompareSupplier] = useState<string | null>(null);
+  useEffect(() => {
+    if (rfq?.awardedSupplierId && !selectedCompareSupplier) {
+      setSelectedCompareSupplier(rfq.awardedSupplierId);
+    }
+  }, [rfq?.awardedSupplierId]);
 
   const isDraft = rfq?.status === "DRAFT";
   const isSent = rfq?.status === "SENT";
-  const isQuoted = rfq?.status === "QUOTED";
+  const isQuoted = rfq?.status === "QUOTED" || rfq?.status === "QUOTATION_RECEIVED";
+  const isQuotationReceived = rfq?.status === "QUOTATION_RECEIVED" || rfq?.status === "QUOTED";
+  const isEvaluation = rfq?.status === "EVALUATION";
   const isAwarded = rfq?.status === "AWARDED";
+  const isPoCreated = rfq?.status === "PO_CREATED" || rfq?.status === "CLOSED";
   const canEdit = isDraft && editing;
 
   const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? wid ?? "";
@@ -161,14 +176,20 @@ export default function RfqDetailPage() {
           notes: existingQuot.notes ?? "",
           deliveryLeadTime: (existingQuot as any).deliveryLeadTime ?? "",
           paymentTerm: (existingQuot as any).paymentTerm ?? "",
-          lines: (existingQuot.lines ?? []).map((l: any) => ({
-            itemId: l.itemId,
-            uomId: l.uomId,
-            qty: l.qty,
-            unitPrice: l.unitPrice ?? "",
-            discount: l.discount ?? "0",
-            note: l.note ?? "",
-          })),
+          tax: (existingQuot as any).tax ?? "",
+          lines: (existingQuot.lines ?? []).map((l: any) => {
+            const qty = Number(l.qty || 0);
+            const price = l.unitPrice ? Number(l.unitPrice) : 0;
+            const discAmt = l.discount ? Number(l.discount) : 0;
+            const discPct = price && qty ? (discAmt / (qty * price)) * 100 : 0;
+            return {
+              itemId: l.itemId,
+              uomId: l.uomId,
+              qty: l.qty,
+              unitPrice: l.unitPrice ?? "",
+              discount: discPct ? String(Number(discPct.toFixed(2))) : "0",
+            };
+          }),
         });
       } else {
         setQuotForm({
@@ -179,13 +200,13 @@ export default function RfqDetailPage() {
           notes: "",
           deliveryLeadTime: "",
           paymentTerm: "",
+          tax: "",
           lines: (rfq.lines ?? []).map((l) => ({
             itemId: l.itemId,
             uomId: l.uomId,
             qty: l.qty,
             unitPrice: "",
             discount: "0",
-            note: "",
           })),
         });
       }
@@ -243,7 +264,7 @@ export default function RfqDetailPage() {
           expectedDate: editForm.expectedDate || null,
           notes: editForm.notes || null,
           currency: editForm.currency,
-          lines: validLines.map((l: any) => ({ itemId: l.itemId, uomId: l.uomId, qty: l.qty, note: l.note ?? null })),
+          lines: validLines.map((l: any) => ({ itemId: l.itemId, uomId: l.uomId, qty: l.qty, specification: (l as any).specification ?? null, note: l.note ?? null })),
           supplierIds: uniqueSuppliers,
         },
       });
@@ -299,21 +320,28 @@ export default function RfqDetailPage() {
         rfqId: rfq!.id,
         body: {
           supplierId: supId,
-          quotationNo: quotForm.quotationNo || null,
+          quotationNo: null,
           quotationDate: quotForm.quotationDate,
           validUntil: quotForm.validUntil || null,
           currency: quotForm.currency || rfq!.currency,
           notes: quotForm.notes || null,
           deliveryLeadTime: quotForm.deliveryLeadTime || null,
           paymentTerm: quotForm.paymentTerm || null,
-          lines: validLines.map((l: any) => ({
-            itemId: l.itemId,
-            uomId: l.uomId,
-            qty: l.qty,
-            unitPrice: l.unitPrice || null,
-            discount: l.discount || "0",
-            note: l.note || null,
-          })),
+          lines: validLines.map((l: any) => {
+            const qty = Number(l.qty || 0);
+            const price = l.unitPrice ? Number(l.unitPrice) : 0;
+            const discPct = l.discount ? Number(l.discount) : 0;
+            const discountAmt = price ? qty * price * discPct / 100 : 0;
+            return {
+              itemId: l.itemId,
+              uomId: l.uomId,
+              qty: l.qty,
+              unitPrice: l.unitPrice || null,
+              discount: String(discountAmt),
+              note: null,
+            };
+          }),
+          tax: (quotForm as any).tax || "0",
           status: submitAfter ? "SUBMITTED" : "DRAFT",
         },
       });
@@ -349,7 +377,7 @@ export default function RfqDetailPage() {
   if (isLoading) return <div className="py-20 text-center">Loading...</div>;
   if (!rfq) return <div className="py-20 text-center">RFQ not found</div>;
 
-  const canPrint = ["SENT", "QUOTED", "AWARDED", "CLOSED"].includes(rfq.status);
+  const canPrint = ["SENT", "QUOTED", "QUOTATION_RECEIVED", "EVALUATION", "AWARDED", "PO_CREATED", "CLOSED"].includes(rfq.status);
   const cheapestOverall = (compare as any)?.cheapestOverall as string | null;
 
   return (
@@ -385,97 +413,81 @@ export default function RfqDetailPage() {
                   Send
                 </Button>
               )}
-              {!isDraft && rfq.status !== "CANCELED" && rfq.status !== "CLOSED" && (
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleCancel}>
-                  Cancel
-                </Button>
-              )}
-              {rfq.status !== "CLOSED" && rfq.status !== "CANCELED" && (
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleClose}>
-                  Close
-                </Button>
-              )}
-              {(isDraft || rfq.status === "CANCELED") && (
-                <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={handleDelete}>
-                  Delete
-                </Button>
-              )}
-              {isAwarded && (
-                <Button size="sm" className="h-7 text-xs gap-1" onClick={handleCreatePO} disabled={createPo.isPending}>
-                  <ShoppingCart size={14} /> Create PO
-                </Button>
-              )}
+              <DocMenu
+                onCancel={handleCancel}
+                onDelete={handleDelete}
+                cancelDisabled={rfq.status === "CANCELED" || rfq.status === "CLOSED" || rfq.status === "PO_CREATED"}
+                deleteDisabled={!(isDraft || rfq.status === "CANCELED")}
+              />
             </div>
           }
         >
           <FormSection>
             {!editing ? (
-              <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">PR Reference</label>
-                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.purchaseRequestNo ?? rfq.purchaseRequestId ?? ""}</div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">Warehouse</label>
-                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{warehouseName(rfq.warehouseId)}</div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">Posting Date</label>
-                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.requestDate?.slice(0, 10)}</div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">Quotation Deadline</label>
-                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.quotationDeadline?.slice(0, 10) ?? ""}</div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">Expected Delivery</label>
-                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.expectedDate?.slice(0, 10) ?? ""}</div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">Currency</label>
-                  <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.currency}</div>
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="text-sm font-medium">Notes</label>
-                  <div className="mt-1 rounded-md border bg-zinc-100 p-3 text-sm whitespace-pre-wrap">{rfq.notes ?? ""}</div>
-                </div>
-                {rfq.awardedSupplierId && (
+              <>
+                <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium">Awarded Supplier</label>
-                    <div className="flex h-8 items-center rounded-md border bg-amber-50 px-3 text-sm font-medium">{rfq.awardedSupplierName ?? rfq.awardedSupplierId}</div>
+                    <label className="text-sm font-medium">PR Reference</label>
+                    <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.purchaseRequestNo ?? rfq.purchaseRequestId ?? ""}</div>
                   </div>
-                )}
-              </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium">Posting Date</label>
+                    <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.requestDate?.slice(0, 10)}</div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium">Expected Delivery</label>
+                    <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.expectedDate?.slice(0, 10) ?? ""}</div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium">Quotation Deadline</label>
+                    <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.quotationDeadline?.slice(0, 10) ?? ""}</div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium">Currency</label>
+                    <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{rfq.currency}</div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium">Warehouse</label>
+                    <div className="flex h-8 items-center rounded-md border bg-zinc-100 px-3 text-sm">{warehouseName(rfq.warehouseId)}</div>
+                  </div>
+                </div>
+                <div className="mt-6">
+                  <label className="mb-1.5 block text-sm font-medium">Notes</label>
+                  <div className="min-h-[80px] w-full rounded-md border bg-zinc-100 px-3 py-2 text-sm whitespace-pre-wrap">{rfq.notes ?? ""}</div>
+                </div>
+              </>
             ) : (
-              <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">Warehouse</label>
-                  <Select value={editForm.warehouseId} onChange={(e) => setEditForm({ ...editForm, warehouseId: e.target.value })} className="h-8">
-                    {warehouses.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name}
-                      </option>
-                    ))}
-                  </Select>
+              <>
+                <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                  <DatePicker label="Posting Date" value={editForm.requestDate} onChange={(v) => setEditForm({ ...editForm, requestDate: v })} />
+                  <DatePicker label="Expected Delivery" value={editForm.expectedDate} onChange={(v) => setEditForm({ ...editForm, expectedDate: v })} />
+                  <DatePicker label="Quotation Deadline" value={editForm.quotationDeadline} onChange={(v) => setEditForm({ ...editForm, quotationDeadline: v })} />
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium">Currency</label>
+                    <Select value={editForm.currency} onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })} className="h-8">
+                      <option value="IDR">IDR</option>
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                      <option value="SGD">SGD</option>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium">Warehouse</label>
+                    <Select value={editForm.warehouseId} onChange={(e) => setEditForm({ ...editForm, warehouseId: e.target.value })} className="h-8">
+                      {warehouses.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
                 </div>
-                <DatePicker label="Posting Date" value={editForm.requestDate} onChange={(v) => setEditForm({ ...editForm, requestDate: v })} />
-                <DatePicker label="Quotation Deadline" value={editForm.quotationDeadline} onChange={(v) => setEditForm({ ...editForm, quotationDeadline: v })} />
-                <DatePicker label="Expected Delivery" value={editForm.expectedDate} onChange={(v) => setEditForm({ ...editForm, expectedDate: v })} />
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium">Currency</label>
-                  <Select value={editForm.currency} onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })} className="h-8">
-                    <option value="IDR">IDR</option>
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="SGD">SGD</option>
-                  </Select>
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="text-sm font-medium">Notes</label>
-                  <Textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="text-sm font-medium">Suppliers (min 1)</label>
+              <div className="mt-6">
+                <label className="mb-1.5 block text-sm font-medium">Notes</label>
+                <Textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+              </div>
+              <div className="mt-6">
+                <label className="text-sm font-medium">Suppliers (min 1)</label>
                   {(() => {
                     const supplierOptions = (suppliers as any[])
                       .filter((s: any) => s.isActive !== false)
@@ -490,7 +502,7 @@ export default function RfqDetailPage() {
                         <Table className="table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0">
                           <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
                             <TableRow className="border-border hover:bg-transparent">
-                              <TableHead className="w-8 px-2 text-center">
+                              <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">
                                 <Checkbox
                                   checked={allCheckedEdit ? true : someCheckedEdit ? "indeterminate" : false}
                                   onCheckedChange={(v) => {
@@ -500,7 +512,7 @@ export default function RfqDetailPage() {
                                   aria-label="select all suppliers"
                                 />
                               </TableHead>
-                              <TableHead className="w-10 px-3 text-center">No</TableHead>
+                              <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">No</TableHead>
                               <TableHead className="px-3">Supplier</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -523,7 +535,7 @@ export default function RfqDetailPage() {
                                   </TableCell>
                                   <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
                                   <TableCell className="p-0">
-                                    <TableSearchableSelect table value={sid} onChange={(v) => setEditSupplierRows((prev) => prev.map((val, i) => (i === idx ? v : val)))} options={rowOptions} placeholder="Ketik nama / kode supplier..." columnTitle="Supplier" />
+                                    <TableSearchableSelect table value={sid} onChange={(v) => setEditSupplierRows((prev) => prev.map((val, i) => (i === idx ? v : val)))} options={rowOptions} placeholder="Select Supplier" columnTitle="Supplier" />
                                   </TableCell>
                                 </TableRow>
                               );
@@ -555,13 +567,13 @@ export default function RfqDetailPage() {
                   })()}
                   <p className="mt-1.5 text-xs text-muted-foreground">Ketik di kolom Supplier untuk mencari — sama seperti kolom Item.</p>
                 </div>
-              </div>
+              </>
             )}
           </FormSection>
 
-          <div className="flex gap-2 border-b">
+          <div className="flex gap-2 border-b mb-6">
             <button className={cn("px-4 py-2 text-sm", activeTab === "items" ? "border-b-2 border-black font-semibold" : "text-muted-foreground")} onClick={() => setActiveTab("items")}>
-              Items
+              Detail
             </button>
             <button className={cn("px-4 py-2 text-sm", activeTab === "quotations" ? "border-b-2 border-black font-semibold" : "text-muted-foreground")} onClick={() => setActiveTab("quotations")}>
               Quotations ({rfq.quotations?.length ?? 0})
@@ -572,7 +584,10 @@ export default function RfqDetailPage() {
           </div>
 
           {activeTab === "items" && (
-            <FormSection title="Lines">
+            <FormSection>
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold tracking-tight text-foreground">Items</h3>
+              </div>
               <OrderLineTable
                 value={
                   canEdit
@@ -606,15 +621,24 @@ export default function RfqDetailPage() {
               </div>
               {!canEdit && (
                 <div className="mt-6">
-                  <div className="mb-3 flex items-center gap-4">
-                    <h3 className="whitespace-nowrap text-[11.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Invited Suppliers</h3>
-                    <div className="h-px flex-1 bg-border" />
+                  <div className="mb-3">
+                    <h3 className="text-sm font-semibold tracking-tight text-foreground">Supplier</h3>
                   </div>
                   <div className="overflow-hidden rounded-lg border border-border">
                     <Table className="table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0">
                       <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
                         <TableRow className="border-border hover:bg-transparent">
-                          <TableHead className="w-10 px-3 text-center">No</TableHead>
+                          <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">
+                            <Checkbox
+                              checked={selectedInvitedRows.size === (rfq.suppliers?.length ?? 0) && (rfq.suppliers?.length ?? 0) > 0}
+                              onCheckedChange={(v) => {
+                                if (v) setSelectedInvitedRows(new Set((rfq.suppliers ?? []).map((_, i) => i)));
+                                else setSelectedInvitedRows(new Set());
+                              }}
+                              aria-label="select all invited"
+                            />
+                          </TableHead>
+                          <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">No</TableHead>
                           <TableHead className="px-3">Supplier</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -627,9 +651,21 @@ export default function RfqDetailPage() {
                           </TableRow>
                         ) : (
                           (rfq.suppliers ?? []).map((s, idx) => (
-                            <TableRow key={s.id} className="border-border/70 hover:bg-transparent">
+                            <TableRow key={s.id} data-state={selectedInvitedRows.has(idx) ? "selected" : undefined} className="border-border/70 hover:bg-transparent data-[state=selected]:bg-muted">
+                              <TableCell className="px-2 text-center">
+                                <Checkbox
+                                  checked={selectedInvitedRows.has(idx)}
+                                  onCheckedChange={(v) => {
+                                    const next = new Set(selectedInvitedRows);
+                                    if (v) next.add(idx);
+                                    else next.delete(idx);
+                                    setSelectedInvitedRows(next);
+                                  }}
+                                  aria-label={`select invited ${idx + 1}`}
+                                />
+                              </TableCell>
                               <TableCell className="px-3 text-center text-muted-foreground">{idx + 1}</TableCell>
-                              <TableCell className="px-3 font-medium">{s.supplierName}</TableCell>
+                              <TableCell className="px-3 font-semibold text-foreground">{s.supplierName}</TableCell>
                             </TableRow>
                           ))
                         )}
@@ -642,13 +678,25 @@ export default function RfqDetailPage() {
           )}
 
           {activeTab === "quotations" && (
-            <FormSection title="Quotations">
-              <div className="overflow-hidden rounded-lg border">
-                <Table>
+            <FormSection>
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold tracking-tight text-foreground">Supplier</h3>
+              </div>
+              <div className="overflow-hidden rounded-lg border border-border">
+                <Table className="text-[13px]">
                   <TableHeader className="bg-zinc-100">
                     <TableRow>
+                      <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">
+                        <Checkbox
+                          checked={selectedQuotRows.size === (rfq.suppliers?.length ?? 0) && (rfq.suppliers?.length ?? 0) > 0}
+                          onCheckedChange={(v) => {
+                            if (v) setSelectedQuotRows(new Set((rfq.suppliers ?? []).map((_, i) => i)));
+                            else setSelectedQuotRows(new Set());
+                          }}
+                          aria-label="select all quotations"
+                        />
+                      </TableHead>
                       <TableHead>Supplier</TableHead>
-                      <TableHead>Quotation No</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Valid Until</TableHead>
                       <TableHead className="text-right">Total</TableHead>
@@ -657,16 +705,27 @@ export default function RfqDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(rfq.suppliers ?? []).map((s) => {
+                    {(rfq.suppliers ?? []).map((s, idx) => {
                       const q = (rfq.quotations ?? []).find((qq) => qq.supplierId === s.supplierId);
                       return (
-                        <TableRow key={s.id}>
+                        <TableRow key={s.id} data-state={selectedQuotRows.has(idx) ? "selected" : undefined} className="data-[state=selected]:bg-muted">
+                          <TableCell className="px-2 text-center">
+                            <Checkbox
+                              checked={selectedQuotRows.has(idx)}
+                              onCheckedChange={(v) => {
+                                const next = new Set(selectedQuotRows);
+                                if (v) next.add(idx);
+                                else next.delete(idx);
+                                setSelectedQuotRows(next);
+                              }}
+                              aria-label={`select quotation ${idx + 1}`}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">{s.supplierName}</TableCell>
-                          <TableCell>{q?.quotationNo ?? ""}</TableCell>
                           <TableCell>{q?.quotationDate?.slice(0, 10) ?? ""}</TableCell>
                           <TableCell>{q?.validUntil?.slice(0, 10) ?? ""}</TableCell>
                           <TableCell className="text-right tabular-nums">{q ? `Rp ${formatNumber(q.totalAmount)}` : ""}</TableCell>
-                          <TableCell>{q ? <Badge>{q.status}</Badge> : <Badge variant="outline">Not quoted</Badge>}</TableCell>
+                          <TableCell>{q ? <Badge tone="success">Received</Badge> : <Badge variant="outline" tone="neutral">Waiting</Badge>}</TableCell>
                           <TableCell>
                             <Button size="sm" className="h-7 text-xs" onClick={() => setShowQuotDialog(s.supplierId)} disabled={rfq.status === "CANCELED" || rfq.status === "CLOSED"}>
                               {q ? "Edit" : "Record"}
@@ -678,164 +737,364 @@ export default function RfqDetailPage() {
                   </TableBody>
                 </Table>
               </div>
-              {showQuotDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                  <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-6 shadow-lg dark:bg-zinc-900">
-                    <h3 className="text-sm font-semibold">Record Quotation - {(suppliers as any[]).find((x) => x.id === showQuotDialog)?.name}</h3>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                      <Input label="Quotation No" value={quotForm.quotationNo} onChange={(e) => setQuotForm({ ...quotForm, quotationNo: e.target.value })} placeholder="QT-SUP/001" />
-                      <DatePicker label="Quotation Date" value={quotForm.quotationDate} onChange={(v) => setQuotForm({ ...quotForm, quotationDate: v })} />
-                      <DatePicker label="Valid Until" value={quotForm.validUntil} onChange={(v) => setQuotForm({ ...quotForm, validUntil: v })} />
-                      <Select label="Currency" value={quotForm.currency} onChange={(e) => setQuotForm({ ...quotForm, currency: e.target.value })} className="h-8">
-                        <option value="IDR">IDR</option>
-                        <option value="USD">USD</option>
-                        <option value="EUR">EUR</option>
-                      </Select>
-                      <Input label="Delivery Lead Time" value={quotForm.deliveryLeadTime} onChange={(e) => setQuotForm({ ...quotForm, deliveryLeadTime: e.target.value })} placeholder="3 days" />
-                      <Input label="Payment Term" value={quotForm.paymentTerm} onChange={(e) => setQuotForm({ ...quotForm, paymentTerm: e.target.value })} placeholder="NET 30" />
-                      <div className="sm:col-span-2">
-                        <label className="text-sm font-medium">Notes</label>
-                        <Textarea value={quotForm.notes} onChange={(e) => setQuotForm({ ...quotForm, notes: e.target.value })} />
+              <Dialog open={!!showQuotDialog} onOpenChange={(o) => !o && setShowQuotDialog(null)}>
+                <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-4xl p-0 gap-0 overflow-hidden max-h-[90vh] flex flex-col">
+                  <DialogHeader className="px-6 pt-6 pb-4">
+                    <DialogTitle className="text-[15px] font-semibold">Record Quotation</DialogTitle>
+                    <DialogDescription className="text-xs">
+                      {`RFQ ${rfq.documentNo ?? rfq.id} \u2022 Supplier ${((suppliers as any[]).find((x) => x.id === showQuotDialog)?.name ?? showQuotDialog ?? "") || "Input harga penawaran supplier"}`}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="px-6 py-5 space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <DatePicker label="Quotation Date" value={quotForm.quotationDate} onChange={(v) => setQuotForm({ ...quotForm, quotationDate: v })} />
+                        <DatePicker label="Valid Until" value={quotForm.validUntil} onChange={(v) => setQuotForm({ ...quotForm, validUntil: v })} />
+                        <Select
+                          label="Currency"
+                          value={quotForm.currency}
+                          onChange={(e) => setQuotForm({ ...quotForm, currency: e.target.value })}
+                          className="h-8"
+                        >
+                          <option value="IDR">IDR</option>
+                          <option value="USD">USD</option>
+                          <option value="EUR">EUR</option>
+                        </Select>
+                        <Input
+                          label="Lead Time (days)"
+                          type="number"
+                          value={quotForm.deliveryLeadTime}
+                          onChange={(e) => setQuotForm({ ...quotForm, deliveryLeadTime: e.target.value.replace(/[^0-9]/g, "") })}
+                          placeholder="3"
+                        />
+                        <Input
+                          label="Payment Term"
+                          value={quotForm.paymentTerm}
+                          onChange={(e) => setQuotForm({ ...quotForm, paymentTerm: e.target.value })}
+                          placeholder="NET 30"
+                        />
+                        <Input
+                          label="Tax %"
+                          value={(quotForm as any).tax ?? ""}
+                          onChange={(e) => setQuotForm({ ...quotForm, tax: e.target.value } as any)}
+                          placeholder="0"
+                        />
+                        <div className="sm:col-span-2">
+                          <label className="text-sm font-medium">Notes</label>
+                          <Textarea value={quotForm.notes} onChange={(e) => setQuotForm({ ...quotForm, notes: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="overflow-hidden rounded-lg border">
+                        <Table className="text-[13px]">
+                          <TableHeader className="bg-zinc-100">
+                            <TableRow>
+                              <TableHead>No</TableHead>
+                              <TableHead>Item</TableHead>
+                              <TableHead>Qty</TableHead>
+                              <TableHead className="w-32 text-right">Unit Price</TableHead>
+                              <TableHead className="w-28 text-right">Discount %</TableHead>
+                              <TableHead className="w-32 text-right">Subtotal</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {quotForm.lines.map((l: any, idx: number) => {
+                              const qty = Number(l.qty || 0);
+                              const price = l.unitPrice ? Number(l.unitPrice) : 0;
+                              const discPct = l.discount ? Number(l.discount) : 0;
+                              const discountAmt = price ? qty * price * discPct / 100 : 0;
+                              const subtotal = l.unitPrice ? qty * price - discountAmt : 0;
+                              return (
+                                <TableRow key={idx}>
+                                  <TableCell className="text-center">{idx + 1}</TableCell>
+                                  <TableCell className="text-xs">{itemLabel(l.itemId)}</TableCell>
+                                  <TableCell className="text-center">{l.qty}</TableCell>
+                                  <TableCell className="p-0">
+                                    <TableInput
+                                      value={l.unitPrice}
+                                      onChange={(v) =>
+                                        setQuotForm({
+                                          ...quotForm,
+                                          lines: quotForm.lines.map((x: any, i: number) => (i === idx ? { ...x, unitPrice: v } : x)),
+                                        })
+                                      }
+                                      isNumeric
+                                    />
+                                  </TableCell>
+                                  <TableCell className="p-0">
+                                    <TableInput
+                                      value={l.discount}
+                                      onChange={(v) =>
+                                        setQuotForm({
+                                          ...quotForm,
+                                          lines: quotForm.lines.map((x: any, i: number) => (i === idx ? { ...x, discount: v } : x)),
+                                        })
+                                      }
+                                      isNumeric
+                                      placeholder="0"
+                                    />
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums">{subtotal ? `Rp ${formatNumber(subtotal)}` : ""}</TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
                       </div>
                     </div>
-                    <div className="mt-4 overflow-hidden rounded-lg border">
-                      <Table>
-                        <TableHeader className="bg-zinc-100">
-                          <TableRow>
-                            <TableHead>No</TableHead>
-                            <TableHead>Item</TableHead>
-                            <TableHead>Qty</TableHead>
-                            <TableHead className="w-32 text-right">Unit Price</TableHead>
-                            <TableHead className="w-28 text-right">Discount</TableHead>
-                            <TableHead className="w-32 text-right">Subtotal</TableHead>
-                            <TableHead>Note</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {quotForm.lines.map((l: any, idx: number) => {
-                            const subtotal = l.unitPrice ? Number(l.qty || 0) * Number(l.unitPrice || 0) - Number(l.discount || 0) : 0;
-                            return (
-                              <TableRow key={idx}>
-                                <TableCell className="text-center">{idx + 1}</TableCell>
-                                <TableCell className="text-xs">{itemLabel(l.itemId)}</TableCell>
-                                <TableCell className="text-center">{l.qty}</TableCell>
-                                <TableCell className="p-0">
-                                  <TableInput value={l.unitPrice} onChange={(v) => setQuotForm({ ...quotForm, lines: quotForm.lines.map((x: any, i: number) => (i === idx ? { ...x, unitPrice: v } : x)) })} isNumeric />
-                                </TableCell>
-                                <TableCell className="p-0">
-                                  <TableInput value={l.discount} onChange={(v) => setQuotForm({ ...quotForm, lines: quotForm.lines.map((x: any, i: number) => (i === idx ? { ...x, discount: v } : x)) })} isNumeric />
-                                </TableCell>
-                                <TableCell className="text-right tabular-nums">{subtotal ? `Rp ${formatNumber(subtotal)}` : ""}</TableCell>
-                                <TableCell className="p-0">
-                                  <TableInput value={l.note} onChange={(v) => setQuotForm({ ...quotForm, lines: quotForm.lines.map((x: any, i: number) => (i === idx ? { ...x, note: v } : x)) })} />
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    <div className="mt-4 flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setShowQuotDialog(null)}>
-                        Cancel
-                      </Button>
-                      <Button size="sm" onClick={() => handleSaveQuotation(false)} disabled={createQuot.isPending}>
-                        Save Draft
-                      </Button>
-                      <Button size="sm" className="bg-black text-white" onClick={() => handleSaveQuotation(true)} disabled={createQuot.isPending}>
-                        Save & Submit
-                      </Button>
-                    </div>
                   </div>
-                </div>
-              )}
+                  <DialogFooter className="px-6 py-4">
+                    <Button variant="ghost" size="sm" onClick={() => setShowQuotDialog(null)}>
+                      Cancel
+                    </Button>
+                    <Button size="sm" onClick={() => handleSaveQuotation(false)} disabled={createQuot.isPending}>
+                      Save Draft
+                    </Button>
+                    <Button size="sm" className="bg-black text-white" onClick={() => handleSaveQuotation(true)} disabled={createQuot.isPending}>
+                      Save & Submit
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </FormSection>
           )}
 
-          {activeTab === "compare" && (
-            <FormSection title="Compare">
+                    {activeTab === "compare" && (
+            <FormSection>
               {!compare ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">Loading compare...</div>
               ) : (compare as any).lines?.length === 0 ? (
                 <div className="py-10 text-center text-sm">No data</div>
               ) : (
                 <>
-                  <div className="overflow-x-auto rounded-lg border">
-                    <Table>
+                  <div className="mb-3">
+                    <h3 className="text-sm font-semibold tracking-tight text-foreground">Items</h3>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <Table className="table-fixed text-[13px]">
                       <TableHeader className="bg-zinc-100">
                         <TableRow>
-                          <TableHead className="w-10 text-center">No</TableHead>
-                          <TableHead>Item</TableHead>
+                          <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">
+                            <Checkbox
+                              checked={selectedCompareRows.size === ((compare as any)?.lines?.length ?? 0) && ((compare as any)?.lines?.length ?? 0) > 0}
+                              onCheckedChange={(v) => {
+                                if (v) setSelectedCompareRows(new Set(((compare as any)?.lines ?? []).map((_: any, i: number) => i)));
+                                else setSelectedCompareRows(new Set());
+                              }}
+                              aria-label="select all items"
+                            />
+                          </TableHead>
+                          <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">No</TableHead>
+                          <TableHead className="w-[300px] min-w-[300px] max-w-[300px]">Item</TableHead>
                           <TableHead className="w-20 text-right">Qty</TableHead>
                           {(compare as any).totals?.map((t: any) => (
-                            <TableHead key={t.supplierId} className="text-right min-w-[140px]">
-                              <div className={cn("font-semibold", cheapestOverall === t.supplierId && "text-green-600")}>{t.supplierName}</div>
-                              <div className="text-xs font-normal">Total Rp {formatNumber(t.total)}</div>
+                            <TableHead key={t.supplierId} className="text-right min-w-[180px]">
+                              <div className="font-semibold">{t.supplierName}</div>
                             </TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {(compare as any).lines.map((l: any, idx: number) => (
-                          <TableRow key={idx}>
-                            <TableCell className="text-center">{idx + 1}</TableCell>
-                            <TableCell className="text-xs">
-                              <div className="font-medium">{l.itemName}</div>
-                              <div className="text-muted-foreground">{l.itemCode}</div>
+                          <TableRow key={idx} data-state={selectedCompareRows.has(idx) ? "selected" : undefined} className="data-[state=selected]:bg-muted">
+                            <TableCell className="px-1 text-center">
+                              <Checkbox
+                                checked={selectedCompareRows.has(idx)}
+                                onCheckedChange={(v) => {
+                                  const next = new Set(selectedCompareRows);
+                                  if (v) next.add(idx);
+                                  else next.delete(idx);
+                                  setSelectedCompareRows(next);
+                                }}
+                                aria-label={`select item ${idx + 1}`}
+                              />
+                            </TableCell>
+                            <TableCell className="px-1 text-center w-8">{idx + 1}</TableCell>
+                            <TableCell className="text-xs max-w-[300px] truncate">
+                              <span className="font-medium truncate" title={`${l.itemCode}: ${l.itemName}`}>{l.itemCode}: {l.itemName}</span>
                             </TableCell>
                             <TableCell className="text-right tabular-nums">{formatNumber(l.qty)}</TableCell>
                             {l.perSupplier.map((ps: any) => {
-                              const isCheapest = l.cheapestSupplierId === ps.supplierId;
                               return (
-                                <TableCell key={ps.supplierId} className={cn("text-right tabular-nums", isCheapest && "bg-green-50 font-semibold")}>
-                                  {ps.unitPrice ? (
-                                    <div>
-                                      <div>Rp {formatNumber(ps.unitPrice)}</div>
-                                      <div className="text-xs text-muted-foreground">Sub: Rp {formatNumber(ps.subtotal ?? 0)}</div>
-                                    </div>
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
+                                <TableCell key={ps.supplierId} className="text-right tabular-nums">
+                                  {ps.subtotal ? <span>Rp {formatNumber(ps.subtotal)}</span> : ps.unitPrice ? <span>Rp {formatNumber(Number(ps.unitPrice) * Number(ps.qty ?? l.qty ?? 0))}</span> : <span className="text-muted-foreground">—</span>}
                                 </TableCell>
                               );
                             })}
                           </TableRow>
                         ))}
-                        <TableRow className="bg-zinc-50 font-semibold">
-                          <TableCell colSpan={3} className="text-right">
-                            Grand Total
-                          </TableCell>
-                          {(compare as any).totals?.map((t: any) => (
-                            <TableCell key={t.supplierId} className={cn("text-right", cheapestOverall === t.supplierId && "bg-green-100 text-green-700")}>
-                              Rp {formatNumber(t.total)}
-                            </TableCell>
-                          ))}
+                        <TableRow className="bg-zinc-50 font-semibold border-t">
+                          <TableCell className="px-1 text-center"></TableCell>
+                          <TableCell colSpan={2} className="text-right">Grand Total</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatNumber((compare as any).lines.reduce((s: number, l: any) => s + Number(l.qty || 0), 0))}</TableCell>
+                          {(compare as any).totals?.map((t: any) => {
+                            const perSupGrand = (compare as any).lines.reduce((sum: number, l: any) => {
+                              const ps = l.perSupplier.find((x: any) => x.supplierId === t.supplierId);
+                              if (!ps?.subtotal && !ps?.unitPrice) return sum;
+                              const sub = ps?.subtotal ? Number(ps.subtotal) : (ps?.unitPrice ? Number(ps.unitPrice) * Number(ps.qty ?? l.qty ?? 0) : 0);
+                              return sum + sub;
+                            }, 0);
+                            return (
+                              <TableCell key={t.supplierId} className="text-right tabular-nums">
+                                Rp{formatNumber(perSupGrand)}
+                              </TableCell>
+                            );
+                          })}
                         </TableRow>
                       </TableBody>
                     </Table>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {(compare as any).ranking?.map((r: any) => (
-                      <div key={r.supplierId} className={cn("rounded border px-3 py-2 text-xs", r.rank === 1 && "border-green-300 bg-green-50")}>
-                        <span className="font-semibold">
-                          #{r.rank} {r.supplierName}
-                        </span>{" "}
-                        — Rp {formatNumber(r.total)}
-                        {rfq.status !== "AWARDED" && rfq.status !== "CLOSED" && rfq.status !== "CANCELED" && (
-                          <Button size="sm" className="ml-2 h-6 text-xs" onClick={() => handleAward(r.supplierId)} disabled={award.isPending}>
-                            <Award size={12} /> Award
-                          </Button>
-                        )}
+                  {(() => {
+                    const totals = (compare as any).totals as any[] ?? [];
+                    const quotBySupplier = new Map<string, any>();
+                    (rfq.quotations ?? []).forEach((q: any) => quotBySupplier.set(q.supplierId, q));
+                    const perSup = totals.map((t) => {
+                      const q = quotBySupplier.get(t.supplierId);
+                      let subtotal = 0;
+                      let discount = 0;
+                      if (q?.lines) {
+                        q.lines.forEach((ql: any) => {
+                          const qty = Number(ql.qty || 0);
+                          const price = ql.unitPrice ? Number(ql.unitPrice) : 0;
+                          subtotal += qty * price;
+                          discount += ql.discount ? Number(ql.discount) : 0;
+                        });
+                      } else {
+                        subtotal = t.total;
+                      }
+                      const taxPct = q?.tax != null && String(q.tax).trim() !== "" ? Number(q.tax) : 0;
+                      const tax = (subtotal - discount) * taxPct / 100;
+                      const grand = q ? subtotal - discount + tax : t.total;
+                      const delivery = q?.deliveryLeadTime ?? "";
+                      const payment = q?.paymentTerm ?? "";
+                      const valid = q?.validUntil ? new Date(q.validUntil).toLocaleDateString("id-ID", { day: "2-digit", month: "short" }) : "";
+                      return { ...t, subtotal, discount, tax, grand, delivery, payment, valid, q };
+                    });
+                    return (
+                      <>
+                        <div className="mt-6">
+                          <h3 className="mb-3 text-sm font-semibold tracking-tight text-foreground">Summary</h3>
+                        </div>
+                        <div className="overflow-x-auto rounded-lg border border-border">
+                          <Table className="table-fixed text-[13px]">
+                            <TableHeader className="bg-zinc-100">
+                              <TableRow>
+                                <TableHead className="w-[160px]"></TableHead>
+                                {perSup.map((p) => (
+                                  <TableHead key={p.supplierId} className="text-right min-w-[180px] font-semibold">
+                                    {p.supplierName}
+                                  </TableHead>
+                                ))}
+                              </TableRow>
+                            </TableHeader>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell className="font-medium">Subtotal</TableCell>
+                              {perSup.map((p) => (
+                                <TableCell key={p.supplierId} className="text-right tabular-nums">
+                                  Rp{formatNumber(p.subtotal)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Discount</TableCell>
+                              {perSup.map((p) => (
+                                <TableCell key={p.supplierId} className="text-right tabular-nums">
+                                  Rp{formatNumber(p.discount)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Tax</TableCell>
+                              {perSup.map((p) => (
+                                <TableCell key={p.supplierId} className="text-right tabular-nums">
+                                  Rp{formatNumber(p.tax)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                            <TableRow className="bg-zinc-50 font-semibold">
+                              <TableCell>Grand Total</TableCell>
+                              {perSup.map((p) => (
+                                <TableCell key={p.supplierId} className="text-right tabular-nums">
+                                  Rp{formatNumber(p.grand)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Delivery</TableCell>
+                              {perSup.map((p) => (
+                                <TableCell key={p.supplierId} className="text-right">
+                                  {p.delivery || <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Payment Terms</TableCell>
+                              {perSup.map((p) => (
+                                <TableCell key={p.supplierId} className="text-right">
+                                  {p.payment || <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Valid Until</TableCell>
+                              {perSup.map((p) => (
+                                <TableCell key={p.supplierId} className="text-right">
+                                  {p.valid || <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          </TableBody>
+                        </Table>
                       </div>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">Highlight hijau = termurah per item & total. Purchasing bebas pilih pemenang bukan termurah.</p>
+                      <div className="mt-4 max-w-sm">
+                        <Select
+                          label="Select Supplier"
+                          value={selectedCompareSupplier ?? ""}
+                          onChange={(e) => setSelectedCompareSupplier(e.target.value)}
+                          className="h-8"
+                          disabled={!["EVALUATION", "AWARDED"].includes(rfq.status) || ["PO_CREATED", "CLOSED", "CANCELED"].includes(rfq.status) || award.isPending || createPo.isPending}
+                        >
+                          <option value="">Select supplier...</option>
+                          {perSup.map((p) => (
+                            <option key={p.supplierId} value={p.supplierId}>
+                              {p.supplierName}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="mt-4 flex justify-end">
+                        <Button
+                          size="sm"
+                          className="h-7 gap-1.5"
+                          disabled={!selectedCompareSupplier || !["EVALUATION", "AWARDED"].includes(rfq.status) || ["PO_CREATED", "CLOSED", "CANCELED"].includes(rfq.status) || award.isPending || createPo.isPending}
+                          onClick={async () => {
+                            if (!selectedCompareSupplier) return;
+                            try {
+                              if (rfq.awardedSupplierId !== selectedCompareSupplier) {
+                                await award.mutateAsync({ id: rfq.id, supplierId: selectedCompareSupplier });
+                              }
+                              const res = await createPo.mutateAsync(rfq.id);
+                              toast.success(`PO ${(res as any).documentNo} created`);
+                              navigate(`/app/purchase-orders/${(res as any).id}`);
+                            } catch (e) {
+                              setErr(e instanceof Error ? e.message : "Failed create PO");
+                            }
+                          }}
+                        >
+                          <ShoppingCart size={14} /> Create PO
+                        </Button>
+                      </div>
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </FormSection>
           )}
 
-          <FormSection title="Activity Log">
+          
+<FormSection>
+            <h3 className="mb-4 text-sm font-bold">Activity Log</h3>
             <ActivityTimeline documentType="RFQ" documentId={rfq.id} />
           </FormSection>
         </FormPage>

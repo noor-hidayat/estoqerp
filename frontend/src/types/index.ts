@@ -996,7 +996,7 @@ export interface WorkflowTransition {
   updatedAt?: string;
 }
 
-export type RfqStatus = "DRAFT" | "SENT" | "QUOTED" | "AWARDED" | "CLOSED" | "CANCELED";
+export type RfqStatus = "DRAFT" | "SENT" | "QUOTED" | "QUOTATION_RECEIVED" | "EVALUATION" | "AWARDED" | "PO_CREATED" | "CLOSED" | "CANCELED";
 export type QuotationStatus = "DRAFT" | "SUBMITTED" | "REJECTED" | "AWARDED";
 
 export interface RfqLine {

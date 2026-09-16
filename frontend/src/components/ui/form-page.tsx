@@ -53,7 +53,7 @@ export function FormPage({
   );
 }
 
-/** Form section with small title + divider line on the right. */
+/** Form section with title. */
 export function FormSection({
   title,
   description,
@@ -70,11 +70,10 @@ export function FormSection({
   return (
     <section className={cn("pb-9", className)}>
       {title && (
-        <div className="mb-5 flex items-center gap-4">
-          <h2 className="whitespace-nowrap text-[11.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <h2 className="text-sm font-semibold tracking-tight text-foreground">
             {title}
           </h2>
-          <div className="h-px flex-1 bg-border" />
           {actions && <div className="shrink-0">{actions}</div>}
         </div>
       )}

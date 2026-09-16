@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, ShoppingCart } from "lucide-react";
-import { usePurchaseRequests, useAllWarehouses, useBranches } from "@/lib/api/query";
+import { usePurchaseRequests, useAllWarehouses, useBranches, useDepartments } from "@/lib/api/query";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { DocStatusBadge } from "@/components/supply/doc-status";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { PurchaseRequest } from "@/types";
-import { formatId } from "@/lib/utils";
+import { formatId, timeAgo } from "@/lib/utils";
 
 export default function PurchaseRequestsPage() {
   const navigate = useNavigate();
@@ -19,6 +19,7 @@ export default function PurchaseRequestsPage() {
   const { data: requests = [], isLoading } = usePurchaseRequests();
   const { data: warehouses = [] } = useAllWarehouses();
   const { data: branches = [] } = useBranches();
+  const { data: departments = [] } = useDepartments();
 
   const warehouseName = (id: string) => warehouses.find((w) => w.id === id)?.name ?? "";
   const branchName = (id: string | null | undefined) => (id ? (branches.find((b) => b.id === id)?.name ?? "") : "");
@@ -41,16 +42,30 @@ export default function PurchaseRequestsPage() {
       sortValue: (o) => String(o.documentNo ?? (o as any).prNo ?? o.id),
     },
     {
-      id: "warehouse",
-      header: "Warehouse",
-      cell: (o) => <span className="text-muted-foreground">{warehouseName(o.warehouseId)}</span>,
-      sortValue: (o) => warehouseName(o.warehouseId),
-    },
-    {
       id: "requestDate",
       header: "Request Date",
-      cell: (o) => <span className="text-muted-foreground">{o.requestDate?.slice(0, 10)}</span>,
-      sortValue: (o) => o.requestDate,
+      cell: (o) => <span className="whitespace-nowrap text-xs text-muted-foreground">{o.requestDate?.slice(0, 10) ?? ""}</span>,
+      sortValue: (o) => o.requestDate ?? "",
+    },
+    {
+      id: "department",
+      header: "Request By",
+      cell: (o) => {
+        const name = (o as any).department ?? "";
+        const dept = (departments as any[]).find((d) => d.name === name);
+        const label = dept ? (dept.code ? `${dept.code} - ${dept.name}` : dept.name) : name;
+        return <span className="text-xs text-muted-foreground">{label || "-"}</span>;
+      },
+      sortValue: (o) => String((o as any).department ?? ""),
+    },
+    {
+      id: "branch",
+      header: "Branch",
+      cell: (o) => {
+        const name = branchName((o as any).branchId);
+        return <span className="text-xs text-muted-foreground">{name || "-"}</span>;
+      },
+      sortValue: (o) => branchName((o as any).branchId),
     },
     {
       id: "urgency",
@@ -64,37 +79,16 @@ export default function PurchaseRequestsPage() {
       sortValue: (o) => String((o as any).urgency ?? "MEDIUM"),
     },
     {
-      id: "department",
-      header: "From Department",
-      cell: (o) => <span className="text-xs text-muted-foreground">{(o as any).department ?? ""}</span>,
-      sortValue: (o) => String((o as any).department ?? ""),
-    },
-    {
-      id: "branch",
-      header: "Branch",
-      cell: (o) => <span className="text-xs text-muted-foreground">{branchName((o as any).branchId)}</span>,
-      sortValue: (o) => branchName((o as any).branchId),
-    },
-    {
       id: "status",
       header: "Status",
       cell: (o) => <DocStatusBadge status={o.status} />,
       sortValue: (o) => o.status,
     },
     {
-      id: "actions",
-      header: "",
-      align: "right",
-      cell: (o) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2.5 text-xs"
-          onClick={() => navigate(`/app/purchase-requests/${o.id}`)}
-        >
-          View
-        </Button>
-      ),
+      id: "created",
+      header: "Created",
+      cell: (o) => <span className="whitespace-nowrap text-xs text-muted-foreground">{(o as any).createdAt ? timeAgo((o as any).createdAt) : ""}</span>,
+      sortValue: (o) => (o as any).createdAt ?? "",
     },
   ];
 
@@ -118,7 +112,7 @@ export default function PurchaseRequestsPage() {
         onRowClick={(o) => navigate(`/app/purchase-requests/${o.id}`)}
         searchPlaceholder="Search purchase requests..."
         getSearchText={(o) =>
-          `${o.documentNo ?? (o as any).prNo ?? formatId(o.id)} ${warehouseName(o.warehouseId)} ${(o as any).department ?? ""} ${branchName((o as any).branchId)}`
+          `${o.documentNo ?? (o as any).prNo ?? formatId(o.id)} ${o.requestDate ?? ""} ${(o as any).department ?? ""} ${branchName((o as any).branchId)} ${String((o as any).urgency ?? "")} ${o.status} ${warehouseName(o.warehouseId)}`
         }
         filters={
           <div className="flex gap-2">

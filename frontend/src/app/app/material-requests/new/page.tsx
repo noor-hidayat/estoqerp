@@ -431,22 +431,22 @@ export default function NewMaterialRequestPage() {
           </div>
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
             <SearchableSelect
-              label="From Department"
+              label="Request By"
               options={departmentOptions}
               value={form.department}
               onChange={(v) => setForm({ ...form, department: v })}
               placeholder="Select department..."
               emptyText="No department found"
-              emptyLabel="— No Department —"
+              emptyLabel=""
             />
             <SearchableSelect
-              label="To Department"
+              label="Request To"
               options={departmentOptions}
               value={form.toDepartment}
               onChange={(v) => setForm({ ...form, toDepartment: v })}
               placeholder="Select department..."
               emptyText="No department found"
-              emptyLabel="— No Department —"
+              emptyLabel=""
             />
           </div>
           {/* Notes | Target Warehouse */}
@@ -459,38 +459,22 @@ export default function NewMaterialRequestPage() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />
             </div>
-            <div className="space-y-2">
-              <Select
-                label="Target Warehouse"
-                value={form.warehouseId}
-                onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
-                className="h-8"
-              >
-                <option value="">Select warehouse...</option>
-                {warehouses.map((w) => {
-                  const parent = (w as any).parentId ? warehouses.find((x) => x.id === (w as any).parentId) : null;
-                  return (
-                    <option key={w.id} value={w.id}>
-                      {(w as any).parentId ? `↳ ${w.name} (induk: ${parent?.name ?? ""})` : w.name}
-                    </option>
-                  );
-                })}
-              </Select>
-              {(() => {
-                const wh: any = warehouses.find((x) => x.id === form.warehouseId);
-                if (!wh || (!wh.picName && !wh.picPhone && !wh.picEmail && !wh.address && !wh.phone)) return null;
+            <Select
+              label="Target Warehouse"
+              value={form.warehouseId}
+              onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
+              className="h-8"
+            >
+              <option value="">Select warehouse...</option>
+              {warehouses.map((w) => {
+                const parent = (w as any).parentId ? warehouses.find((x) => x.id === (w as any).parentId) : null;
                 return (
-                  <div className="rounded-md border border-border bg-zinc-50 dark:bg-zinc-900/50 px-3 py-2 text-[11px] leading-relaxed">
-                    <div className="font-medium text-foreground">PIC & Kontak Gudang</div>
-                    {wh.picName ? <div>PIC: <span className="font-medium">{wh.picName}</span> {wh.picPhone ? `· ${wh.picPhone}` : ""} {wh.picEmail ? `· ${wh.picEmail}` : ""}</div> : null}
-                    {wh.phone ? <div>Telp Gudang: {wh.phone}</div> : null}
-                    {wh.email ? <div>Email Gudang: {wh.email}</div> : null}
-                    {wh.address ? <div>Alamat: {wh.address}</div> : null}
-                    {wh.parentId ? <div className="text-muted-foreground">Induk: {warehouses.find((x) => x.id === wh.parentId)?.name ?? ""}</div> : null}
-                  </div>
+                  <option key={w.id} value={w.id}>
+                    {(w as any).parentId ? `↳ ${w.name} (induk: ${parent?.name ?? ""})` : w.name}
+                  </option>
                 );
-              })()}
-            </div>
+              })}
+            </Select>
           </div>
         </FormSection>
 

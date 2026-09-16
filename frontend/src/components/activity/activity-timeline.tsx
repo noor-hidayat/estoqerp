@@ -1,8 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { timeAgo, formatDateTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { Clock, FilePlus, Edit, Send, Check, X, Ban, ArrowRightLeft, FileText, Plus, Minus, RefreshCw } from "lucide-react";
+import { Clock, FilePlus, Edit, Send, Check, X, Ban, ArrowRightLeft, FileText, Plus, Minus, RefreshCw, Award, ShoppingCart } from "lucide-react";
 
 type FieldChange = { from: unknown; to: unknown };
 type LinesDiff = {
@@ -51,12 +52,52 @@ type Activity = {
 };
 
 function useActivities(documentType?: string, documentId?: string) {
-  return useQuery({
+  const qc = useQueryClient();
+  const query = useQuery({
     queryKey: ["activity-logs", documentType, documentId],
     queryFn: () => api.get<Activity[]>(`/activity-logs?documentType=${documentType}&documentId=${documentId}`),
     enabled: !!documentType && !!documentId,
-    staleTime: 30_000,
+    // fetch hanya saat masuk menu + saat backend ada log baru (via SSE) + saat window focus
+    // polling 4s dihapus agar tidak mubazir
+    staleTime: 0,
+    gcTime: 5 * 60_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
+
+  // SSE realtime: subscribe ke backend stream, invalidate saat ada log baru
+  useEffect(() => {
+    if (!documentType || !documentId) return;
+    let aborted = false;
+    const controller = new AbortController();
+    const path = `/activity-logs/stream?documentType=${encodeURIComponent(documentType)}&documentId=${encodeURIComponent(documentId)}`;
+
+    const subscribe = () => {
+      if (aborted || controller.signal.aborted) return;
+      api.subscribe(path, () => {
+        // backend baru saja simpan log untuk dokumen ini → refetch tanpa reload
+        qc.invalidateQueries({ queryKey: ["activity-logs", documentType, documentId] });
+      }, controller.signal).catch((err) => {
+        if (controller.signal.aborted || aborted) return;
+        // retry setelah 5 detik jika stream putus (network / server restart)
+        const msg = err instanceof Error ? err.message : String(err);
+        // jangan spam log untuk abort
+        if (!msg.includes("aborted")) {
+          console.debug("[activity SSE] disconnected, retry in 5s", msg);
+          setTimeout(subscribe, 5000);
+        }
+      });
+    };
+
+    subscribe();
+    return () => {
+      aborted = true;
+      controller.abort();
+    };
+  }, [documentType, documentId, qc]);
+
+  return query;
 }
 
 const ACTION_META: Record<string, { label: string; icon: any; dot: string }> = {
@@ -64,23 +105,24 @@ const ACTION_META: Record<string, { label: string; icon: any; dot: string }> = {
   update: { label: "Diperbarui", icon: Edit, dot: "bg-zinc-400" },
   post: { label: "Diposting", icon: Send, dot: "bg-amber-500" },
   submit: { label: "Disubmit", icon: Send, dot: "bg-amber-500" },
+  send: { label: "Dikirim", icon: Send, dot: "bg-blue-500" },
   approve: { label: "Disetujui", icon: Check, dot: "bg-emerald-500" },
   reject: { label: "Ditolak", icon: X, dot: "bg-red-500" },
   cancel: { label: "Dibatalkan", icon: Ban, dot: "bg-zinc-400" },
+  close: { label: "Ditutup", icon: Ban, dot: "bg-zinc-500" },
+  award: { label: "Awarded", icon: Award, dot: "bg-amber-600" },
   convert: { label: "Dikonversi", icon: ArrowRightLeft, dot: "bg-violet-500" },
   prepare: { label: "Disiapkan", icon: FileText, dot: "bg-sky-500" },
   complete: { label: "Selesai", icon: Check, dot: "bg-emerald-600" },
   delete: { label: "Dihapus", icon: Ban, dot: "bg-red-400" },
+  create_quotation: { label: "Quotation Dibuat", icon: FileText, dot: "bg-sky-500" },
+  update_quotation: { label: "Quotation Diperbarui", icon: Edit, dot: "bg-sky-400" },
+  create_po: { label: "PO Dibuat", icon: ShoppingCart, dot: "bg-emerald-600" },
+  quoted: { label: "Quoted", icon: FileText, dot: "bg-sky-500" },
 };
 
-function Dot({ action }: { action: string }) {
-  const meta = ACTION_META[action] ?? { label: action, icon: Clock, dot: "bg-zinc-300" };
-  const Icon = meta.icon;
-  return (
-    <div className={cn("flex size-7 items-center justify-center rounded-full border-2 border-background shadow-sm", meta.dot)}>
-      <Icon size={12} className="text-white" strokeWidth={2.5} />
-    </div>
-  );
+function Dot(_props: { action: string }) {
+  return <div className="size-1.5 rounded-full mt-2 bg-zinc-400" />;
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -292,7 +334,7 @@ function Sentence({ actor, label, from, to, suffix }: { actor: string; label?: s
 }
 
 function sentencesFor(a: Activity): React.ReactNode[] {
-  const actor = a.actorEmail ?? a.actorName ?? "System";
+  const actor = (a.actorName && String(a.actorName).trim() ? String(a.actorName).trim() : null) ?? (a.actorEmail && String(a.actorEmail).trim() ? String(a.actorEmail).trim() : null) ?? "System";
   const act = a.action?.toLowerCase();
   const ago = timeAgo(a.createdAt);
   const nodes: React.ReactNode[] = [];
@@ -300,11 +342,20 @@ function sentencesFor(a: Activity): React.ReactNode[] {
   const linesDiff = (a.metadata as any)?.linesDiff as LinesDiff | undefined;
 
   if (act === "create") {
-    nodes.push(
-      <span key="c">
-        <span className="font-medium text-foreground">{actor}</span> created this. <span className="text-muted-foreground cursor-help" title={formatDateTime(a.createdAt)}>{ago}</span>
-      </span>
-    );
+    const no = (a.metadata as any)?.documentNo ?? (a.metadata as any)?.targetDocumentNo ?? null;
+    if (no && String(no).trim()) {
+      nodes.push(
+        <span key="c">
+          <span className="font-medium text-foreground">{actor}</span> created {String(no).trim()}. <span className="text-muted-foreground cursor-help" title={formatDateTime(a.createdAt)}>{ago}</span>
+        </span>
+      );
+    } else {
+      nodes.push(
+        <span key="c">
+          <span className="font-medium text-foreground">{actor}</span> created this. <span className="text-muted-foreground cursor-help" title={formatDateTime(a.createdAt)}>{ago}</span>
+        </span>
+      );
+    }
     return nodes;
   }
   if (act === "delete") {
@@ -368,6 +419,53 @@ function sentencesFor(a: Activity): React.ReactNode[] {
     nodes.push(
       <span key="cv">
         <span className="font-medium text-foreground">{actor}</span> converted to {t} {no}. <span className="text-muted-foreground cursor-help" title={formatDateTime(a.createdAt)}>{ago}</span>
+      </span>
+    );
+    return nodes;
+  }
+  if (act === "send") {
+    nodes.push(
+      <span key="send">
+        <span className="font-medium text-foreground">{actor}</span> sent this RFQ to suppliers. <span className="text-muted-foreground cursor-help" title={formatDateTime(a.createdAt)}>{ago}</span>
+      </span>
+    );
+    return nodes;
+  }
+  if (act === "award") {
+    const sup = (a.metadata as any)?.supplierId ?? (a.metadata as any)?.awardedSupplierId ?? "";
+    nodes.push(
+      <span key="award">
+        <span className="font-medium text-foreground">{actor}</span> awarded this to supplier {String(sup).slice(0, 8)}{String(sup).length > 8 ? "…" : ""}. <span className="text-muted-foreground cursor-help" title={formatDateTime(a.createdAt)}>{ago}</span>
+      </span>
+    );
+    return nodes;
+  }
+  if (act === "create_quotation" || act === "update_quotation") {
+    const supName = (a.metadata as any)?.supplierName ?? (a.metadata as any)?.supplierId ?? "";
+    const rfqNo = (a.metadata as any)?.rfqDocumentNo ?? "";
+    const label = act === "create_quotation" ? "created quotation" : "updated quotation";
+    const rfqPart = rfqNo ? ` for RFQ ${String(rfqNo)}` : "";
+    const supPart = supName ? ` for supplier ${String(supName)}` : "";
+    nodes.push(
+      <span key="quot">
+        <span className="font-medium text-foreground">{actor}</span> {label}{rfqPart}{supPart}. <span className="text-muted-foreground cursor-help" title={formatDateTime(a.createdAt)}>{ago}</span>
+      </span>
+    );
+    return nodes;
+  }
+  if (act === "create_po") {
+    const no = (a.metadata as any)?.targetDocumentNo ?? (a.metadata as any)?.documentNo ?? "";
+    nodes.push(
+      <span key="cpo">
+        <span className="font-medium text-foreground">{actor}</span> created PO {no} from this RFQ. <span className="text-muted-foreground cursor-help" title={formatDateTime(a.createdAt)}>{ago}</span>
+      </span>
+    );
+    return nodes;
+  }
+  if (act === "close") {
+    nodes.push(
+      <span key="close">
+        <span className="font-medium text-foreground">{actor}</span> closed this. <span className="text-muted-foreground cursor-help" title={formatDateTime(a.createdAt)}>{ago}</span>
       </span>
     );
     return nodes;
@@ -485,7 +583,7 @@ export function ActivityTimeline({ documentType, documentId }: { documentType: s
           const sentences = sentencesFor(a);
           return (
             <div key={a.id} className="relative flex gap-3 pb-5 last:pb-0">
-              {!isLast && <div className="absolute left-[13px] top-7 bottom-0 w-px bg-border" />}
+              {!isLast && <div className="absolute left-[3px] top-[14px] bottom-0 w-px bg-border" />}
               <div className="relative z-10 shrink-0">
                 <Dot action={a.action} />
               </div>

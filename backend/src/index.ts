@@ -26,6 +26,8 @@ import { workflowsRouter } from "./routes/workflows";
 import { userSignaturesRouter } from "./routes/user-signatures";
 import { activityLogsRouter } from "./routes/activity-logs";
 import { rfqRouter } from "./routes/rfq";
+import { realtimeRouter } from "./routes/realtime";
+import { emitRealtime } from "./lib/realtime";
 
 const app = express();
 
@@ -45,6 +47,53 @@ app.use("/api/auth", authRouter);
 
 app.use("/api", requireAuth);
 app.use("/api", resolveScope);
+// Global realtime emitter: setiap mutation sukses (POST/PUT/PATCH/DELETE) emit ke SSE
+// FE subscribe ke /api/realtime/stream?tables=... untuk dapat dorongan tanpa polling
+app.use("/api", (req, _res, next) => {
+  const res = _res as express.Response;
+  res.on("finish", () => {
+    try {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        const m = req.method;
+        if (!["POST", "PUT", "PATCH", "DELETE"].includes(m)) return;
+        const url = (req.originalUrl || req.url || "").split("?")[0];
+        const seg = url.replace(/^\/api\//, "").split("/")[0];
+        if (!seg) return;
+        const skip = new Set([
+          "auth",
+          "realtime",
+          "activity-logs",
+          "health",
+          "import",
+          "exchange",
+          "company-settings",
+          "ai",
+          "workflows",
+          "user-signatures",
+        ]);
+        if (skip.has(seg)) return;
+        // seg sudah kebab-case sesuai FE queryKey (purchase-orders, receivings, etc)
+        // Tentukan action untuk log lebih spesifik
+        let action: any = "*";
+        if (m === "POST") {
+          if (url.includes("/cancel")) action = "cancel";
+          else if (url.includes("/submit")) action = "submit";
+          else if (url.includes("/post")) action = "post";
+          else if (url.includes("/approve")) action = "approve";
+          else if (url.includes("/reject")) action = "reject";
+          else if (url.includes("/close")) action = "close";
+          else action = "create";
+        } else if (m === "DELETE") action = "delete";
+        else action = "update";
+        const id = (req.params as any)?.id ?? undefined;
+        emitRealtime(seg, action, id);
+        // juga emit untuk alias singular/plural yang mungkin dipakai FE
+        // mis FE pakai "purchase-orders" tapi URL "purchase-orders" sudah sama
+      }
+    } catch {}
+  });
+  next();
+});
 app.use("/api", dashboardRouter);
 app.use("/api", dashboardBuilderRouter);
 app.use("/api/import", importRouter);
@@ -63,6 +112,7 @@ app.use("/api", materialRequestRouter);
 app.use("/api", rfqRouter);
 app.use("/api", workflowsRouter);
 app.use("/api", userSignaturesRouter);
+app.use("/api", realtimeRouter);
 app.use("/api", activityLogsRouter);
 app.use("/api", crudRouter);
 

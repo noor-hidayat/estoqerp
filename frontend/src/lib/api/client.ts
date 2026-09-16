@@ -138,6 +138,12 @@ export const api = {
     onEvent: (event: T) => void,
     signal?: AbortSignal
   ): Promise<void> => streamRequest(path, body, onEvent, signal),
+  /** GET SSE stream — untuk activity-log realtime. Auth via Bearer header, auto-refresh. */
+  subscribe: <T = unknown>(
+    path: string,
+    onEvent: (event: T) => void,
+    signal?: AbortSignal
+  ): Promise<void> => subscribeRequest(path, onEvent, signal),
 };
 
 async function streamRequest<T>(
@@ -195,6 +201,65 @@ async function streamRequest<T>(
         onEvent(JSON.parse(payload) as T);
       } catch {
         // lewati event yang tidak valid
+      }
+    }
+  }
+}
+
+async function subscribeRequest<T>(
+  path: string,
+  onEvent: (event: T) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const tokens = getTokens();
+  const headers = new Headers({ Accept: "text/event-stream" });
+  if (tokens?.access) headers.set("Authorization", `Bearer ${tokens.access}`);
+
+  const doFetch = () =>
+    fetch(`${API_URL}${path}`, { method: "GET", headers, signal });
+
+  let res = await doFetch();
+
+  if (res.status === 401) {
+    const refreshed = await refreshOnce();
+    if (refreshed) {
+      const newTokens = getTokens();
+      if (newTokens?.access) headers.set("Authorization", `Bearer ${newTokens.access}`);
+      res = await doFetch();
+    }
+  }
+
+  if (!res.ok) {
+    let message = `Permintaan gagal (${res.status})`;
+    try {
+      const b = (await res.json()) as ApiErrorBody;
+      if (b?.error) message = b.error;
+    } catch {}
+    throw new ApiError(message, res.status);
+  }
+
+  if (!res.body) return;
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    if (signal?.aborted) break;
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, idx).trim();
+      buffer = buffer.slice(idx + 1);
+      if (!line || line.startsWith(":")) continue; // comment / heartbeat
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      try {
+        onEvent(JSON.parse(payload) as T);
+      } catch {
+        // lewati event tidak valid
       }
     }
   }

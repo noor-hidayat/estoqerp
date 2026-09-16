@@ -1,0 +1,1 @@
+ALTER TABLE "supplier_quotation_lines" ADD COLUMN "tax" numeric(15, 2) DEFAULT '0' NOT NULL;

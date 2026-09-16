@@ -134,6 +134,7 @@ export default function NewRfqPage() {
             discount: "",
             batchNumber: "",
             note: l.note ?? "",
+            specification: (l as any).specification ?? (l as any).note ?? "",
             deliveryDate: (l as any).deliveryDate ?? "",
           }))
         );
@@ -198,7 +199,7 @@ export default function NewRfqPage() {
         notes: form.notes || null,
         currency: form.currency || baseCurrency,
         branchId: form.branchId || null,
-        lines: valid.map((l) => ({ itemId: l.itemId, uomId: l.uomId, qty: l.qty, note: l.note || null })),
+        lines: valid.map((l) => ({ itemId: l.itemId, uomId: l.uomId, qty: l.qty, specification: (l as any).specification || null, note: l.note || null })),
         supplierIds: uniqueSuppliers,
       });
       navigate(`/app/rfq/${(res as any).id}`);
@@ -234,21 +235,13 @@ export default function NewRfqPage() {
                 <SearchableSelect value={form.purchaseRequestId} onChange={(v) => setForm({ ...form, purchaseRequestId: v })} options={prOptions} placeholder="Select PR (optional)..." />
               )}
             </div>
-            <Select label="Target Warehouse" value={form.warehouseId} onChange={(e) => setForm({ ...form, warehouseId: e.target.value })} className="h-8">
-              <option value="">Select warehouse...</option>
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
             <DatePicker label="Posting Date" value={form.requestDate} onChange={(v) => setForm({ ...form, requestDate: v })} />
-            <DatePicker label="Quotation Deadline" value={form.quotationDeadline} onChange={(v) => setForm({ ...form, quotationDeadline: v })} />
           </div>
           <div className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
             <DatePicker label="Expected Delivery" value={form.expectedDate} onChange={(v) => setForm({ ...form, expectedDate: v })} />
+            <DatePicker label="Quotation Deadline" value={form.quotationDeadline} onChange={(v) => setForm({ ...form, quotationDeadline: v })} />
+          </div>
+          <div className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Currency</label>
               <Select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className="h-8">
@@ -258,6 +251,14 @@ export default function NewRfqPage() {
                 <option value="SGD">SGD</option>
               </Select>
             </div>
+            <Select label="Target Warehouse" value={form.warehouseId} onChange={(e) => setForm({ ...form, warehouseId: e.target.value })} className="h-8">
+              <option value="">Select warehouse...</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </Select>
           </div>
           <div className="mt-6">
             <label className="mb-1.5 block text-sm font-medium">Notes</label>
@@ -265,7 +266,7 @@ export default function NewRfqPage() {
           </div>
         </FormSection>
 
-        <FormSection title="Lines">
+        <FormSection title="Items">
           <OrderLineTable
             value={lines}
             onChange={setLines}
@@ -278,19 +279,19 @@ export default function NewRfqPage() {
           </div>
         </FormSection>
 
-        <FormSection title="Invite Suppliers (min 1)">
+        <FormSection title="Supplier">
           <div className="overflow-hidden rounded-lg border border-border">
             <Table className="table-fixed border-collapse text-left text-[13px] [&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border [&_th]:last:border-r-0 [&_td]:last:border-r-0">
               <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
                 <TableRow className="border-border hover:bg-transparent">
-                  <TableHead className="w-8 px-2 text-center">
+                  <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">
                     <Checkbox
                       checked={supplierRows.length > 0 && selectedSupplierRows.size === supplierRows.length ? true : selectedSupplierRows.size > 0 ? "indeterminate" : false}
                       onCheckedChange={(v) => toggleAllSupplierRows(!!v)}
                       aria-label="select all suppliers"
                     />
                   </TableHead>
-                  <TableHead className="w-10 px-3 text-center">No</TableHead>
+                  <TableHead className="w-[40px] min-w-[40px] max-w-[40px] px-3 text-center">No</TableHead>
                   <TableHead className="px-3">Supplier</TableHead>
                 </TableRow>
               </TableHeader>
@@ -309,7 +310,7 @@ export default function NewRfqPage() {
                           value={sid}
                           onChange={(v) => setSupplierRow(idx, v)}
                           options={rowOptions}
-                          placeholder="Ketik nama / kode supplier..."
+                          placeholder="Select Supplier"
                           columnTitle="Supplier"
                         />
                       </TableCell>
@@ -332,7 +333,6 @@ export default function NewRfqPage() {
               )}
             </div>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Supplier terpilih akan mendapatkan dokumen RFQ terpisah saat Print (1 halaman per supplier). Ketik di kolom Supplier untuk mencari.</p>
         </FormSection>
       </FormPage>
     </RoleGuard>

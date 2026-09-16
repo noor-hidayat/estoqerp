@@ -1,0 +1,1 @@
+ALTER TABLE "rfq_lines" ADD COLUMN "specification" text;
