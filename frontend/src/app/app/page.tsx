@@ -7,7 +7,7 @@ import {
   useDashboards,
   useDashboardWidgetsData,
 } from "@/lib/api/use-dashboards";
-import { WidgetRenderer } from "@/components/dashboard/widgets";
+import { WidgetRenderer } from "@/modules/dashboard/components/widgets";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActiveWorkspace } from "@/hooks/use-workspace";
 

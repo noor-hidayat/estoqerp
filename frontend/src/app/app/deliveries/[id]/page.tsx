@@ -17,10 +17,10 @@ import { DocMenu } from "@/components/ui/doc-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
-import { DocStatusBadge } from "@/components/supply/doc-status";
-import { OrderLineTable, type OrderLineInput } from "@/components/supply/order-line-table";
+import { DocStatusBadge } from "@/components/data-display/doc-status";
+import { OrderLineTable, type OrderLineInput } from "@/modules/purchasing/components/order-line-table";
 import { FormSection } from "@/components/ui/form-page";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { ActivityTimeline } from "@/modules/activity/components/activity-timeline";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatId } from "@/lib/utils";
 

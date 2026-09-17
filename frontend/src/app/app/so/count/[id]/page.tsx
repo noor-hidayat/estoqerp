@@ -22,7 +22,7 @@ import {
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ShellLoader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { ActivityTimeline } from "@/modules/activity/components/activity-timeline";
 
 interface DetailDraft {
   key: string;

@@ -8,10 +8,10 @@ import {
   useDeleteMovement,
 } from "@/lib/api/query";
 import { MenuGate } from "@/components/ui/role-guard";
-import { MovementForm } from "@/components/transactions/movement-form";
-import { DocStatusBadge } from "@/components/supply/doc-status";
+import { MovementForm } from "@/modules/inventory/components/movement-form";
+import { DocStatusBadge } from "@/components/data-display/doc-status";
 import { FormSection } from "@/components/ui/form-page";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { ActivityTimeline } from "@/modules/activity/components/activity-timeline";
 
 const MENU = "inventory.transactions";
 

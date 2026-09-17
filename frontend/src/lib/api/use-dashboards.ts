@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
-import type { WidgetConfig, WidgetInstance, WidgetLayout } from "@/components/dashboard/types";
+import type { WidgetConfig, WidgetInstance, WidgetLayout } from "@/modules/dashboard/types";
 
 export interface DashboardSummary {
   id: string;
@@ -116,7 +116,7 @@ export function useDashboardTemplates(workspaceId?: string | null) {
     queryKey: ["dashboard-templates", workspaceId ?? "all"],
     queryFn: () => {
       const qs = workspaceId ? `?workspaceId=${workspaceId}` : "";
-      return api.get<import("@/components/dashboard/widget-registry").WidgetTemplate[]>(`/dashboard-templates${qs}`);
+      return api.get<import("@/modules/dashboard/registry/widget-registry").WidgetTemplate[]>(`/dashboard-templates${qs}`);
     },
     staleTime: 10 * 60_000,
     gcTime: 30 * 60_000,
@@ -132,7 +132,7 @@ export interface DashboardWidgetsData {
     layout: WidgetLayout;
     title: string;
     templateId: string | null;
-    rows: import("@/components/dashboard/types").WidgetRow[];
+    rows: import("@/modules/dashboard/types").WidgetRow[];
     error: string | null;
     config: WidgetConfig;
     percentChange?: number | null;

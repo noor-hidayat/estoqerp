@@ -50,7 +50,7 @@ import {
   Filters,
   type Filter,
   type FilterFieldConfig,
-} from "@/components/reui/filters"
+} from "@/components/data-display/filters"
 
 export interface DataTableColumn<T> {
   id: string;

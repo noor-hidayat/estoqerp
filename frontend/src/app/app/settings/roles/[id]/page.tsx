@@ -1,7 +1,7 @@
 import { useParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { useRoles } from "@/lib/api/query";
-import { RoleForm } from "@/components/roles/role-form";
+import { RoleForm } from "@/modules/access/components/role-form";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { FormSkeleton } from "@/components/ui/skeleton";
 
