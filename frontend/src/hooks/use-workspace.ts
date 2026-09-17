@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "@/lib/session";
 import { useWorkspaces } from "@/lib/api/query";
-import { WORKSPACES } from "@/components/app-shell/nav";
+import { WORKSPACES } from "@/components/layout/nav";
 
 const ACTIVE_KEY = "workspace.activeId";
 

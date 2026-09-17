@@ -1,6 +1,6 @@
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
-import { FormatEditor } from "@/components/barcode/format-editor";
+import { FormatEditor } from "@/modules/barcode/components/format-editor";
 import { FormPage } from "@/components/ui/form-page";
 import type { BarcodeFormat } from "@/types";
 

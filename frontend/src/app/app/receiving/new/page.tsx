@@ -17,7 +17,7 @@ import { FormSkeleton } from "@/components/ui/skeleton";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TableInput } from "@/components/ui/table-input";
-import { type OrderLineInput } from "@/components/supply/order-line-table";
+import { type OrderLineInput } from "@/modules/purchasing/components/order-line-table";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatId, formatNumber } from "@/lib/utils";
 import { useItemsList } from "@/lib/api/query";

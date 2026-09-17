@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { DocStatusBadge } from "@/components/supply/doc-status";
+import { DocStatusBadge } from "@/components/data-display/doc-status";
 import { DocMenu } from "@/components/ui/doc-menu";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { FormPage, FormSection } from "@/components/ui/form-page";

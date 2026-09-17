@@ -2,7 +2,7 @@ import { lazy, Suspense, useTransition } from "react";
 import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { SessionProvider, useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { navForPermissions } from "@/components/app-shell/nav";
+import { navForPermissions } from "@/components/layout/nav";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { TableSkeleton, FormSkeleton, DetailSkeleton, ChatSkeleton, TableWithKpiSkeleton } from "@/components/ui/loader";

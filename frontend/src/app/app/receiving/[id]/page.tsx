@@ -23,10 +23,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { TimePicker } from "@/components/ui/time-picker";
-import { DocStatusBadge } from "@/components/supply/doc-status";
-import { type OrderLineInput } from "@/components/supply/order-line-table";
+import { DocStatusBadge } from "@/components/data-display/doc-status";
+import { type OrderLineInput } from "@/modules/purchasing/components/order-line-table";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { ActivityTimeline } from "@/modules/activity/components/activity-timeline";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TableInput } from "@/components/ui/table-input";
 import { useErrorToast } from "@/hooks/use-error-toast";

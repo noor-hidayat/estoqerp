@@ -2,7 +2,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
-import { BatchFormatEditor } from "@/components/batch/format-editor";
+import { BatchFormatEditor } from "@/modules/inventory/components/batch-format-editor";
 import { FormPage, FormSection } from "@/components/ui/form-page";
 import { useBatchFormats, useRemove } from "@/lib/api/query";
 import { useState } from "react";
@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { ActivityTimeline } from "@/modules/activity/components/activity-timeline";
 
 export default function EditBatchFormatPage() {
   const params = useParams<{ id: string }>();

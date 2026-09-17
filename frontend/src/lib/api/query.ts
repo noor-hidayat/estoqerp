@@ -15,7 +15,7 @@ import type {
   Receiving,
   Delivery, DeliveryLine,
 } from "@/types";
-import type { DashboardMeta, WidgetConfig, WidgetRow } from "@/components/dashboard/types";
+import type { DashboardMeta, WidgetConfig, WidgetRow } from "@/modules/dashboard/types";
 
 function qs(params: Record<string, unknown>): string {
   const entries = Object.entries(params).filter(([, v]) => v != null && v !== "");

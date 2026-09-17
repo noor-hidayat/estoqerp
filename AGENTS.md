@@ -1,24 +1,25 @@
 # Project structure
 
-Monorepo npm workspaces — 3 folder terpisah:
+Frontend-first — `frontend/` adalah aplikasi aktif; `archive/backend` dan `archive/database` adalah arsip referensi.
 
-| Folder | Stack | Command |
-|---|---|---|
-| `frontend/` | React + Vite (SPA, react-router) | `npm run dev -w frontend` |
-| `backend/` | Node + Express 5 + Drizzle ORM + PostgreSQL | `npm run dev -w backend` |
-| `database/` | Skema SQL referensi (migrasi resmi via drizzle-kit di `backend/drizzle/`) | — |
+| Folder | Stack | Status | Command |
+|---|---|---|---|
+| `frontend/` | React + Vite (SPA, react-router) | **Active** | `npm run dev` atau `npm run dev -w frontend` |
+| `archive/backend/` | Node + Express 5 + Drizzle ORM + PostgreSQL | **Archived** | — (referensi rebuild) |
+| `archive/database/` | Skema SQL referensi | **Archived** | — |
+| `docs/design.md` | Design system | — | — |
 
 - Frontend memakai pola route `src/app/app/...` (bukan Next.js) dengan `src/App.tsx` sebagai router.
-- Semua data via `useDB()`/`useData()` dari `frontend/src/hooks/use-db.ts` → `frontend/src/lib/api/db-provider.tsx` → fetch ke REST API backend.
-- Backend: auth JWT (access + refresh token, lihat `backend/src/routes/auth.ts`), semua CRUD lewat generic router `backend/src/routes/crud.ts` (whitelist tabel di `CRUD_TABLES`).
-- Skema DB tunggal: `backend/src/db/schema.ts` (sumber kebenaran untuk drizzle-kit). Ubah di sana lalu `npm run db:generate && npm run db:migrate`.
-- Perintah lint/typecheck dari root: `npm run lint`, `npm run typecheck`.
+- Semua data via `useDB()`/`useData()` dari `frontend/src/hooks/use-db.ts` → `frontend/src/lib/api/db-provider.tsx` → fetch ke REST API (saat ini mock/local hingga backend baru).
+- Backend arsip: auth JWT (access + refresh token, lihat `archive/backend/src/routes/auth.ts`), semua CRUD lewat generic router `archive/backend/src/routes/crud.ts` (whitelist tabel di `CRUD_TABLES`).
+- Skema DB arsip tunggal: `archive/backend/src/db/schema.ts` (sumber kebenaran historis untuk drizzle-kit) dan `archive/database/schema.sql`.
+- Perintah lint/typecheck dari root: `npm run lint`, `npm run typecheck` (hanya frontend).
 
 ## Konvensi UI & Workflow (Receiving → QC → GNR)
 
-> Disepakati 2026-09-05: semua agent baru wajib ikut pola ini. Detail UI lihat `design.md` (layout, tabel, tombol, gap header, flow save).
+> Disepakati 2026-09-05: semua agent baru wajib ikut pola ini. Detail UI lihat `docs/design.md` (layout, tabel, tombol, gap header, flow save).
 
-> Aturan baru yang diubah (2026-09-05): flow save, gap judul-header, ukuran tombol, layout Detail vs New harus identik — sudah dimasukkan ke `design.md` §1-4; yang lain menyusul.
+> Aturan baru yang diubah (2026-09-05): flow save, gap judul-header, ukuran tombol, layout Detail vs New harus identik — sudah dimasukkan ke `docs/design.md` §1-4; yang lain menyusul.
 
 **Layout Receiving (grid `sm:grid-cols-2`, `gap-x-6 gap-y-4`, `border border-border`, header `bg-zinc-100` + `divide-x`):**
 - Baris 1: `Document (No PO, SearchableSelect)` | `Posting Date (DatePicker, w-full, h-8)` 
