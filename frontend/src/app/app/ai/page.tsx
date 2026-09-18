@@ -3,8 +3,8 @@ import { Bot, Copy, Check, Loader2, Plus, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/session";
-import { AnswerContent } from "@/components/ai-chat/answer-render";
-import { useChat, type ChatMessage } from "@/components/ai-chat/use-chat";
+import { AnswerContent } from "@/modules/ai/components/answer-render";
+import { useChat, type ChatMessage } from "@/modules/ai/hooks/use-chat";
 import { useActiveWorkspace } from "@/hooks/use-workspace";
 
 const SUGGESTIONS = [

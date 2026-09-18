@@ -2,9 +2,10 @@ import { lazy, Suspense, useTransition } from "react";
 import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { SessionProvider, useSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { navForPermissions } from "@/components/app-shell/nav";
+import { navForPermissions } from "@/components/layout/nav";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { isLocalMode } from "@/lib/api/client";
 import { TableSkeleton, FormSkeleton, DetailSkeleton, ChatSkeleton, TableWithKpiSkeleton } from "@/components/ui/loader";
 
 import LoginPage from "@/app/login/page";
@@ -81,6 +82,7 @@ const WorkflowDetailPage = lazy(() => import("@/app/app/settings/workflows/[id]/
 const NewRolePage = lazy(() => import("@/app/app/settings/roles/new/page"));
 const EditRolePage = lazy(() => import("@/app/app/settings/roles/[id]/page"));
 const ImportDataPage = lazy(() => import("@/app/app/settings/import/page"));
+const DevDataPage = lazy(() => import("@/app/app/settings/dev-data/page"));
 const AiSettingsPage = lazy(() => import("@/app/app/settings/ai/page"));
 const CompanySettingsPage = lazy(() => import("@/app/app/settings/company/page"));
 const AccountPage = lazy(() => import("@/app/app/settings/account/page"));
@@ -102,9 +104,9 @@ const PurchaseOrderDetailPage = lazy(() => import("@/app/app/purchase-orders/[id
 const SalesOrdersPage = lazy(() => import("@/app/app/sales-orders/page"));
 const NewSalesOrderPage = lazy(() => import("@/app/app/sales-orders/new/page"));
 const SalesOrderDetailPage = lazy(() => import("@/app/app/sales-orders/[id]/page"));
-const GoodsReceiptsPage = lazy(() => import("@/app/app/goods-receipts/page"));
-const NewGoodsReceiptPage = lazy(() => import("@/app/app/goods-receipts/new/page"));
-const GoodsReceiptDetailPage = lazy(() => import("@/app/app/goods-receipts/[id]/page"));
+const GrnListPage = lazy(() => import("@/app/app/grn/page"));
+const NewGrnPage = lazy(() => import("@/app/app/grn/new/page"));
+const GrnDetailPage = lazy(() => import("@/app/app/grn/[id]/page"));
 const DeliveriesPage = lazy(() => import("@/app/app/deliveries/page"));
 const NewDeliveryPage = lazy(() => import("@/app/app/deliveries/new/page"));
 const DeliveryDetailPage = lazy(() => import("@/app/app/deliveries/[id]/page"));
@@ -115,7 +117,8 @@ const InboundQcPage = lazy(() => import("@/app/app/qc/page"));
 const NewQcInspectionPage = lazy(() => import("@/app/app/qc/new/page"));
 const QcInspectionDetailPage = lazy(() => import("@/app/app/qc/[id]/page"));
 const InboundPutawayPage = lazy(() => import("@/app/app/putaway/page"));
-const SupplierReturnPage = lazy(() => import("@/app/app/supplier-return/page"));
+const NewPutawayPage = lazy(() => import("@/app/app/putaway/new/page"));
+const PutawayDetailPage = lazy(() => import("@/app/app/putaway/[id]/page"));
 const OutboundPickingPage = lazy(() => import("@/app/app/outbound/picking/page"));
 const OutboundPackingPage = lazy(() => import("@/app/app/outbound/packing/page"));
 const CustomerReturnPage = lazy(() => import("@/app/app/outbound/customer-return/page"));
@@ -126,11 +129,12 @@ const ReceivingReportPage = lazy(() => import("@/app/app/report/receiving/page")
 const DeliveryPerformanceReportPage = lazy(() => import("@/app/app/report/delivery-performance/page"));
 
 /** Halaman pertama "/app" — Dashboard bila punya aksesnya, selain itu
- *  diarahkan ke menu pertama yang boleh dibuka role-nya. */
+ *  diarahkan ke menu pertama yang boleh dibuka role-nya.
+ *  Mode lokal (frontend-first, issue #3): dev user selalu isSystem. */
 function HomeRoute() {
   const { isSystem, permissions, loading } = useSession();
   if (loading) return null;
-  if (can(isSystem, permissions, "dashboard", "view")) {
+  if (isLocalMode() || can(isSystem, permissions, "dashboard", "view")) {
     return <DashboardPage />;
   }
   const firstHref =
@@ -159,7 +163,8 @@ export default function App() {
     <SessionProvider>
       <TooltipProvider delayDuration={200}>
           <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          {/* Frontend-first (issue #3): tidak ada halaman login — /login dialihkan ke /app. */}
+          <Route path="/login" element={isLocalMode() ? <Navigate to="/app" replace /> : <LoginPage />} />
           <Route path="/" element={<Navigate to="/app" replace />} />
 
           <Route path="/app" element={<AppLayout />}>
@@ -240,6 +245,7 @@ export default function App() {
             <Route path="settings/workflows/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewWorkflowPage /></LazyPage>} />
             <Route path="settings/workflows/:id" element={<LazyPage fallback={<FormSkeleton fields={6} />}><WorkflowDetailPage /></LazyPage>} />
             <Route path="settings/import" element={<LazyPage fallback={<TableSkeleton columns={4} filters={0} />}><ImportDataPage /></LazyPage>} />
+            <Route path="settings/dev-data" element={<LazyPage fallback={<TableSkeleton columns={2} filters={0} />}><DevDataPage /></LazyPage>} />
             <Route path="settings/ai" element={<LazyPage fallback={<FormSkeleton fields={6} />}><AiSettingsPage /></LazyPage>} />
             <Route path="settings/company" element={<LazyPage fallback={<FormSkeleton fields={6} />}><CompanySettingsPage /></LazyPage>} />
             <Route path="settings/account" element={<LazyPage fallback={<FormSkeleton fields={4} />}><AccountPage /></LazyPage>} />
@@ -261,9 +267,13 @@ export default function App() {
             <Route path="sales-orders" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><SalesOrdersPage /></LazyPage>} />
             <Route path="sales-orders/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewSalesOrderPage /></LazyPage>} />
             <Route path="sales-orders/:id" element={<LazyPage fallback={<DetailSkeleton />}><SalesOrderDetailPage /></LazyPage>} />
-            <Route path="goods-receipts" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><GoodsReceiptsPage /></LazyPage>} />
-            <Route path="goods-receipts/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewGoodsReceiptPage /></LazyPage>} />
-            <Route path="goods-receipts/:id" element={<LazyPage fallback={<DetailSkeleton />}><GoodsReceiptDetailPage /></LazyPage>} />
+            {/* Legacy redirect: /app/goods-receipts/* -> /app/grn */}
+            <Route path="goods-receipts" element={<Navigate to="/app/grn" replace />} />
+            <Route path="goods-receipts/new" element={<Navigate to="/app/grn/new" replace />} />
+            <Route path="goods-receipts/:id" element={<RedirectTo to="/app/grn/:id" />} />
+            <Route path="grn" element={<LazyPage fallback={<TableSkeleton columns={6} filters={0} />}><GrnListPage /></LazyPage>} />
+            <Route path="grn/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewGrnPage /></LazyPage>} />
+            <Route path="grn/:id" element={<LazyPage fallback={<DetailSkeleton />}><GrnDetailPage /></LazyPage>} />
             <Route path="deliveries" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><DeliveriesPage /></LazyPage>} />
             <Route path="deliveries/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewDeliveryPage /></LazyPage>} />
             <Route path="deliveries/:id" element={<LazyPage fallback={<DetailSkeleton />}><DeliveryDetailPage /></LazyPage>} />
@@ -275,7 +285,8 @@ export default function App() {
             <Route path="qc/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewQcInspectionPage /></LazyPage>} />
             <Route path="qc/:id" element={<LazyPage fallback={<DetailSkeleton />}><QcInspectionDetailPage /></LazyPage>} />
             <Route path="putaway" element={<LazyPage><InboundPutawayPage /></LazyPage>} />
-            <Route path="supplier-return" element={<LazyPage><SupplierReturnPage /></LazyPage>} />
+            <Route path="putaway/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewPutawayPage /></LazyPage>} />
+            <Route path="putaway/:id" element={<LazyPage fallback={<DetailSkeleton />}><PutawayDetailPage /></LazyPage>} />
             {/* Redirect URL lama /app/inbound/* ke path flat */}
             <Route path="inbound/receiving" element={<Navigate to="/app/receiving" replace />} />
             <Route path="inbound/receiving/new" element={<Navigate to="/app/receiving/new" replace />} />
@@ -284,7 +295,6 @@ export default function App() {
             <Route path="inbound/qc/new" element={<Navigate to="/app/qc/new" replace />} />
             <Route path="inbound/qc/:id" element={<RedirectTo to="/app/qc/:id" />} />
             <Route path="inbound/putaway" element={<Navigate to="/app/putaway" replace />} />
-            <Route path="inbound/supplier-return" element={<Navigate to="/app/supplier-return" replace />} />
             <Route path="outbound" element={<Navigate to="/app/sales-orders" replace />} />
             <Route path="outbound/picking" element={<LazyPage><OutboundPickingPage /></LazyPage>} />
             <Route path="outbound/packing" element={<LazyPage><OutboundPackingPage /></LazyPage>} />

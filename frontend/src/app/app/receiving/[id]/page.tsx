@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Pencil, Save, X, Printer } from "lucide-react";
+import { Save, X, ChevronsUpDown, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import {
   useAllWarehouses,
@@ -17,16 +17,24 @@ import {
   useQcInspections,
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DocMenu } from "@/components/ui/doc-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { TimePicker } from "@/components/ui/time-picker";
-import { DocStatusBadge } from "@/components/supply/doc-status";
-import { type OrderLineInput } from "@/components/supply/order-line-table";
+import { DocStatusBadge } from "@/components/data-display/doc-status";
+import { type OrderLineInput } from "@/modules/purchasing/components/order-line-table";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { ActivityTimeline } from "@/modules/activity/components/activity-timeline";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TableInput } from "@/components/ui/table-input";
 import { useErrorToast } from "@/hooks/use-error-toast";
@@ -66,7 +74,6 @@ export default function ReceivingDetailPage() {
   const [error, setError] = useState("");
   useErrorToast(error);
   useEffect(() => { if (isError) console.error("[ReceivingDetail] fetchError", id, fetchError); }, [isError, fetchError, id]);
-  const [editing, setEditing] = useState(false);
 
   const warehouseName = (wid?: string) => warehouses.find((w) => w.id === wid)?.name ?? "";
   const supplierName = (sid?: string) => suppliers.find((s) => s.id === sid)?.name ?? "";
@@ -88,6 +95,8 @@ export default function ReceivingDetailPage() {
     notes: "",
   });
   const [lines, setLines] = useState<OrderLineInput[]>([]);
+  const [allowEditPosting, setAllowEditPosting] = useState(false);
+  const [qcRequired, setQcRequired] = useState(true);
 
   useEffect(() => {
     if (gr) {
@@ -97,6 +106,7 @@ export default function ReceivingDetailPage() {
         receiptDate: gr.receiptDate?.slice(0, 10) ?? todayISO(),
         notes: gr.notes ?? "",
       });
+      setQcRequired((gr as any).qcRequired ?? true);
       setLines(
         (gr.lines ?? []).map((l: any) => ({
           itemId: l.itemId,
@@ -122,6 +132,7 @@ export default function ReceivingDetailPage() {
         patch: {
           warehouseId: form.warehouseId,
           receiptDate: form.receiptDate,
+          qcRequired,
           notes: form.notes.trim() || null,
           lines: valid.map((l) => ({
             itemId: l.itemId,
@@ -133,16 +144,64 @@ export default function ReceivingDetailPage() {
           })),
         },
       });
-      setEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal menyimpan.");
     }
   };
 
+  // Kembalikan form ke data tersimpan (tombol Discard).
+  const discardChanges = () => {
+    if (!gr) return;
+    setForm({
+      purchaseOrderId: (gr as any).purchaseOrderId ?? "",
+      warehouseId: gr.warehouseId,
+      receiptDate: gr.receiptDate?.slice(0, 10) ?? todayISO(),
+      notes: gr.notes ?? "",
+    });
+    setQcRequired((gr as any).qcRequired ?? true);
+    setAllowEditPosting(false);
+    setLines(
+      (gr.lines ?? []).map((l: any) => ({
+        itemId: l.itemId,
+        uomId: l.uomId,
+        qty: String(l.qty),
+        unitPrice: l.unitPrice ?? "",
+        batchNumber: l.batchNumber ?? "",
+        note: l.note ?? "",
+        qtyAccepted: l.qtyAccepted ?? null,
+        qtyRejected: l.qtyRejected ?? null,
+        rejectReason: l.rejectReason ?? null,
+      } as any))
+    );
+  };
+
   const isDraft = gr?.status === "DRAFT";
   const isPendingQc = gr?.status === "PENDING_QC";
+  const isSubmitted = gr?.status === "SUBMITTED";
+  // COMPLETED/POSTED = status lama, tetap dianggap siap GRN agar data existing tidak rusak.
   const isCompleted = gr?.status === "COMPLETED" || gr?.status === "POSTED";
+  const readyForGrn = isSubmitted || isCompleted;
   const isCanceled = gr?.status === "CANCELED";
+
+  // Dirty = ada perubahan belum disimpan (hanya relevan saat DRAFT).
+  // Badge status jadi "Not save", tombol Save muncul; setelah tersimpan kembali Draft + Submit.
+  const dirty = useMemo(() => {
+    if (!gr || gr.status !== "DRAFT") return false;
+    if ((form.warehouseId ?? "") !== (gr.warehouseId ?? "")) return true;
+    if ((form.receiptDate ?? "") !== (gr.receiptDate?.slice(0, 10) ?? "")) return true;
+    if ((form.notes.trim() || "") !== (gr.notes ?? "")) return true;
+    if (qcRequired !== ((gr as any).qcRequired ?? true)) return true;
+    const norm = (arr: any[]) =>
+      (arr ?? []).filter((l) => l?.itemId).map((l) => ({
+        itemId: l.itemId,
+        uomId: l.uomId ?? "",
+        qty: String(l.qty ?? ""),
+        unitPrice: l.unitPrice || null,
+        batchNumber: l.batchNumber || null,
+        note: l.note || null,
+      }));
+    return JSON.stringify(norm(lines as any[])) !== JSON.stringify(norm((gr.lines ?? []) as any[]));
+  }, [gr, form, lines, qcRequired]);
   const onSubmit = async () => {
     if (!gr) return;
     const confirmed = await new Promise<boolean>((resolve) => {
@@ -162,7 +221,7 @@ export default function ReceivingDetailPage() {
         () => (
           <div className="bg-background border border-border rounded-lg shadow-lg p-3 w-[340px]">
             <div className="font-semibold text-xs">Submit Receiving?</div>
-            <div className="text-xs text-muted-foreground mt-1">Status akan menjadi Pending for QC Inspection.</div>
+            <div className="text-xs text-muted-foreground mt-1">{(gr as any)?.qcRequired === false ? "QC dilewati — status akan menjadi Submitted, GRN dapat langsung dibuat." : "Status akan menjadi Pending for QC Inspection."}</div>
             <div className="flex justify-end gap-1.5 mt-3">
               <Button variant="ghost" size="sm" className="h-6 px-2.5 text-xs" onClick={() => cleanup(false)}>
                 No
@@ -187,7 +246,7 @@ export default function ReceivingDetailPage() {
     if (!gr) return;
     if (isDraft) return onSubmit();
     if (isPendingQc) {
-      if (!confirm("Posting langsung ke COMPLETED tanpa QC detail?")) return;
+      if (!confirm("Posting langsung ke Submitted tanpa QC detail?")) return;
       try {
         await post.mutateAsync(gr.id);
       } catch (e) {
@@ -217,7 +276,7 @@ export default function ReceivingDetailPage() {
   };
   const onCreateGnr = () => {
     if (!gr) return;
-    navigate(`/app/goods-receipts/new?purchaseOrderId=${gr.purchaseOrderId}&receivingId=${gr.id}`);
+    navigate(`/app/grn/new?purchaseOrderId=${gr.purchaseOrderId}&receivingId=${gr.id}`);
   };
   const onCreateInspection = () => {
     if (!gr) return;
@@ -228,13 +287,12 @@ export default function ReceivingDetailPage() {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        if (editing) saveEdit();
-        else if (isDraft) onSubmit();
+        if (isDraft && dirty) saveEdit();
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [editing, isDraft, form, lines, gr?.id]);
+  }, [isDraft, dirty, form, lines, qcRequired, allowEditPosting, gr?.id]);
 
   if (isLoading) {
     return (
@@ -266,72 +324,85 @@ export default function ReceivingDetailPage() {
     <RoleGuard roles={[]} menus={[MENU]}>
       <FormPage
         title={rcvNo}
-        titleBadge={<DocStatusBadge status={gr.status} />}
+        titleBadge={isDraft && dirty ? <Badge tone="destructive">Not save</Badge> : <DocStatusBadge status={gr.status} />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {editing ? (
+            {isDraft && dirty && (
               <>
-                <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+                <Button variant="ghost" size="sm" onClick={discardChanges}>
                   <X size={14} strokeWidth={2} /> Discard
                 </Button>
                 <Button variant="primary" size="sm" onClick={saveEdit} disabled={update.isPending}>
                   <Save size={15} strokeWidth={2} /> Save
                 </Button>
               </>
-            ) : (
-              <>
-                {isDraft && (
-                  <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-                    <Pencil size={14} strokeWidth={2} /> Edit
+            )}
+            {isDraft && !dirty && (
+              <Button variant="primary" size="sm" onClick={onSubmit} disabled={submit.isPending}>
+                Submit
+              </Button>
+            )}
+            {isPendingQc && (
+              <Button variant="primary" size="sm" onClick={onCreateInspection}>
+                Quality Control
+              </Button>
+            )}
+            {readyForGrn && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="primary" size="sm" aria-label="Create">
+                    Create <ChevronsUpDown size={14} className="opacity-80" />
                   </Button>
-                )}
-                {isDraft && (
-                  <Button variant="primary" size="sm" onClick={onSubmit} disabled={submit.isPending}>
-                    Submit
-                  </Button>
-                )}
-                {isPendingQc && (
-                  <Button variant="primary" size="sm" onClick={onCreateInspection}>
-                    Create Inspection
-                  </Button>
-                )}
-                {isCompleted && (
-                  <Button variant="primary" size="sm" onClick={onCreateGnr}>
-                    Create GNR
-                  </Button>
-                )}
-                {!isCanceled && !isCompleted && (
-                  <DocMenu
-                    onCancel={onCancel}
-                    onDelete={onDelete}
-                    cancelDisabled={cancel.isPending}
-                  />
-                )}
-                {isDraft && (
-                  <Button variant="ghost" size="sm" className="hidden" onClick={onPost} disabled>
-                    Post (legacy)
-                  </Button>
-                )}
-              </>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem className="gap-2" onClick={onCreateGnr}>
+                    <PackageCheck size={14} /> Good Receipt Note
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {!isCanceled && !readyForGrn && (
+              <DocMenu
+                onCancel={onCancel}
+                onDelete={onDelete}
+                cancelDisabled={cancel.isPending}
+              />
+            )}
+            {isDraft && (
+              <Button variant="ghost" size="sm" className="hidden" onClick={onPost} disabled>
+                Post (legacy)
+              </Button>
             )}
           </div>
         }
       >
-        {editing ? (
+        {isDraft ? (
           <>
             <FormSection>
-              <FormGrid>
+              <div className="grid gap-x-8 gap-y-5 sm:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium leading-none">Document</label>
+                  <label className="text-sm font-medium leading-none">Ref PO</label>
                 <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{(() => { const pid = form.purchaseOrderId ?? (gr as any).purchaseOrderId; const p = pos.find((x) => x.id === pid); if (p?.documentNo) return String(p.documentNo); if ((p as any)?.poNo) return String((p as any).poNo); if (pid && /[A-Z]+\//.test(pid)) return pid; return p ? formatId(p.id) : ""; })()}</div>
               </div>
-              <DatePicker label="Posting Date" value={form.receiptDate} onChange={(v) => setForm({ ...form, receiptDate: v })} />
-              <div aria-hidden="true" />
-              <TimePicker label="Posting Time" value={toTimeStr(gr.createdAt)} onChange={() => {}} disabled />
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium leading-none">Supplier Name</label>
+                <label className="text-sm font-medium leading-none">Supplier</label>
                 <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{supplierIdForGr ? suppliers.find((s) => s.id === supplierIdForGr)?.name ?? "" : ""}</div>
               </div>
+              <DatePicker label="Posting Date" value={form.receiptDate} onChange={(v) => setForm({ ...form, receiptDate: v })} disabled={!allowEditPosting} />
+              <div className="flex flex-col justify-center gap-2 py-1">
+                <label className="flex cursor-pointer items-center gap-2 text-xs">
+                  <Checkbox checked={allowEditPosting} onCheckedChange={(v) => setAllowEditPosting(v === true)} />
+                  Edit posting date
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-xs">
+                  <Checkbox checked={qcRequired} onCheckedChange={(v) => setQcRequired(v === true)} />
+                  QC Inspection
+                </label>
+              </div>
+              <div aria-hidden="true" />
+              <TimePicker label="Posting Time" value={toTimeStr(gr.createdAt)} onChange={() => {}} disabled />
+            </div>
+            <FormGrid className="mt-5">
               <SearchableSelect
                 label="Target Warehouse"
                 placeholder="Pilih gudang..."
@@ -399,18 +470,30 @@ export default function ReceivingDetailPage() {
       ) : (
         <>
           <FormSection>
-            <FormGrid>
+            <div className="grid gap-x-8 gap-y-5 sm:grid-cols-3">
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium leading-none">Document</label>
+                <label className="text-sm font-medium leading-none">Ref PO</label>
                 <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{(() => { const p = pos.find((x) => x.id === gr.purchaseOrderId); if (p?.documentNo) return String(p.documentNo); if ((p as any)?.poNo) return String((p as any).poNo); if (gr.purchaseOrderId && /[A-Z]+\//.test(gr.purchaseOrderId)) return gr.purchaseOrderId; return p ? formatId(p.id) : ""; })()}</div>
               </div>
-              <DatePicker label="Posting Date" value={gr.receiptDate?.slice(0, 10) ?? ""} onChange={() => {}} disabled />
-              <div aria-hidden="true" />
-              <TimePicker label="Posting Time" value={toTimeStr(gr.createdAt)} onChange={() => {}} disabled />
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium leading-none">Supplier Name</label>
+                <label className="text-sm font-medium leading-none">Supplier</label>
                 <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{supplierIdForGr ? suppliers.find((s) => s.id === supplierIdForGr)?.name ?? "" : ""}</div>
               </div>
+              <DatePicker label="Posting Date" value={gr.receiptDate?.slice(0, 10) ?? ""} onChange={() => {}} disabled />
+              <div className="flex flex-col justify-center gap-2 py-1">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox checked={false} disabled />
+                  Edit posting date
+                </label>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox checked={(gr as any).qcRequired ?? true} disabled />
+                  QC Inspection
+                </label>
+              </div>
+              <div aria-hidden="true" />
+              <TimePicker label="Posting Time" value={toTimeStr(gr.createdAt)} onChange={() => {}} disabled />
+            </div>
+            <FormGrid className="mt-5">
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium leading-none">Target Warehouse</label>
                 <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">{warehouses.find((w) => w.id === gr.warehouseId)?.name ?? ""}</div>
@@ -427,18 +510,18 @@ export default function ReceivingDetailPage() {
               )}
             </FormGrid>
           </FormSection>
-          <FormSection title={`Item ${isCompleted ? "— QC Completed (Qty Accepted / Reject)" : isPendingQc ? "— Pending QC Inspection" : ""}`}>
+          <FormSection title={`Item ${readyForGrn ? "— Submitted (Qty Accepted / Reject)" : isPendingQc ? "— Pending QC Inspection" : ""}`}>
             <div className="overflow-hidden rounded-lg border border-border">
               <div className="overflow-x-auto">
-                <Table className={`${isCompleted || isPendingQc ? "min-w-[1100px]" : "min-w-[900px]"} table-fixed text-left text-[13px]`}>
+                <Table className={`${readyForGrn || isPendingQc ? "min-w-[1100px]" : "min-w-[900px]"} table-fixed text-left text-[13px]`}>
                   <TableHeader className="bg-zinc-100 dark:bg-zinc-800 [&_tr]:border-border">
                     <TableRow className="border-border hover:bg-transparent">
                       <TableHead className="w-10 px-3 text-center">No.</TableHead>
                       <TableHead className="min-w-[200px] px-3">Item</TableHead>
                       <TableHead className="w-[80px] px-3 text-right">Qty PO</TableHead>
                       <TableHead className="w-[95px] px-3 text-right">Qty Received</TableHead>
-                      {(isCompleted || isPendingQc) && <TableHead className="w-[95px] px-3 text-right">Qty Accepted</TableHead>}
-                      {(isCompleted || isPendingQc) && <TableHead className="w-[95px] px-3 text-right">Qty Reject</TableHead>}
+                      {(readyForGrn || isPendingQc) && <TableHead className="w-[95px] px-3 text-right">Qty Accepted</TableHead>}
+                      {(readyForGrn || isPendingQc) && <TableHead className="w-[95px] px-3 text-right">Qty Reject</TableHead>}
                       <TableHead className="w-[100px] px-3 text-right">Rate</TableHead>
                       <TableHead className="w-[130px] px-3 text-right">Amount</TableHead>
                     </TableRow>
@@ -450,7 +533,7 @@ export default function ReceivingDetailPage() {
                       const qtyPo = poLine?.qty ?? "";
                       const rate = r.unitPrice ?? "";
                       const qtyReceived = Number(r.qty || 0);
-                      const qtyRejected = r.qtyRejected != null ? Number(r.qtyRejected) : isCompleted || isPendingQc ? 0 : null;
+                      const qtyRejected = r.qtyRejected != null ? Number(r.qtyRejected) : readyForGrn || isPendingQc ? 0 : null;
                       const qtyAccepted = r.qtyAccepted != null ? Number(r.qtyAccepted) : qtyRejected != null ? qtyReceived - qtyRejected : null;
                       const amount = qtyReceived * Number(rate || 0);
                       return (
@@ -459,8 +542,8 @@ export default function ReceivingDetailPage() {
                           <TableCell className="px-3 font-medium text-foreground">{item ? `${item.code}: ${item.name}` : r.itemId || ""}</TableCell>
                           <TableCell className="px-3 text-right tabular-nums text-muted-foreground">{qtyPo !== "" ? formatNumber(qtyPo) : "0"}</TableCell>
                           <TableCell className="px-3 text-right tabular-nums text-foreground">{r.qty ? formatNumber(r.qty) : "0"}</TableCell>
-                          {(isCompleted || isPendingQc) && <TableCell className="px-3 text-right font-medium tabular-nums text-emerald-700">{qtyAccepted != null ? formatNumber(qtyAccepted) : "0"}</TableCell>}
-                          {(isCompleted || isPendingQc) && <TableCell className="px-3 text-right tabular-nums text-destructive">{qtyRejected != null ? formatNumber(qtyRejected) : "0"}</TableCell>}
+                          {(readyForGrn || isPendingQc) && <TableCell className="px-3 text-right font-medium tabular-nums text-emerald-700">{qtyAccepted != null ? formatNumber(qtyAccepted) : "0"}</TableCell>}
+                          {(readyForGrn || isPendingQc) && <TableCell className="px-3 text-right tabular-nums text-destructive">{qtyRejected != null ? formatNumber(qtyRejected) : "0"}</TableCell>}
                           <TableCell className="p-0">
                             <div className="flex items-center justify-between gap-2 px-3">
                               <span className="text-sm font-medium tracking-wide text-muted-foreground">Rp</span>
@@ -479,8 +562,8 @@ export default function ReceivingDetailPage() {
                   </TableBody>
                 </Table>
               </div>
-              {isCompleted && <div className="border-t border-border bg-emerald-50/50 px-3 py-2 text-[11px] text-emerald-800">QC Completed — gudang dapat membuat GNR (stock masuk gudang).</div>}
-              {isPendingQc && <div className="border-t border-border bg-amber-50/50 px-3 py-2 text-[11px] text-amber-800">Pending for QC Inspection — buat QC Inspection via tombol di atas. Setelah QC Completed baru bisa buat GNR.</div>}
+              {readyForGrn && <div className="border-t border-border bg-emerald-50/50 px-3 py-2 text-[11px] text-emerald-800">Submitted — gudang dapat membuat Good Receipt Note via tombol Create di atas.</div>}
+              {isPendingQc && <div className="border-t border-border bg-amber-50/50 px-3 py-2 text-[11px] text-amber-800">Pending for QC Inspection — buat QC via tombol Quality Control di atas. Setelah QC (Submitted) baru bisa buat Good Receipt Note.</div>}
             </div>
           </FormSection>
           {qcHistory.length > 0 && (

@@ -13,7 +13,7 @@ import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
 import { toast } from "sonner";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { ActivityTimeline } from "@/modules/activity/components/activity-timeline";
 
 export default function EditTaxCategoryPage() {
   const { id } = useParams<{ id: string }>();

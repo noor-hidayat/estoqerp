@@ -7,8 +7,19 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, clearTokens, getAccessToken, getTokens, setTokens } from "@/lib/api/client";
+import { api, clearTokens, getAccessToken, getTokens, setTokens, isLocalMode } from "@/lib/api/client";
 import type { User } from "@/types";
+
+// Development user untuk fase frontend-first (issue #3): user dianggap
+// sudah login, tanpa halaman Login / JWT / session validation.
+const DEV_USER: User = {
+  id: "dev-user",
+  name: "Developer",
+  email: "dev@estoq.local",
+  role: "role_sys_admin",
+  active: true,
+  avatarHue: 210,
+};
 
 export const ROLE_LABELS: Record<string, string> = {
   role_sys_admin: "Administrator",
@@ -56,6 +67,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let disposed = false;
+
+    // Mode lokal: langsung pakai dev user — tanpa token, tanpa /auth/me.
+    if (isLocalMode()) {
+      setUser(DEV_USER);
+      setIsSystem(true);
+      setPermissions([]);
+      setAccess({ branchIds: [], warehouseIds: [], workspaceIds: [] });
+      setLoading(false);
+      return () => {
+        disposed = true;
+        void disposed;
+      };
+    }
 
     const applyMe = (me: MeResponse) => {
       setUser(me);
@@ -111,6 +135,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
+    // Mode lokal: login selalu "berhasil" sebagai dev user.
+    if (isLocalMode()) {
+      void email;
+      void password;
+      setUser(DEV_USER);
+      setIsSystem(true);
+      return { error: null };
+    }
     try {
       const data = await api.post<LoginResponse>("/auth/login", {
         email,

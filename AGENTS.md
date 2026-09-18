@@ -1,31 +1,31 @@
 # Project structure
 
-Monorepo npm workspaces — 3 folder terpisah:
+Frontend-first — `frontend/` adalah aplikasi aktif; `archive/backend` dan `archive/database` adalah arsip referensi.
 
-| Folder | Stack | Command |
-|---|---|---|
-| `frontend/` | React + Vite (SPA, react-router) | `npm run dev -w frontend` |
-| `backend/` | Node + Express 5 + Drizzle ORM + PostgreSQL | `npm run dev -w backend` |
-| `database/` | Skema SQL referensi (migrasi resmi via drizzle-kit di `backend/drizzle/`) | — |
+| Folder | Stack | Status | Command |
+|---|---|---|---|
+| `frontend/` | React + Vite (SPA, react-router) | **Active** | `npm run dev` atau `npm run dev -w frontend` |
+| `archive/backend/` | Node + Express 5 + Drizzle ORM + PostgreSQL | **Archived** | — (referensi rebuild) |
+| `archive/database/` | Skema SQL referensi | **Archived** | — |
+| `docs/design.md` | Design system | — | — |
 
 - Frontend memakai pola route `src/app/app/...` (bukan Next.js) dengan `src/App.tsx` sebagai router.
-- Semua data via `useDB()`/`useData()` dari `frontend/src/hooks/use-db.ts` → `frontend/src/lib/api/db-provider.tsx` → fetch ke REST API backend.
-- Backend: auth JWT (access + refresh token, lihat `backend/src/routes/auth.ts`), semua CRUD lewat generic router `backend/src/routes/crud.ts` (whitelist tabel di `CRUD_TABLES`).
-- Skema DB tunggal: `backend/src/db/schema.ts` (sumber kebenaran untuk drizzle-kit). Ubah di sana lalu `npm run db:generate && npm run db:migrate`.
-- Perintah lint/typecheck dari root: `npm run lint`, `npm run typecheck`.
+- Semua data via `useDB()`/`useData()` dari `frontend/src/hooks/use-db.ts` → `frontend/src/lib/api/db-provider.tsx` → fetch ke REST API (saat ini mock/local hingga backend baru).
+- Backend arsip: auth JWT (access + refresh token, lihat `archive/backend/src/routes/auth.ts`), semua CRUD lewat generic router `archive/backend/src/routes/crud.ts` (whitelist tabel di `CRUD_TABLES`).
+- Skema DB arsip tunggal: `archive/backend/src/db/schema.ts` (sumber kebenaran historis untuk drizzle-kit) dan `archive/database/schema.sql`.
+- Perintah lint/typecheck dari root: `npm run lint`, `npm run typecheck` (hanya frontend).
 
 ## Konvensi UI & Workflow (Receiving → QC → GNR)
 
-> Disepakati 2026-09-05: semua agent baru wajib ikut pola ini. Detail UI lihat `design.md` (layout, tabel, tombol, gap header, flow save).
+> Disepakati 2026-09-05: semua agent baru wajib ikut pola ini. Detail UI lihat `docs/design.md` (layout, tabel, tombol, gap header, flow save).
 
-> Aturan baru yang diubah (2026-09-05): flow save, gap judul-header, ukuran tombol, layout Detail vs New harus identik — sudah dimasukkan ke `design.md` §1-4; yang lain menyusul.
+> Aturan baru yang diubah (2026-09-05): flow save, gap judul-header, ukuran tombol, layout Detail vs New harus identik — sudah dimasukkan ke `docs/design.md` §1-4; yang lain menyusul.
 
-**Layout Receiving (grid `sm:grid-cols-2`, `gap-x-6 gap-y-4`, `border border-border`, header `bg-zinc-100` + `divide-x`):**
-- Baris 1: `Document (No PO, SearchableSelect)` | `Posting Date (DatePicker, w-full, h-8)` 
-- Baris 2: `Supplier Name` (readOnly) | `Gudang Simpan (Target Warehouse, SearchableSelect)`
-- Baris 3: `Notes` (`sm:col-span-2` atau dibagi 2 bila di QC detail)
-- Baris 2 kolom `Posting Time` di kanan (`h-8 w-1/2`, `TimePicker` logic `1200 → 12:00:00` dari `src/components/ui/time-picker.tsx:parseTimeInput`), `Batch` tidak ditampilkan (hapus).
-- Kolom `Posting Date` `w-full` (`DatePicker` `pl-9`), `Posting Time` di kanan baris 2.
+**Layout New Receiving (grid `sm:grid-cols-3`, `gap-x-8 gap-y-5`, pola GRN):**
+- Baris 1: `Ref PO (SearchableSelect)` | `Supplier` (readOnly `div bg-zinc-100`, `—` bila kosong) | `Posting Date (DatePicker, disabled kecuali ☑ Edit posting date)`
+- Baris 2: `☑ Edit posting date` + `☑ QC Inspection` (stack, `text-xs`) | (kosong) | `Posting Time (TimePicker, disabled kecuali ☑ Edit posting date)`
+- Baris 3 (`FormGrid mt-5`, 2 kolom): `Target Warehouse (SearchableSelect)` | `Notes`
+- `QC Inspection` = `qcRequired` (default `true`, ikut `PO.qcRequired` saat PO dipilih, tersimpan di `receivings.qcRequired`); bila `false`, submit langsung `COMPLETED` (skip QC, GNR bisa langsung dibuat).
 
 **Tabel 1 kotak full (global):**
 - `TableCell` untuk input = `p-0 border-r border-border` + `TableInput` (`src/components/ui/table-input.tsx`, `h-9 w-full border-0 bg-transparent`, `onWheel=>blur` agar scroll tidak ubah angka, placeholder `Qty` untuk angka / `columnTitle` untuk lain, background `bg-amber-50` saat focus).
@@ -37,10 +37,10 @@ Monorepo npm workspaces — 3 folder terpisah:
 - Form New: `Document (No Receiving, PENDING_QC)` | `Posting Date` (dari `receiving.receiptDate`, disabled) / `Inspection Date | Supplier Name` (Supplier di kanan, Time dihapus), `Notes` span2 (tanpa `QC Notes`).
 - Tabel 1 `No | Item Code | Qty Reject (TableInput) | Qty Accept (auto)` – satu baris per item, `Qty Origin` dihapus.
 - Tabel 2 `No | Item Code(auto) | Parameter | Qty` – flat `paramRows: {itemIdx,parameterId,qty}[]`, `+ Add Parameter` auto `itemIdx = nextItem dengan sisa reject` (jika `reject 0` Tabel 2 tidak muncul), `TableInput` + `SearchableSelect(table)` dengan `qty` tanpa background, vertical lines.
-- Submit → `POST /qc-inspections` + `POST /:id/submit` → propagasi `receiving_lines.qtyAccepted/Rejected` + `receivings.status=COMPLETED` → baru `Create GNR` (`POST /goods-receipts` guard cek `PENDING_QC`).
+- Submit → `POST /qc-inspections` + `POST /:id/submit` → propagasi `receiving_lines.qtyAccepted/Rejected` + `receivings.status=SUBMITTED` → baru `Create > Good Receipt Note` (`/app/grn/new`).
 - Detail QC: 2 tabel sama, header bersih, tanpa `Back` di detail (hapus) + tanpa text di bawah judul (`Receiving: ...`), tanpa `Inspection Date` di detail, `Posting Date` editable default `actual date` (today), `Supplier` tanpa dropdown `v` (plain div, bukan `SearchableSelect`), `Notes` dibagi 2 (1 kolom, tidak `sm:col-span-2`).
 
-**Receiving Detail:** `Alasan Reject` dihapus global (tidak tampil di semua status), `Batch` dihapus global. Label `Document` (bukan `No PO`) untuk `purchaseOrderId`, `Supplier Name` & `Target Warehouse` tampil sebagai `div bg-zinc-100` (readOnly, bukan `SearchableSelect` saat view) agar tidak kosong. Kotak `rounded-xl border bg-card p-5` yang mengelilingi Document→Note **dihapus** di menu RCV (detail view/edit); grid kini `gap-x-8 gap-y-5` via `FormGrid` sama persis dengan New Receiving. Judul pakai `FormPage title` (`text-[24px] font-semibold tracking-[-0.02em]`) — posisi geser di-fix agar sama dengan New; tombol Save `size="sm"` + ikon `<Save size={15}/>` disamakan New vs Detail.
+**Receiving Detail:** `Alasan Reject` dihapus global (tidak tampil di semua status), `Batch` dihapus global. Layout header **sama persis dengan New Receiving** (grid 3-3-2: `Ref PO | Supplier | Posting Date` / `☑ Edit posting date + ☑ QC Inspection | — | Posting Time` / `Target Warehouse | Notes`); mode view semua readOnly/disabled (`div bg-zinc-100`, checkbox disabled cerminkan `qcRequired`), mode edit `Posting Date` digate `☑ Edit posting date` + `QC Inspection` bisa diubah (tersimpan via `PUT`). Kotak `rounded-xl border bg-card p-5**` yang mengelilingi Document→Note **dihapus** di menu RCV (detail view/edit); grid kini `gap-x-8 gap-y-5` via `FormGrid` sama persis dengan New Receiving. Judul pakai `FormPage title` (`text-[24px] font-semibold tracking-[-0.02em]`) — posisi geser di-fix agar sama dengan New; tombol Save `size="sm"` + ikon `<Save size={15}/>` disamakan New vs Detail.
 
 **Receiving List (`/app/receiving`):** Kolom `Supplier Name | Status | Return(progress 10%/50%/100% bar `h-1.5 bg-muted`+`bg-primary`) | ID=documentNo RCV | PO ID=documentNo PO | Created=timeAgo`. Header tanpa `description` (`PageHeader` tanpa `description`). `PO ID` & `ID` wajib tampil `documentNo` (fallback `formatId` hanya jika `documentNo` null), jangan `"-"`.
 
@@ -50,8 +50,9 @@ Monorepo npm workspaces — 3 folder terpisah:
 
 **Flow Save Receiving (2026-09-05 revisi):**
 - `New > Save` → `POST /receivings` status `DRAFT` (tanpa `Save & Submit` di bawah, `Back` dihapus di menu Receiving).
-- `Edit > Save` → `PUT /receivings/:id` tetap `DRAFT`; tombol `Save` berubah jadi `Submit` setelah save.
-- `Submit` → `POST /receivings/:id/submit` via `toast.custom` Sonner `No / Yes` (duration Infinity, `Yes` autoFocus, `Enter` = Yes, `Esc` = No).
+- Detail `DRAFT` langsung editable (tanpa tombol `Edit`): ada perubahan → badge `Not save` + tombol `Discard`/`Save` (`PUT /receivings/:id`, tetap `DRAFT`); tersimpan bersih → badge `Draft` + tombol `Submit`; `Ctrl+S` = Save saat dirty.
+- `Submit` → `POST /receivings/:id/submit` via `toast.custom` Sonner `No / Yes` (duration Infinity, `Yes` autoFocus, `Enter` = Yes, `Esc` = No) → `PENDING_QC` (langsung `SUBMITTED` bila `qcRequired=false`).
+- Alur Receiving → QC → GRN: `DRAFT --submit--> PENDING_QC --(tombol Quality Control)--> QC submit --> SUBMITTED --(tombol Create > Good Receipt Note)--> GRN. Status lama `COMPLETED`/`POSTED` tetap dianggap siap GRN.
 - Shortcut `Ctrl+S` / `Cmd+S` trigger `Save` (New/Edit) atau `Submit`/`Update` sesuai konteks (preventDefault browser save).
 
 **PO View:** `documentNo` mengandung `/` (`PO/2026/09/0004`) → navigasi pakai `id` (UUID) + `encodeURIComponent` agar tidak 404 di `react-router :id` & `express :id`.

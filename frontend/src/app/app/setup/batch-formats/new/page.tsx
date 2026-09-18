@@ -1,6 +1,6 @@
 import { MANAGER_ROLES } from "@/lib/roles";
 import { RoleGuard } from "@/components/ui/role-guard";
-import { BatchFormatEditor } from "@/components/batch/format-editor";
+import { BatchFormatEditor } from "@/modules/inventory/components/batch-format-editor";
 import { FormPage } from "@/components/ui/form-page";
 import type { BatchFormat } from "@/types";
 

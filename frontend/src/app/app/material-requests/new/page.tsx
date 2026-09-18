@@ -26,7 +26,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { FormPage, FormSection } from "@/components/ui/form-page";
-import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
+import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/modules/purchasing/components/order-line-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableInput } from "@/components/ui/table-input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -224,6 +224,11 @@ export default function NewMaterialRequestPage() {
     taxCategoryId: "",
   });
   const [lines, setLines] = useState<OrderLineInput[]>([emptyOrderLine()]);
+  const subWarehouses = useMemo(() => {
+    const subs = (warehouses as any[]).filter((w) => (w as any).parentId);
+    return subs.length > 0 ? subs : (warehouses as any[]);
+  }, [warehouses]);
+  const requestByName = (user as any)?.name ?? (user as any)?.email ?? "";
 
   const baseCurrency = (company as any)?.baseCurrency ?? "IDR";
   const defaultCurrency = baseCurrency;
@@ -397,6 +402,7 @@ export default function NewMaterialRequestPage() {
         }
       >
         <FormSection>
+          {/* Row 1: Branch | Request By (user) | Request Date */}
           <div className="grid gap-x-6 gap-y-6 sm:grid-cols-3">
             <Select
               label="Branch"
@@ -411,11 +417,20 @@ export default function NewMaterialRequestPage() {
                 </option>
               ))}
             </Select>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium leading-none">Request By</label>
+              <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
+                {requestByName || "—"}
+              </div>
+            </div>
             <DatePicker
               label="Request Date"
               value={form.requestDate}
               onChange={(v) => setForm({ ...form, requestDate: v })}
             />
+          </div>
+          {/* Row 2: Need Approval | (empty) | Required Date */}
+          <div className="mt-6 grid gap-x-6 gap-y-6 sm:grid-cols-3">
             <div className="flex flex-col justify-center gap-2 py-1">
               <label className="flex items-center gap-2 text-xs cursor-pointer">
                 <Checkbox
@@ -428,10 +443,17 @@ export default function NewMaterialRequestPage() {
                 Need Approval
               </label>
             </div>
+            <div />
+            <DatePicker
+              label="Required Date"
+              value={form.expectedDate}
+              onChange={(v) => setForm({ ...form, expectedDate: v })}
+            />
           </div>
+          {/* Row 3: Requesting Dept | Target Dept */}
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
             <SearchableSelect
-              label="Request By"
+              label="Requesting Dept"
               options={departmentOptions}
               value={form.department}
               onChange={(v) => setForm({ ...form, department: v })}
@@ -440,7 +462,7 @@ export default function NewMaterialRequestPage() {
               emptyLabel=""
             />
             <SearchableSelect
-              label="Request To"
+              label="Target Dept"
               options={departmentOptions}
               value={form.toDepartment}
               onChange={(v) => setForm({ ...form, toDepartment: v })}
@@ -449,7 +471,7 @@ export default function NewMaterialRequestPage() {
               emptyLabel=""
             />
           </div>
-          {/* Notes | Target Warehouse */}
+          {/* Row 4: Notes | Target Warehouse (sub-warehouse) */}
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
@@ -466,11 +488,11 @@ export default function NewMaterialRequestPage() {
               className="h-8"
             >
               <option value="">Select warehouse...</option>
-              {warehouses.map((w) => {
-                const parent = (w as any).parentId ? warehouses.find((x) => x.id === (w as any).parentId) : null;
+              {subWarehouses.map((w: any) => {
+                const parent = (warehouses as any[]).find((x: any) => x.id === w.parentId);
                 return (
                   <option key={w.id} value={w.id}>
-                    {(w as any).parentId ? `↳ ${w.name} (induk: ${parent?.name ?? ""})` : w.name}
+                    {w.parentId ? `↳ ${w.name} (induk: ${parent?.name ?? ""})` : w.name}
                   </option>
                 );
               })}

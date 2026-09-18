@@ -14,6 +14,7 @@ import {
   useWorkflows,
   useDepartments,
 } from "@/lib/api/query";
+import { useSession } from "@/lib/session";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { DocMenu } from "@/components/ui/doc-menu";
@@ -25,7 +26,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { FormPage, FormSection } from "@/components/ui/form-page";
-import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
+import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/modules/purchasing/components/order-line-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableInput } from "@/components/ui/table-input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -182,6 +183,7 @@ function ChargeTypeSelect({
 
 export default function NewPurchaseRequestPage() {
   const navigate = useNavigate();
+  const { user } = useSession();
   const { data: warehouses = [], isLoading: warehousesLoading } = useAllWarehouses();
   const { data: branches = [] } = useBranches();
   const { isLoading: uomsLoading } = useUoms();
@@ -209,6 +211,7 @@ export default function NewPurchaseRequestPage() {
   const [form, setForm] = useState({
     warehouseId: "",
     requestDate: todayISO(),
+    expectedDate: "",
     urgency: "MEDIUM" as string,
     notes: "",
     department: "",
@@ -224,6 +227,11 @@ export default function NewPurchaseRequestPage() {
     taxCategoryId: "",
   });
   const [lines, setLines] = useState<OrderLineInput[]>([emptyOrderLine()]);
+  const subWarehouses = useMemo(() => {
+    const subs = (warehouses as any[]).filter((w) => (w as any).parentId);
+    return subs.length > 0 ? subs : (warehouses as any[]);
+  }, [warehouses]);
+  const requestByName = (user as any)?.name ?? (user as any)?.email ?? "";
 
   const baseCurrency = (company as any)?.baseCurrency ?? "IDR";
   const defaultCurrency = baseCurrency;
@@ -293,6 +301,7 @@ export default function NewPurchaseRequestPage() {
     setForm({
       warehouseId: "",
       requestDate: todayISO(),
+      expectedDate: "",
       urgency: "MEDIUM",
       notes: "",
       department: "",
@@ -324,7 +333,7 @@ export default function NewPurchaseRequestPage() {
       const res = await create.mutateAsync({
         warehouseId: form.warehouseId || warehouses[0]?.id || null,
         requestDate: form.requestDate,
-        expectedDate: null,
+        expectedDate: form.expectedDate || null,
         urgency: form.urgency || "MEDIUM",
         notes: form.notes.trim() || null,
         department: form.department.trim() || null,
@@ -402,6 +411,7 @@ export default function NewPurchaseRequestPage() {
         }
       >
         <FormSection>
+          {/* Row 1: Branch | Request By (user) | Request Date */}
           <div className="grid gap-x-6 gap-y-6 sm:grid-cols-3">
             <Select
               label="Branch"
@@ -416,11 +426,20 @@ export default function NewPurchaseRequestPage() {
                 </option>
               ))}
             </Select>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium leading-none">Request By</label>
+              <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
+                {requestByName || "—"}
+              </div>
+            </div>
             <DatePicker
               label="Request Date"
               value={form.requestDate}
               onChange={(v) => setForm({ ...form, requestDate: v })}
             />
+          </div>
+          {/* Row 2: Need Approval | (empty) | Required Date */}
+          <div className="mt-6 grid gap-x-6 gap-y-6 sm:grid-cols-3">
             <div className="flex flex-col justify-center gap-2 py-1">
               <label className="flex items-center gap-2 text-xs cursor-pointer">
                 <Checkbox
@@ -433,10 +452,27 @@ export default function NewPurchaseRequestPage() {
                 Need Approval
               </label>
             </div>
+            <div />
+            <DatePicker
+              label="Required Date"
+              value={form.expectedDate}
+              onChange={(v) => setForm({ ...form, expectedDate: v })}
+            />
           </div>
+          {/* Row 3: Urgency | Requesting Dept */}
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+            <Select
+              label="Urgency"
+              value={form.urgency}
+              onChange={(e) => setForm({ ...form, urgency: e.target.value })}
+              className="h-8"
+            >
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+            </Select>
             <SearchableSelect
-              label="Request By"
+              label="Requesting Dept"
               options={departmentOptions}
               value={form.department}
               onChange={(v) => setForm({ ...form, department: v })}
@@ -444,17 +480,8 @@ export default function NewPurchaseRequestPage() {
               emptyText="No department found"
               emptyLabel=""
             />
-            <SearchableSelect
-              label="Request To"
-              options={departmentOptions}
-              value={form.toDepartment}
-              onChange={(v) => setForm({ ...form, toDepartment: v })}
-              placeholder="Select department..."
-              emptyText="No department found"
-              emptyLabel=""
-            />
           </div>
-          {/* Notes | Urgency */}
+          {/* Row 4: Notes | Target Warehouse (sub-warehouse) */}
           <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
@@ -465,14 +492,20 @@ export default function NewPurchaseRequestPage() {
               />
             </div>
             <Select
-              label="Urgency"
-              value={form.urgency}
-              onChange={(e) => setForm({ ...form, urgency: e.target.value })}
+              label="Target Warehouse"
+              value={form.warehouseId}
+              onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
               className="h-8"
             >
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
+              <option value="">Select warehouse...</option>
+              {subWarehouses.map((w: any) => {
+                const parent = (warehouses as any[]).find((x: any) => x.id === w.parentId);
+                return (
+                  <option key={w.id} value={w.id}>
+                    {w.parentId ? `↳ ${w.name} (induk: ${parent?.name ?? ""})` : w.name}
+                  </option>
+                );
+              })}
             </Select>
           </div>
         </FormSection>

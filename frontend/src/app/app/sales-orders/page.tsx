@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { DocStatusBadge } from "@/components/supply/doc-status";
+import { DocStatusBadge } from "@/components/data-display/doc-status";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { SalesOrder } from "@/types";
 import { formatId } from "@/lib/utils";

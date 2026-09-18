@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
-import { DocStatusBadge } from "@/components/supply/doc-status";
+import { DocStatusBadge } from "@/components/data-display/doc-status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { FormSection } from "@/components/ui/form-page";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { ActivityTimeline } from "@/modules/activity/components/activity-timeline";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatId, formatNumber } from "@/lib/utils";
 import { useItemsList } from "@/lib/api/query";
@@ -77,7 +77,7 @@ export default function QcDetailPage() {
   const isCompleted = qc.status === "COMPLETED";
 
   const onSubmit = async () => {
-    if (!confirm("Submit QC ini? Receiving akan menjadi COMPLETED.")) return;
+    if (!confirm("Submit QC ini? Receiving akan menjadi Submitted.")) return;
     try { await submit.mutateAsync(qc.id); } catch (e) { setError(e instanceof Error ? e.message : "Gagal submit"); }
   };
   const onCancel = async () => {

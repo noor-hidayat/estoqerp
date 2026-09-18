@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { DocStatusBadge } from "@/components/supply/doc-status";
+import { DocStatusBadge } from "@/components/data-display/doc-status";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { formatId, timeAgo } from "@/lib/utils";
 import { cx } from "@/lib/utils";
@@ -24,7 +24,7 @@ function returnPctOf(r: any): number {
   if (totalQty > 0) return Math.round((totalRejected / totalQty) * 100);
   // fallback status based if no qty data
   const s = String(r.status ?? "").toUpperCase();
-  if (s === "COMPLETED" || s === "POSTED") return 0; // if no reject data, assume 0% reject
+  if (s === "COMPLETED" || s === "POSTED" || s === "SUBMITTED") return 0; // if no reject data, assume 0% reject
   if (s === "PENDING_QC") return 0;
   return 0;
 }
@@ -139,6 +139,7 @@ export default function InboundReceivingPage() {
               <option value="all">All status</option>
               <option value="DRAFT">Draft</option>
               <option value="PENDING_QC">Pending QC</option>
+              <option value="SUBMITTED">Submitted</option>
               <option value="COMPLETED">Completed</option>
               <option value="POSTED">Posted (legacy)</option>
               <option value="CANCELED">Canceled</option>

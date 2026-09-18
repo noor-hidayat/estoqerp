@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { DocStatusBadge } from "@/components/supply/doc-status";
+import { DocStatusBadge } from "@/components/data-display/doc-status";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import type { MaterialRequest } from "@/types";
 import { formatId, timeAgo } from "@/lib/utils";
@@ -46,8 +46,16 @@ export default function MaterialRequestsPage() {
       sortValue: (o) => o.requestDate ?? "",
     },
     {
-      id: "department",
+      id: "requestBy",
       header: "Request By",
+      cell: (o) => (
+        <span className="text-xs text-muted-foreground">{(o as any).createdByName ?? "-"}</span>
+      ),
+      sortValue: (o) => String((o as any).createdByName ?? ""),
+    },
+    {
+      id: "department",
+      header: "Requesting Dept",
       cell: (o) => {
         const name = (o as any).department ?? "";
         const dept = (departments as any[]).find((d) => d.name === name);
@@ -57,8 +65,19 @@ export default function MaterialRequestsPage() {
       sortValue: (o) => String((o as any).department ?? ""),
     },
     {
+      id: "toDepartment",
+      header: "Target Dept",
+      cell: (o) => {
+        const name = (o as any).toDepartment ?? "";
+        const dept = (departments as any[]).find((d) => d.name === name);
+        const label = dept ? (dept.code ? `${dept.code} - ${dept.name}` : dept.name) : name;
+        return <span className="text-xs text-muted-foreground">{label || "-"}</span>;
+      },
+      sortValue: (o) => String((o as any).toDepartment ?? ""),
+    },
+    {
       id: "warehouse",
-      header: "Warehouse",
+      header: "Target Warehouse",
       cell: (o) => <span className="text-xs text-muted-foreground">{warehouseName(o.warehouseId) || "-"}</span>,
       sortValue: (o) => warehouseName(o.warehouseId),
     },
@@ -96,7 +115,7 @@ export default function MaterialRequestsPage() {
         onRowClick={(o) => navigate(`/app/material-requests/${o.id}`)}
         searchPlaceholder="Search material requests..."
         getSearchText={(o) =>
-          `${o.documentNo ?? (o as any).mrNo ?? formatId(o.id)} ${o.requestDate ?? ""} ${(o as any).department ?? ""} ${warehouseName(o.warehouseId)} ${o.status}`
+          `${o.documentNo ?? (o as any).mrNo ?? formatId(o.id)} ${o.requestDate ?? ""} ${(o as any).createdByName ?? ""} ${(o as any).department ?? ""} ${(o as any).toDepartment ?? ""} ${warehouseName(o.warehouseId)} ${o.status}`
         }
         filters={
           <div className="flex gap-2">

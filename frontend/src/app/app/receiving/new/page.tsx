@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/query";
 import { RoleGuard } from "@/components/ui/role-guard";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -17,7 +18,7 @@ import { FormSkeleton } from "@/components/ui/skeleton";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TableInput } from "@/components/ui/table-input";
-import { type OrderLineInput } from "@/components/supply/order-line-table";
+import { type OrderLineInput } from "@/modules/purchasing/components/order-line-table";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatId, formatNumber } from "@/lib/utils";
 import { useItemsList } from "@/lib/api/query";
@@ -55,6 +56,8 @@ export default function NewReceivingPage() {
   const [warehouseId, setWarehouseId] = useState("");
   const [postingDate, setPostingDate] = useState(todayISO());
   const [postingTime, setPostingTime] = useState(nowTime());
+  const [allowEditPosting, setAllowEditPosting] = useState(false);
+  const [qcRequired, setQcRequired] = useState(true);
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<OrderLineInput[]>([]);
 
@@ -65,10 +68,12 @@ export default function NewReceivingPage() {
 
   const { data: poDetail } = usePurchaseOrder(poId || undefined);
   const supplierIdForSelected = (poDetail as any)?.supplierId ?? pos.find((p) => p.id === poId)?.supplierId ?? "";
+  const supplierName = suppliers.find((s) => s.id === supplierIdForSelected)?.name ?? "";
 
   useEffect(() => {
     if (poDetail) {
       setWarehouseId(poDetail.warehouseId);
+      setQcRequired((poDetail as any).qcRequired ?? true);
       setLines(
         (poDetail.lines ?? []).map((l) => ({
           itemId: l.itemId,
@@ -115,6 +120,7 @@ export default function NewReceivingPage() {
         purchaseOrderId: poId,
         warehouseId,
         receiptDate: postingDate,
+        qcRequired,
         notes: notes.trim() || null,
         lines: valid.map((l) => ({
           itemId: l.itemId,
@@ -125,7 +131,8 @@ export default function NewReceivingPage() {
           note: l.note || null,
         })),
       });
-      return (res as any).documentNo ?? (res as any).id;
+      // Navigasi pakai id UUID (bukan documentNo yang mengandung "/").
+      return (res as any).id ?? (res as any).documentNo;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal menyimpan receiving.");
       return null;
@@ -146,7 +153,7 @@ export default function NewReceivingPage() {
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [poId, warehouseId, postingDate, postingTime, notes, lines, create.isPending]);
+  }, [poId, warehouseId, postingDate, postingTime, allowEditPosting, qcRequired, notes, lines, create.isPending]);
 
   if (posLoading || warehousesLoading) {
     return (
@@ -167,9 +174,9 @@ export default function NewReceivingPage() {
         }
       >
         <FormSection>
-          <FormGrid>
+          <div className="grid gap-x-8 gap-y-5 sm:grid-cols-3">
             <SearchableSelect
-              label="Document"
+              label="Ref PO"
               placeholder="Pilih purchase order..."
               options={filteredPos.map((p) => ({
                 value: p.id,
@@ -178,17 +185,27 @@ export default function NewReceivingPage() {
               value={poId}
               onChange={(v) => setPoId(v)}
             />
-            <DatePicker label="Posting Date" value={postingDate} onChange={(v) => setPostingDate(v)} />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium leading-none">Supplier</label>
+              <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
+                {poId ? supplierName || "—" : "Pilih Ref PO dulu..."}
+              </div>
+            </div>
+            <DatePicker label="Posting Date" value={postingDate} onChange={(v) => setPostingDate(v)} disabled={!allowEditPosting} />
+            <div className="flex flex-col justify-center gap-2 py-1">
+              <label className="flex cursor-pointer items-center gap-2 text-xs">
+                <Checkbox checked={allowEditPosting} onCheckedChange={(v) => setAllowEditPosting(v === true)} />
+                Edit posting date
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-xs">
+                <Checkbox checked={qcRequired} onCheckedChange={(v) => setQcRequired(v === true)} />
+                QC Inspection
+              </label>
+            </div>
             <div aria-hidden="true" />
-            <TimePicker label="Posting Time" value={postingTime} onChange={(v) => setPostingTime(v)} />
-            <SearchableSelect
-              label="Supplier Name"
-              placeholder={poId ? "Otomatis dari PO" : "Pilih PO dulu..."}
-              options={suppliers.map((s) => ({ value: s.id, label: s.name }))}
-              value={supplierIdForSelected}
-              onChange={() => {}}
-              disabled
-            />
+            <TimePicker label="Posting Time" value={postingTime} onChange={(v) => setPostingTime(v)} disabled={!allowEditPosting} />
+          </div>
+          <FormGrid className="mt-5">
             <SearchableSelect
               label="Target Warehouse"
               placeholder="Pilih gudang..."

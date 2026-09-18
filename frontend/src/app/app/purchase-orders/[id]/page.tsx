@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { X, Coins, ChevronDown, Briefcase, Printer, ChevronsUpDown, PackageCheck, FileText, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -19,7 +18,6 @@ import {
   useRejectPurchaseOrder,
   useCancelPurchaseOrder,
   useRemovePurchaseOrder,
-  useCreateReceiptFromPo,
   useItemsList,
   useWorkflows,
   useWorkflowStates,
@@ -41,11 +39,11 @@ import { Select } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { DocStatusBadge } from "@/components/supply/doc-status";
+import { DocStatusBadge } from "@/components/data-display/doc-status";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FormPage, FormSection, FormGrid } from "@/components/ui/form-page";
-import { ActivityTimeline } from "@/components/activity/activity-timeline";
-import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
+import { ActivityTimeline } from "@/modules/activity/components/activity-timeline";
+import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/modules/purchasing/components/order-line-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableInput } from "@/components/ui/table-input";
 import { useErrorToast } from "@/hooks/use-error-toast";
@@ -223,7 +221,6 @@ export default function PurchaseOrderDetailPage() {
   const post = usePostPurchaseOrder();
   const cancel = useCancelPurchaseOrder();
   const remove = useRemovePurchaseOrder();
-  const createReceipt = useCreateReceiptFromPo();
   const [error, setError] = useState("");
   useErrorToast(error);
   const [editing, setEditing] = useState(false);
@@ -262,7 +259,6 @@ export default function PurchaseOrderDetailPage() {
         post={post}
         cancel={cancel}
         remove={remove}
-        createReceipt={createReceipt}
         navigate={navigate}
       />
     </RoleGuard>
@@ -282,7 +278,6 @@ function POBody({
   post,
   cancel,
   remove,
-  createReceipt,
   navigate,
 }: {
   po: PurchaseOrder;
@@ -297,7 +292,6 @@ function POBody({
   post: ReturnType<typeof usePostPurchaseOrder>;
   cancel: ReturnType<typeof useCancelPurchaseOrder>;
   remove: ReturnType<typeof useRemovePurchaseOrder>;
-  createReceipt: ReturnType<typeof useCreateReceiptFromPo>;
   navigate: (to: string) => void;
 }) {
   const [err, setErr] = useState("");
@@ -650,16 +644,6 @@ function POBody({
       setErr(e instanceof Error ? e.message : "Failed to delete.");
     }
   };
-  const onReceipt = async () => {
-    if (!confirm("Create a Goods Receipt from this PO?")) return;
-    try {
-      const res = await createReceipt.mutateAsync({ id: po.id, receiptDate: todayISO() });
-      navigate(`/app/goods-receipts/${res.id}`);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed to create receipt.");
-    }
-  };
-
   const supplier = suppliers.find((s) => s.id === po.supplierId);
   const warehouse = warehouses.find((w) => w.id === po.warehouseId);
   return (
@@ -1271,22 +1255,6 @@ function POBody({
             </div>
         </div>
       </FormSection>
-
-      {!editing && po.receipts && po.receipts.length > 0 && (
-        <FormSection title="Linked Goods Receipts">
-          <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-            {po.receipts.map((r) => (
-              <Link key={r.id} to={`/app/goods-receipts/${r.id}`} className="flex items-center justify-between px-5 py-3 hover:bg-muted/60">
-                <span className="text-[13px] font-semibold">GR {(r as any).documentNo ?? (r as any).grNo ?? formatId(r.id)}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground">{r.receiptDate?.slice(0, 10)}</span>
-                  <DocStatusBadge status={r.status} />
-                </div>
-              </Link>
-            ))}
-          </div>
-        </FormSection>
-      )}
 
       <FormSection title="Activity Log">
         <ActivityTimeline documentType="PO" documentId={po.id} />

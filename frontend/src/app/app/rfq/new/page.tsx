@@ -19,7 +19,7 @@ import { FormPage, FormSection } from "@/components/ui/form-page";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SearchableSelect as TableSearchableSelect } from "@/components/ui/searchable-select";
-import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/components/supply/order-line-table";
+import { OrderLineTable, emptyOrderLine, type OrderLineInput } from "@/modules/purchasing/components/order-line-table";
 import { useErrorToast } from "@/hooks/use-error-toast";
 import { formatNumber } from "@/lib/utils";
 

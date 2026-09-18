@@ -6,7 +6,7 @@ import {
   useUpdateMovement,
 } from "@/lib/api/query";
 import { MenuGate } from "@/components/ui/role-guard";
-import { MovementForm } from "@/components/transactions/movement-form";
+import { MovementForm } from "@/modules/inventory/components/movement-form";
 
 export default function NewTransactionPage() {
   const navigate = useNavigate();

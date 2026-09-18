@@ -1,4 +1,4 @@
-import { PartyManager } from "@/components/supply/party-manager";
+import { PartyManager } from "@/modules/purchasing/components/party-manager";
 import { Truck } from "lucide-react";
 
 export default function SuppliersPage() {

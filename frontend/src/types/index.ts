@@ -519,7 +519,7 @@ export interface MovementInput {
 // ---- Supply Chain ----
 
 export type DocStatus = "DRAFT" | "POSTED" | "CANCELED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
-export type ReceivingStatus = "DRAFT" | "PENDING_QC" | "COMPLETED" | "CANCELED" | "POSTED";
+export type ReceivingStatus = "DRAFT" | "PENDING_QC" | "SUBMITTED" | "COMPLETED" | "CANCELED" | "POSTED";
 
 /** Suppliers & Customers share an identical field shape. */
 export interface Party {
@@ -787,6 +787,8 @@ export interface Receiving {
   warehouseId: string;
   receiptDate: string;
   notes?: string | null;
+  /** false = QC dilewati, submit langsung SUBMITTED. Default true. */
+  qcRequired?: boolean;
   status: ReceivingStatus;
   submittedAt?: string | null;
   submittedBy?: string | null;
