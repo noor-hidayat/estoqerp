@@ -48,8 +48,16 @@ export default function PurchaseRequestsPage() {
       sortValue: (o) => o.requestDate ?? "",
     },
     {
-      id: "department",
+      id: "requestBy",
       header: "Request By",
+      cell: (o) => (
+        <span className="text-xs text-muted-foreground">{(o as any).createdByName ?? "-"}</span>
+      ),
+      sortValue: (o) => String((o as any).createdByName ?? ""),
+    },
+    {
+      id: "department",
+      header: "Requesting Dept",
       cell: (o) => {
         const name = (o as any).department ?? "";
         const dept = (departments as any[]).find((d) => d.name === name);
@@ -112,7 +120,7 @@ export default function PurchaseRequestsPage() {
         onRowClick={(o) => navigate(`/app/purchase-requests/${o.id}`)}
         searchPlaceholder="Search purchase requests..."
         getSearchText={(o) =>
-          `${o.documentNo ?? (o as any).prNo ?? formatId(o.id)} ${o.requestDate ?? ""} ${(o as any).department ?? ""} ${branchName((o as any).branchId)} ${String((o as any).urgency ?? "")} ${o.status} ${warehouseName(o.warehouseId)}`
+          `${o.documentNo ?? (o as any).prNo ?? formatId(o.id)} ${o.requestDate ?? ""} ${(o as any).createdByName ?? ""} ${(o as any).department ?? ""} ${branchName((o as any).branchId)} ${String((o as any).urgency ?? "")} ${o.status} ${warehouseName(o.warehouseId)}`
         }
         filters={
           <div className="flex gap-2">

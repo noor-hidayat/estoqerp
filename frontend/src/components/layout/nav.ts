@@ -466,7 +466,6 @@ export const WAREHOUSE_NAV: NavGroup[] = [
           { label: "Receiving", href: "/app/receiving", icon: "Inbox", menu: "supply.receivings" },
           { label: "GRN", href: "/app/grn", icon: "PackageCheck", menu: "supply.goodsReceipts" },
           { label: "Putaway", href: "/app/putaway", icon: "PackageSearch", menu: "supply.goodsReceipts" },
-          { label: "Supplier Return", href: "/app/supplier-return", icon: "Undo2", menu: "supply.goodsReceipts" },
         ],
       },
       {

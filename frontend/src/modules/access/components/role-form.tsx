@@ -76,13 +76,12 @@ const MENU_GROUPS: MenuGroup[] = [
     masterKey: "inbound",
     title: "Inbound",
     // Dipetakan sesuai workspace NAV:
-    // Warehouse → Receiving, GRN, Putaway, Supplier Return (menu keys PO/GR, filter by workspace)
+    // Warehouse → Receiving, GRN, Putaway (menu keys PO/GR, filter by workspace)
     // Purchasing → Suppliers, Purchase Orders, Goods Receipts
     menus: [
       { key: "supply.suppliers", label: "Suppliers" },
       { key: "supply.receivings", label: "Receiving" },
       { key: "supply.goodsReceipts", label: "Putaway" },
-      { key: "supply.goodsReceipts", label: "Supplier Return" },
     ],
   },
   {
@@ -492,7 +491,7 @@ export function RoleForm({ role }: { role?: Role }) {
   const hasBranch = checked.branches.size > 0 || checked.warehouses.size > 0;
 
   // Pemetaan menu sesuai workspace (dinamis dari NAV, bukan static).
-  // Contoh: warehouse → Inbound: Receiving, GRN, Putaway, Supplier Return (dari WAREHOUSE_NAV)
+  // Contoh: warehouse → Inbound: Receiving, GRN, Putaway (dari WAREHOUSE_NAV)
   //         purchasing → Suppliers, Purchase Orders, Goods Receipts, dll.
   // Shared (Settings/Setup) selalu ikut. Jika dynamic gagal, fallback ke filter static MENU_GROUPS.
   const workspaceFilteredGroups = (() => {

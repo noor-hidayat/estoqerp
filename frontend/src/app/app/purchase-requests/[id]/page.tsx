@@ -316,6 +316,17 @@ function PRBody({
   );
   const { data: company } = useCompanySettings();
   const { data: items = [] } = useItemsList();
+  const subWarehouses = useMemo(() => {
+    const subs = (warehouses as any[]).filter((w: any) => (w as any).parentId);
+    return subs.length > 0 ? subs : (warehouses as any[]);
+  }, [warehouses]);
+  const requestByName =
+    (pr as any).createdByName ?? (user as any)?.name ?? (user as any)?.email ?? "";
+  const deptLabel = (val?: string | null) => {
+    if (!val) return "";
+    const d = (departments as any[]).find((x: any) => x.name === val);
+    return d ? (d.code ? `${d.code} - ${d.name}` : d.name) : val;
+  };
   const { data: workflows = [] } = useWorkflows();
   const workflowIdForPR = (pr as any).approvalWorkflowId || (workflows as any[]).find((w: any) => String(w.documentType).toUpperCase() === "PR" && w.isDefault)?.id;
   const { data: workflowStates = [] } = useWorkflowStates(workflowIdForPR);
@@ -757,6 +768,7 @@ function PRBody({
           }
         >
           <FormSection>
+            {/* Row 1: Branch | Request By (user) | Request Date */}
             <div className="grid gap-x-6 gap-y-6 sm:grid-cols-3">
               {editable ? (
                 <Select
@@ -780,12 +792,21 @@ function PRBody({
                   </div>
                 </div>
               )}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium leading-none">Request By</label>
+                <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
+                  {requestByName || "—"}
+                </div>
+              </div>
               <DatePicker
                 label="Request Date"
                 value={form.requestDate}
                 onChange={(v) => setForm({ ...form, requestDate: v })}
                 disabled={!editable}
               />
+            </div>
+            {/* Row 2: Need Approval | (empty) | Required Date */}
+            <div className="mt-6 grid gap-x-6 gap-y-6 sm:grid-cols-3">
               <div className="flex flex-col justify-center gap-2 py-1">
                 <label className="flex items-center gap-2 text-xs cursor-pointer">
                   <Checkbox
@@ -796,56 +817,16 @@ function PRBody({
                   Need Approval
                 </label>
               </div>
+              <div />
+              <DatePicker
+                label="Required Date"
+                value={form.expectedDate}
+                onChange={(v) => setForm({ ...form, expectedDate: v })}
+                disabled={!editable}
+              />
             </div>
+            {/* Row 3: Urgency | Requesting Dept */}
             <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-              {editable ? (
-                <SearchableSelect
-                  label="Request By"
-                  options={departmentOptions}
-                  value={form.department}
-                  onChange={(v) => setForm({ ...form, department: v })}
-                  placeholder="Select department..."
-                  emptyText="No department found"
-                  emptyLabel=""
-                />
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium leading-none">Request By</label>
-                  <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {(() => { const d = (departments as any[]).find((x: any) => x.name === (pr as any).department); return d ? (d.code ? `${d.code} - ${d.name}` : d.name) : (pr as any).department ?? ""; })()}
-                  </div>
-                </div>
-              )}
-              {editable ? (
-                <SearchableSelect
-                  label="Request To"
-                  options={departmentOptions}
-                  value={form.toDepartment}
-                  onChange={(v) => setForm({ ...form, toDepartment: v })}
-                  placeholder="Select department..."
-                  emptyText="No department found"
-                  emptyLabel=""
-                />
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium leading-none">Request To</label>
-                  <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
-                    {(() => { const d = (departments as any[]).find((x: any) => x.name === (pr as any).toDepartment); return d ? (d.code ? `${d.code} - ${d.name}` : d.name) : (pr as any).toDepartment ?? ""; })()}
-                  </div>
-                </div>
-              )}
-            </div>
-            {/* Notes | Urgency */}
-            <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
-                <Textarea
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  disabled={!editable}
-                  placeholder={editable ? "Optional notes..." : ""}
-                />
-              </div>
               {editable ? (
                 <Select
                   label="Urgency"
@@ -862,6 +843,61 @@ function PRBody({
                   <label className="text-sm font-medium leading-none">Urgency</label>
                   <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
                     {String((pr as any).urgency ?? "MEDIUM")}
+                  </div>
+                </div>
+              )}
+              {editable ? (
+                <SearchableSelect
+                  label="Requesting Dept"
+                  options={departmentOptions}
+                  value={form.department}
+                  onChange={(v) => setForm({ ...form, department: v })}
+                  placeholder="Select department..."
+                  emptyText="No department found"
+                  emptyLabel=""
+                />
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium leading-none">Requesting Dept</label>
+                  <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
+                    {deptLabel((pr as any).department)}
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Row 4: Notes | Target Warehouse (sub-warehouse) */}
+            <div className="mt-6 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium leading-none">Notes</label>
+                <Textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  disabled={!editable}
+                  placeholder={editable ? "Optional notes..." : ""}
+                />
+              </div>
+              {editable ? (
+                <Select
+                  label="Target Warehouse"
+                  value={form.warehouseId}
+                  onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
+                  className="h-8"
+                >
+                  <option value="">Select warehouse...</option>
+                  {subWarehouses.map((w: any) => {
+                    const parent = (warehouses as any[]).find((x: any) => x.id === w.parentId);
+                    return (
+                      <option key={w.id} value={w.id}>
+                        {w.parentId ? `↳ ${w.name} (induk: ${parent?.name ?? ""})` : w.name}
+                      </option>
+                    );
+                  })}
+                </Select>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium leading-none">Target Warehouse</label>
+                  <div className="flex h-8 items-center rounded-md border border-input bg-zinc-100 px-3 text-[13px] text-foreground">
+                    {warehouseName(pr.warehouseId)}
                   </div>
                 </div>
               )}

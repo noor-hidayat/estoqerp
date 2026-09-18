@@ -119,7 +119,6 @@ const QcInspectionDetailPage = lazy(() => import("@/app/app/qc/[id]/page"));
 const InboundPutawayPage = lazy(() => import("@/app/app/putaway/page"));
 const NewPutawayPage = lazy(() => import("@/app/app/putaway/new/page"));
 const PutawayDetailPage = lazy(() => import("@/app/app/putaway/[id]/page"));
-const SupplierReturnPage = lazy(() => import("@/app/app/supplier-return/page"));
 const OutboundPickingPage = lazy(() => import("@/app/app/outbound/picking/page"));
 const OutboundPackingPage = lazy(() => import("@/app/app/outbound/packing/page"));
 const CustomerReturnPage = lazy(() => import("@/app/app/outbound/customer-return/page"));
@@ -288,7 +287,6 @@ export default function App() {
             <Route path="putaway" element={<LazyPage><InboundPutawayPage /></LazyPage>} />
             <Route path="putaway/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewPutawayPage /></LazyPage>} />
             <Route path="putaway/:id" element={<LazyPage fallback={<DetailSkeleton />}><PutawayDetailPage /></LazyPage>} />
-            <Route path="supplier-return" element={<LazyPage><SupplierReturnPage /></LazyPage>} />
             {/* Redirect URL lama /app/inbound/* ke path flat */}
             <Route path="inbound/receiving" element={<Navigate to="/app/receiving" replace />} />
             <Route path="inbound/receiving/new" element={<Navigate to="/app/receiving/new" replace />} />
@@ -297,7 +295,6 @@ export default function App() {
             <Route path="inbound/qc/new" element={<Navigate to="/app/qc/new" replace />} />
             <Route path="inbound/qc/:id" element={<RedirectTo to="/app/qc/:id" />} />
             <Route path="inbound/putaway" element={<Navigate to="/app/putaway" replace />} />
-            <Route path="inbound/supplier-return" element={<Navigate to="/app/supplier-return" replace />} />
             <Route path="outbound" element={<Navigate to="/app/sales-orders" replace />} />
             <Route path="outbound/picking" element={<LazyPage><OutboundPickingPage /></LazyPage>} />
             <Route path="outbound/packing" element={<LazyPage><OutboundPackingPage /></LazyPage>} />

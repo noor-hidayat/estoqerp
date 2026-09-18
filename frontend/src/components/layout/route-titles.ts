@@ -23,7 +23,6 @@ const STATIC_TITLES: Record<string, string> = {
   "/app/qc": "QC Inspection",
   "/app/putaway": "Putaway",
   "/app/putaway/new": "New Putaway",
-  "/app/supplier-return": "Supplier Return",
   "/app/outbound/picking": "Picking",
   "/app/outbound/packing": "Packing",
   "/app/outbound/customer-return": "Customer Return",
