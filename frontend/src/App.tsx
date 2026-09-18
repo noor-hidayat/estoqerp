@@ -117,6 +117,8 @@ const InboundQcPage = lazy(() => import("@/app/app/qc/page"));
 const NewQcInspectionPage = lazy(() => import("@/app/app/qc/new/page"));
 const QcInspectionDetailPage = lazy(() => import("@/app/app/qc/[id]/page"));
 const InboundPutawayPage = lazy(() => import("@/app/app/putaway/page"));
+const NewPutawayPage = lazy(() => import("@/app/app/putaway/new/page"));
+const PutawayDetailPage = lazy(() => import("@/app/app/putaway/[id]/page"));
 const SupplierReturnPage = lazy(() => import("@/app/app/supplier-return/page"));
 const OutboundPickingPage = lazy(() => import("@/app/app/outbound/picking/page"));
 const OutboundPackingPage = lazy(() => import("@/app/app/outbound/packing/page"));
@@ -284,6 +286,8 @@ export default function App() {
             <Route path="qc/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewQcInspectionPage /></LazyPage>} />
             <Route path="qc/:id" element={<LazyPage fallback={<DetailSkeleton />}><QcInspectionDetailPage /></LazyPage>} />
             <Route path="putaway" element={<LazyPage><InboundPutawayPage /></LazyPage>} />
+            <Route path="putaway/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewPutawayPage /></LazyPage>} />
+            <Route path="putaway/:id" element={<LazyPage fallback={<DetailSkeleton />}><PutawayDetailPage /></LazyPage>} />
             <Route path="supplier-return" element={<LazyPage><SupplierReturnPage /></LazyPage>} />
             {/* Redirect URL lama /app/inbound/* ke path flat */}
             <Route path="inbound/receiving" element={<Navigate to="/app/receiving" replace />} />

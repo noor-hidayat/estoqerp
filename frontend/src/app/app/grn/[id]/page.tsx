@@ -321,7 +321,7 @@ export default function GrnDetailPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-52">
-                    <DropdownMenuItem onClick={() => navigate("/app/putaway")}>
+                    <DropdownMenuItem onClick={() => navigate(`/app/putaway/new?grnId=${doc.id}`)}>
                       Putaway
                     </DropdownMenuItem>
                   </DropdownMenuContent>
