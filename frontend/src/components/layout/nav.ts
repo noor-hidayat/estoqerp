@@ -282,6 +282,12 @@ export const NAV: NavGroup[] = [
             menu: "settings.import",
           },
           {
+            label: "Dev Data",
+            href: "/app/settings/dev-data",
+            icon: "Database",
+            menu: "settings.import",
+          },
+          {
             label: "AI Settings",
             href: "/app/settings/ai",
             icon: "Bot",

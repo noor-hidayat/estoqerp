@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient, setupRealtimeInvalidation } from "@/lib/api/query-client";
 import { subscribe, REALTIME_TABLES } from "@/lib/realtime";
 import { api } from "@/lib/api/client";
+import { isLocalMode } from "@/lib/api/client";
 import App from "./App";
 import "./app/globals.css";
 
@@ -13,7 +14,9 @@ setupRealtimeInvalidation(subscribe);
 
 // Realtime server: subscribe ke backend SSE untuk semua table transaksional
 // Master (suppliers, warehouses, items dll) TIDAK ikut — fetch sekali saja (5 menit cache)
-if (typeof window !== "undefined") {
+// Realtime server: hanya saat backend tersedia. Mode lokal (issue #3)
+// memakai BroadcastChannel antar-tab (setupRealtimeInvalidation di atas).
+if (typeof window !== "undefined" && !isLocalMode()) {
   const tablesParam = REALTIME_TABLES.join(",");
   const controller = new AbortController();
   const path = `/realtime/stream?tables=${encodeURIComponent(tablesParam)}`;

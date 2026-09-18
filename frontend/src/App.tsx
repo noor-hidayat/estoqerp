@@ -5,6 +5,7 @@ import { can } from "@/lib/permissions";
 import { navForPermissions } from "@/components/layout/nav";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { isLocalMode } from "@/lib/api/client";
 import { TableSkeleton, FormSkeleton, DetailSkeleton, ChatSkeleton, TableWithKpiSkeleton } from "@/components/ui/loader";
 
 import LoginPage from "@/app/login/page";
@@ -81,6 +82,7 @@ const WorkflowDetailPage = lazy(() => import("@/app/app/settings/workflows/[id]/
 const NewRolePage = lazy(() => import("@/app/app/settings/roles/new/page"));
 const EditRolePage = lazy(() => import("@/app/app/settings/roles/[id]/page"));
 const ImportDataPage = lazy(() => import("@/app/app/settings/import/page"));
+const DevDataPage = lazy(() => import("@/app/app/settings/dev-data/page"));
 const AiSettingsPage = lazy(() => import("@/app/app/settings/ai/page"));
 const CompanySettingsPage = lazy(() => import("@/app/app/settings/company/page"));
 const AccountPage = lazy(() => import("@/app/app/settings/account/page"));
@@ -126,11 +128,12 @@ const ReceivingReportPage = lazy(() => import("@/app/app/report/receiving/page")
 const DeliveryPerformanceReportPage = lazy(() => import("@/app/app/report/delivery-performance/page"));
 
 /** Halaman pertama "/app" — Dashboard bila punya aksesnya, selain itu
- *  diarahkan ke menu pertama yang boleh dibuka role-nya. */
+ *  diarahkan ke menu pertama yang boleh dibuka role-nya.
+ *  Mode lokal (frontend-first, issue #3): dev user selalu isSystem. */
 function HomeRoute() {
   const { isSystem, permissions, loading } = useSession();
   if (loading) return null;
-  if (can(isSystem, permissions, "dashboard", "view")) {
+  if (isLocalMode() || can(isSystem, permissions, "dashboard", "view")) {
     return <DashboardPage />;
   }
   const firstHref =
@@ -159,7 +162,8 @@ export default function App() {
     <SessionProvider>
       <TooltipProvider delayDuration={200}>
           <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          {/* Frontend-first (issue #3): tidak ada halaman login — /login dialihkan ke /app. */}
+          <Route path="/login" element={isLocalMode() ? <Navigate to="/app" replace /> : <LoginPage />} />
           <Route path="/" element={<Navigate to="/app" replace />} />
 
           <Route path="/app" element={<AppLayout />}>
@@ -240,6 +244,7 @@ export default function App() {
             <Route path="settings/workflows/new" element={<LazyPage fallback={<FormSkeleton fields={4} />}><NewWorkflowPage /></LazyPage>} />
             <Route path="settings/workflows/:id" element={<LazyPage fallback={<FormSkeleton fields={6} />}><WorkflowDetailPage /></LazyPage>} />
             <Route path="settings/import" element={<LazyPage fallback={<TableSkeleton columns={4} filters={0} />}><ImportDataPage /></LazyPage>} />
+            <Route path="settings/dev-data" element={<LazyPage fallback={<TableSkeleton columns={2} filters={0} />}><DevDataPage /></LazyPage>} />
             <Route path="settings/ai" element={<LazyPage fallback={<FormSkeleton fields={6} />}><AiSettingsPage /></LazyPage>} />
             <Route path="settings/company" element={<LazyPage fallback={<FormSkeleton fields={6} />}><CompanySettingsPage /></LazyPage>} />
             <Route path="settings/account" element={<LazyPage fallback={<FormSkeleton fields={4} />}><AccountPage /></LazyPage>} />

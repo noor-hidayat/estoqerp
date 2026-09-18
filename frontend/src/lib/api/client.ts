@@ -6,6 +6,17 @@ export interface TokenPair {
 const TOKENS_KEY = "so_tokens";
 const API_URL = import.meta.env.VITE_API_URL ?? "/api";
 
+/** Mode penyimpanan data frontend (issue #3: frontend-first).
+ *  - "local": seluruh CRUD via LocalStorage (default, tanpa backend/login).
+ *  - "api": via Backend REST API (fase backend, butuh login/JWT).
+ *  Ganti via env `VITE_DATA_MODE=api` tanpa mengubah UI/business logic. */
+export const DATA_MODE: "local" | "api" =
+  (import.meta.env.VITE_DATA_MODE as string) === "api" ? "api" : "local";
+
+export function isLocalMode(): boolean {
+  return DATA_MODE === "local";
+}
+
 export function getTokens(): TokenPair | null {
   try {
     const raw = localStorage.getItem(TOKENS_KEY);
@@ -27,6 +38,17 @@ export function setTokens(access: string, refresh: string) {
 
 export function clearTokens() {
   localStorage.removeItem(TOKENS_KEY);
+}
+
+function safeParseBody(body: BodyInit | null | undefined): unknown {
+  if (typeof body === "string") {
+    try {
+      return JSON.parse(body);
+    } catch {
+      return body;
+    }
+  }
+  return body;
 }
 
 interface ApiErrorBody {
@@ -81,6 +103,19 @@ function refreshOnce(): Promise<boolean> {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  // Frontend-first (issue #3): tanpa backend, semua request dilayani
+  // LocalStorage repository layer — tidak ada fetch, tidak ada 401.
+  if (isLocalMode()) {
+    const { handleLocalRequest, LocalApiError } = await import("@/lib/data/local-api");
+    const method = (options.method ?? "GET").toUpperCase();
+    try {
+      return await handleLocalRequest<T>(method, path, options.body === undefined ? undefined : safeParseBody(options.body));
+    } catch (e) {
+      if (e instanceof LocalApiError) throw new ApiError(e.message, e.status);
+      throw e;
+    }
+  }
+
   const { skipAuth, ...rest } = options;
   const tokens = getTokens();
 
@@ -152,6 +187,17 @@ async function streamRequest<T>(
   onEvent: (event: T) => void,
   signal?: AbortSignal
 ): Promise<void> {
+  // Mode lokal: AI streaming tidak tersedia — beri tahu UI via event error.
+  if (isLocalMode()) {
+    void path;
+    void body;
+    try {
+      onEvent({ type: "error", message: "AI tidak tersedia di mode lokal (tanpa backend)." } as T);
+    } catch {
+      // ignore
+    }
+    return;
+  }
   const tokens = getTokens();
   const headers = new Headers({ "Content-Type": "application/json" });
   if (tokens?.access) headers.set("Authorization", `Bearer ${tokens.access}`);
@@ -211,6 +257,17 @@ async function subscribeRequest<T>(
   onEvent: (event: T) => void,
   signal?: AbortSignal
 ): Promise<void> {
+  // Mode lokal: realtime antar-tab sudah diurus BroadcastChannel (lib/realtime).
+  // Tunggu hingga abort agar caller dengan pola "await subscribe" tidak loop retry.
+  if (isLocalMode()) {
+    void path;
+    void onEvent;
+    if (signal?.aborted) return;
+    await new Promise<void>((resolve) => {
+      if (signal) signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    return;
+  }
   const tokens = getTokens();
   const headers = new Headers({ Accept: "text/event-stream" });
   if (tokens?.access) headers.set("Authorization", `Bearer ${tokens.access}`);
