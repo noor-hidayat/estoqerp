@@ -7,8 +7,8 @@ export default function InboundPutawayPage() {
       eyebrow="Inbound"
       title="Putaway"
       description="Penempatan barang hasil GRN ke lokasi gudang."
-      relatedHref="/app/goods-receipts"
-      relatedLabel="Buka Goods Receipts"
+      relatedHref="/app/grn"
+      relatedLabel="Buka GRN"
     />
   );
 }

@@ -720,7 +720,7 @@ function handleDocAction(
     });
     return repo<Row>("receivings").update(rcv.id, {
       lines, qcNotes: (b.qcNotes as string | null) ?? rcv.qcNotes ?? null,
-      status: "COMPLETED", qcInspectedAt: new Date().toISOString(),
+      status: "SUBMITTED", qcInspectedAt: new Date().toISOString(),
     } as Partial<Row>);
   }
 
@@ -811,7 +811,7 @@ function submitQcInspection(qcId: string): Row {
         const rejected = num(match.qtyRejected);
         return { ...rl, qtyRejected: String(rejected), qtyAccepted: String(num(match.qtyReceived ?? rl.qty) - rejected) };
       });
-      rcvRepo.update(receivingId, { lines: rcvLines, status: "COMPLETED", qcInspectedAt: new Date().toISOString() } as Partial<Row>);
+      rcvRepo.update(receivingId, { lines: rcvLines, status: "SUBMITTED", qcInspectedAt: new Date().toISOString() } as Partial<Row>);
     }
   }
   return updated;

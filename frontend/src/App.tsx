@@ -104,9 +104,9 @@ const PurchaseOrderDetailPage = lazy(() => import("@/app/app/purchase-orders/[id
 const SalesOrdersPage = lazy(() => import("@/app/app/sales-orders/page"));
 const NewSalesOrderPage = lazy(() => import("@/app/app/sales-orders/new/page"));
 const SalesOrderDetailPage = lazy(() => import("@/app/app/sales-orders/[id]/page"));
-const GoodsReceiptsPage = lazy(() => import("@/app/app/goods-receipts/page"));
-const NewGoodsReceiptPage = lazy(() => import("@/app/app/goods-receipts/new/page"));
-const GoodsReceiptDetailPage = lazy(() => import("@/app/app/goods-receipts/[id]/page"));
+const GrnListPage = lazy(() => import("@/app/app/grn/page"));
+const NewGrnPage = lazy(() => import("@/app/app/grn/new/page"));
+const GrnDetailPage = lazy(() => import("@/app/app/grn/[id]/page"));
 const DeliveriesPage = lazy(() => import("@/app/app/deliveries/page"));
 const NewDeliveryPage = lazy(() => import("@/app/app/deliveries/new/page"));
 const DeliveryDetailPage = lazy(() => import("@/app/app/deliveries/[id]/page"));
@@ -266,9 +266,13 @@ export default function App() {
             <Route path="sales-orders" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><SalesOrdersPage /></LazyPage>} />
             <Route path="sales-orders/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewSalesOrderPage /></LazyPage>} />
             <Route path="sales-orders/:id" element={<LazyPage fallback={<DetailSkeleton />}><SalesOrderDetailPage /></LazyPage>} />
-            <Route path="goods-receipts" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><GoodsReceiptsPage /></LazyPage>} />
-            <Route path="goods-receipts/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewGoodsReceiptPage /></LazyPage>} />
-            <Route path="goods-receipts/:id" element={<LazyPage fallback={<DetailSkeleton />}><GoodsReceiptDetailPage /></LazyPage>} />
+            {/* Legacy redirect: /app/goods-receipts/* -> /app/grn */}
+            <Route path="goods-receipts" element={<Navigate to="/app/grn" replace />} />
+            <Route path="goods-receipts/new" element={<Navigate to="/app/grn/new" replace />} />
+            <Route path="goods-receipts/:id" element={<RedirectTo to="/app/grn/:id" />} />
+            <Route path="grn" element={<LazyPage fallback={<TableSkeleton columns={6} filters={0} />}><GrnListPage /></LazyPage>} />
+            <Route path="grn/new" element={<LazyPage fallback={<FormSkeleton fields={4} hasTable tableColumns={5} />}><NewGrnPage /></LazyPage>} />
+            <Route path="grn/:id" element={<LazyPage fallback={<DetailSkeleton />}><GrnDetailPage /></LazyPage>} />
             <Route path="deliveries" element={<LazyPage fallback={<TableSkeleton columns={6} filters={2} />}><DeliveriesPage /></LazyPage>} />
             <Route path="deliveries/new" element={<LazyPage fallback={<FormSkeleton fields={5} hasTable tableColumns={5} />}><NewDeliveryPage /></LazyPage>} />
             <Route path="deliveries/:id" element={<LazyPage fallback={<DetailSkeleton />}><DeliveryDetailPage /></LazyPage>} />

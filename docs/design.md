@@ -41,6 +41,7 @@
 ## 5) Tabel (Global)
 - Wrapper: `overflow-hidden rounded-lg border border-border`
 - Header: `bg-zinc-100 dark:bg-zinc-800` + `border-b`, `divide-x divide-border`, tidak ada double-border.
+- **Checkbox wajib**: kolom pertama setiap tabel item selalu `Checkbox` (`w-8 px-2 text-center`) — header berisi select-all (`checked` / `indeterminate`), tiap baris ada checkbox per-row. Berlaku untuk mode edit maupun readOnly.
 - `TableCell` input: `p-0 border-r border-border` + `TableInput` (`src/components/ui/table-input.tsx`: `h-9 w-full border-0 bg-transparent`, `onWheel=>blur`, `placeholder Qty`, `bg-amber-50` saat focus).
 - `SearchableSelect` di tabel: prop `table` → `border-0 bg-transparent h-9`, dropdown hanya setelah ketik (`onChange` → `setOpen(true)`, `onFocus` tidak buka), vertical lines `divide-x`.
 - Receiving Detail: `Alasan Reject` & `Batch` dihapus global (tidak ada kolom).
@@ -55,5 +56,14 @@
 - Warna, tipografi, spacing lain tetap pakai Tailwind + `cn`/`cx`. Jangan pakai `rounded-xl border` card untuk form — pakai `FormSection` saja.
 - Semua `DatePicker` `pl-9` + ikon `Calendar`, `TimePicker` logic sama.
 - Validasi & error via `useErrorToast` + `toast.error`, bukan `alert`.
+
+## 8) GRN Header (frontend-only, `/app/grn`)
+- Baris 1 (3 kolom, `grid gap-x-8 gap-y-5 sm:grid-cols-3`): `Ref PO` | `Supplier` (readOnly otomatis dari PO) | `Posting Date`.
+- Baris 2 (3 kolom): di bawah `Ref PO` ada 2 checkbox (`Checkbox` + label `text-xs cursor-pointer`, pola mengikut `purchase-orders/[id]`): `Edit posting date time` (gate — tanpa centang, `DatePicker`/`TimePicker` `disabled`) dan `Putaway` (flag tersimpan di dokumen); kolom tengah kosong `aria-hidden`; `Posting Time` tepat di bawah `Posting Date`.
+- Baris 3 (2 kolom, `FormGrid`): `Warehouse` | `Sub Warehouse` (opsi difilter `parentId === warehouseId`).
+- Detail view (Submitted/Canceled): kedua checkbox tetap tampil terkunci (`disabled`, tidak hilang)
+  — `Edit posting date time` (selalu belum dicentang) dan `Putaway` (status tersimpan);
+  gate `Edit posting date time` selalu mulai belum dicentang tiap dokumen dimuat.
+- Berlaku identik untuk New dan Detail (view/edit).
 
 > Ubah aturan di file ini dulu jika ada revisi — jangan ubah langsung di component tanpa update `design.md` agar konsisten.

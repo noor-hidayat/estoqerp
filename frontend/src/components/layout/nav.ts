@@ -240,6 +240,12 @@ export const NAV: NavGroup[] = [
         menu: "supply.salesOrders",
       },
       {
+        label: "GRN",
+        href: "/app/grn",
+        icon: "PackageCheck",
+        menu: "supply.goodsReceipts",
+      },
+      {
         label: "Deliveries",
         href: "/app/deliveries",
         icon: "Truck",
@@ -458,6 +464,7 @@ export const WAREHOUSE_NAV: NavGroup[] = [
         menu: "supply.receivings",
         children: [
           { label: "Receiving", href: "/app/receiving", icon: "Inbox", menu: "supply.receivings" },
+          { label: "GRN", href: "/app/grn", icon: "PackageCheck", menu: "supply.goodsReceipts" },
           { label: "Putaway", href: "/app/putaway", icon: "PackageSearch", menu: "supply.goodsReceipts" },
           { label: "Supplier Return", href: "/app/supplier-return", icon: "Undo2", menu: "supply.goodsReceipts" },
         ],
@@ -591,6 +598,12 @@ export const PURCHASING_NAV: NavGroup[] = [
         href: "/app/purchase-orders",
         icon: "ShoppingCart",
         menu: "supply.purchaseOrders",
+      },
+      {
+        label: "GRN",
+        href: "/app/grn",
+        icon: "PackageCheck",
+        menu: "supply.goodsReceipts",
       },
     ],
   },
