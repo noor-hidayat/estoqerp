@@ -88,9 +88,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const isAiChat = pathname === "/app/ai";
 
+  // Frontend-first (issue #3): tanpa backend tidak ada redirect /login.
+  // Session dev selalu terisi; loading hanya sesaat saat init.
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
-  }, [user, loading, router]);
+    void router;
+  }, [router]);
 
   if (loading || !user) return <ShellLoader />;
 
