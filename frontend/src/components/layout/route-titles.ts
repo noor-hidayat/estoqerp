@@ -22,6 +22,7 @@ const STATIC_TITLES: Record<string, string> = {
   "/app/receiving/new": "New Receiving",
   "/app/qc": "QC Inspection",
   "/app/putaway": "Putaway",
+  "/app/putaway/new": "New Putaway",
   "/app/supplier-return": "Supplier Return",
   "/app/outbound/picking": "Picking",
   "/app/outbound/packing": "Packing",
@@ -51,6 +52,7 @@ const PATTERNS: { regex: RegExp; title: string }[] = [
   { regex: /^\/app\/setup\/departments\/[^/]+$/, title: "Edit Department" },
   { regex: /^\/app\/transaction\/[^/]+$/, title: "Transaction Details" },
   { regex: /^\/app\/receiving\/[^/]+$/, title: "Receiving Details" },
+  { regex: /^\/app\/putaway\/[^/]+$/, title: "Putaway Details" },
 ];
 
 export function getPageTitle(pathname: string): string | null {
