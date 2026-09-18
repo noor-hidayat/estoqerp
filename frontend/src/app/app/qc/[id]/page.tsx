@@ -77,7 +77,7 @@ export default function QcDetailPage() {
   const isCompleted = qc.status === "COMPLETED";
 
   const onSubmit = async () => {
-    if (!confirm("Submit QC ini? Receiving akan menjadi COMPLETED.")) return;
+    if (!confirm("Submit QC ini? Receiving akan menjadi Submitted.")) return;
     try { await submit.mutateAsync(qc.id); } catch (e) { setError(e instanceof Error ? e.message : "Gagal submit"); }
   };
   const onCancel = async () => {

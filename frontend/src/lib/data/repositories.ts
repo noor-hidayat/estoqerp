@@ -169,7 +169,7 @@ export function applyTransition(collection: string, id: string, action: string, 
       patch.status = collection === "receivings" ? "PENDING_QC" : "POSTED";
       break;
     case "submit":
-      if (collection === "receivings") patch.status = "PENDING_QC";
+      if (collection === "receivings") patch.status = (row as any).qcRequired === false ? "SUBMITTED" : "PENDING_QC";
       else if (collection === "qcInspections") patch.status = "COMPLETED";
       else patch.status = "SUBMITTED";
       patch.submittedAt = nowIso;

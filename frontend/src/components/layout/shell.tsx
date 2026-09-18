@@ -49,7 +49,7 @@ function RouteGuard({ children }: { children: ReactNode }) {
       if (path.startsWith("/app/setup/document-types")) return "master";
       if (path.startsWith("/app/receiving")) return "supply.receivings";
       if (path.startsWith("/app/qc")) return "supply.receivings";
-      if (path.startsWith("/app/goods-receipts")) return "supply.goodsReceipts";
+      if (path.startsWith("/app/grn")) return "supply.goodsReceipts";
       if (path.startsWith("/app/purchase-orders")) return "supply.purchaseOrders";
       if (path.startsWith("/app/sales-orders")) return "supply.salesOrders";
       if (path.startsWith("/app/deliveries")) return "supply.deliveries";

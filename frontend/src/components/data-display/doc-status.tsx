@@ -4,6 +4,7 @@ import type { DocStatus, ReceivingStatus } from "@/types";
 const TONE: Record<string, string> = {
   DRAFT: "neutral",
   POSTED: "success",
+  SUBMITTED: "success",
   ACTIVE: "success",
   APPROVED: "success",
   COMPLETED: "success",
@@ -23,6 +24,7 @@ const TONE: Record<string, string> = {
 const LABEL: Record<string, string> = {
   DRAFT: "Draft",
   POSTED: "Posted",
+  SUBMITTED: "Submitted",
   ACTIVE: "Active",
   APPROVED: "Approved",
   COMPLETED: "Completed",

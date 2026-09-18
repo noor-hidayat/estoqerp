@@ -112,7 +112,9 @@ function usePaginatedList<T, R extends PaginatedResponse<T> = PaginatedResponse<
 function useResourceOne<T>(table: string, id: string | undefined) {
   return useQuery({
     queryKey: [table, id],
-    queryFn: () => api.get<T>(`/${table}/${id}`),
+    // documentNo bisa mengandung "/" (RCV/2026/09/0004) — encode agar tidak
+    // memecah parsing segmen path di local-api (split sebelum decode).
+    queryFn: () => api.get<T>(`/${table}/${encodeURIComponent(id ?? "")}`),
     enabled: !!id,
   });
 }
