@@ -197,12 +197,6 @@ function ChargeTypeSelect({
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
-function formatDdMmmYyyy(dateStr?: string | null): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
 const CURRENCY_SYMBOLS: Record<string, string> = { IDR: "Rp", USD: "$", EUR: "€", SGD: "S$", JPY: "¥", CNY: "¥", MYR: "RM", THB: "฿", AUD: "A$" };
 function sym(cur?: string | null): string {
   if (!cur) return "Rp";
@@ -283,6 +277,11 @@ function PRBody({
   navigate: (to: string) => void;
 }) {
   const [err, setErr] = useState("");
+  const [paperSize, setPaperSize] = useState<"A4" | "CONTINUOUS">("A4");
+  const handlePrint = (size: "A4" | "CONTINUOUS") => {
+    setPaperSize(size);
+    setTimeout(() => window.print(), 60);
+  };
   useErrorToast(err);
   const { user } = useSession();
   const { data: taxCategories = [] } = useTaxCategories();
@@ -618,6 +617,35 @@ function PRBody({
     }
   };
   const warehouse = warehouses.find((w) => w.id === pr.warehouseId);
+  // Print: approval steps mengikuti Approval Flow (intermediate + final).
+  // Created By selalu tampil; step selain terakhir = Checked By; step terakhir = Approved By.
+  const printApprovalSteps = (() => {
+    const sorted = [...((workflowStates as any[]) ?? [])].sort((a: any, b: any) => (a.orderNo ?? 0) - (b.orderNo ?? 0));
+    const withFinal = sorted.filter((s: any) => s.type === "intermediate" || s.type === "final");
+    const steps = withFinal.length > 0 ? withFinal : sorted.filter((s: any) => s.type !== "initial" && s.type !== "rejected");
+    return (pr as any).needApproval ? steps : [];
+  })();
+  const printCreatorName = (pr as any).createdByName ?? (pr as any).preparedByName ?? requestByName ?? "";
+  const printCreatorDate = (pr as any).createdAt ?? (pr as any).preparedSignedAt ?? pr.requestDate;
+  const printSlashDate = (iso?: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("en-GB"); // DD/MM/YYYY untuk continuous form
+  };
+  const printDashDate = (iso?: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("id-ID").replace(/\//g, "-"); // DD-MM-YYYY untuk A4
+  };
+  const formatDdMmmYyyy = (dateStr?: string | null): string => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  };
+  const printReqDate = printSlashDate;
   return (
     <>
       <div className="print:hidden">
@@ -635,9 +663,21 @@ function PRBody({
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {!editing && isApproved && (
-                <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Print" onClick={() => window.print()}>
-                  <Printer size={16} />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Print">
+                      <Printer size={16} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem className="gap-2" onClick={() => handlePrint("A4")}>
+                      <Printer size={14} /> Print A4
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="gap-2" onClick={() => handlePrint("CONTINUOUS")}>
+                      <Printer size={14} /> Print Continuous 9.5&quot; x 11&quot;
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               {!editing && isPendingApproval && (pr as any).needApproval && (
                 <DropdownMenu>
@@ -828,7 +868,7 @@ function PRBody({
               value={lines}
               onChange={editable ? setLines : () => {}}
               readOnly={!editable}
-              headerDeliveryDate={undefined}
+              headerDeliveryDate={form.expectedDate}
               currency={editable ? form.currency : (pr as any).currency}
               exchangeRate={editable ? form.exchangeRate : (pr as any).exchangeRate}
               baseCurrency={baseCurrency}
@@ -844,16 +884,17 @@ function PRBody({
           </FormSection>
         </FormPage>
       </div>
-      {/* Print view for MR */}
-      <style>{`@media print { @page { size: A4; margin: 0; } html, body { height: auto !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } body * { visibility: hidden; } .print-doc, .print-doc * { visibility: visible; } .print-doc { position: absolute; left: 0; top: 0; width: 100%; height: auto; } header, nav, aside { display: none !important; } table { page-break-inside: auto; } tr { page-break-inside: avoid; page-break-after: auto; } }`}</style>
+      {/* Print view for MR — template menyesuaikan kertas: A4 biasa / Continuous 9.5 x 11 inch */}
+      <style>{`@media print { @page { size: ${paperSize === "CONTINUOUS" ? "9.5in 11in" : "A4"}; margin: ${paperSize === "CONTINUOUS" ? "0.25in 0.3in" : "0"}; } html, body { height: auto !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } body * { visibility: hidden; } .print-doc, .print-doc * { visibility: visible; } .print-doc { position: absolute; left: 0; top: 0; width: 100%; height: auto; } header, nav, aside { display: none !important; } table { page-break-inside: auto; } tr { page-break-inside: avoid; page-break-after: auto; } }`}</style>
       <div className="hidden print:block print-doc bg-white text-black print:absolute print:inset-0 print:p-0">
+        {paperSize === "A4" ? (
         <div className="mx-auto w-[190mm] max-w-[190mm] bg-white p-[10mm] text-black">
           <div className="flex items-start justify-between gap-6 border-b border-zinc-900 pb-3">
             <div className="flex items-start gap-3">
               {(company as any)?.logo ? (
-                <img src={(company as any).logo} alt="Logo" className="h-10 w-10 object-contain" />
+                <img src={(company as any).logo} alt="Logo" className="h-auto w-auto max-h-[64px] max-w-[200px] object-contain" />
               ) : (
-                <div className="h-10 w-10 border border-black flex items-center justify-center text-[10px] font-bold text-black">LOGO</div>
+                <div className="flex h-[52px] w-[120px] items-center justify-center border border-black text-[11px] font-bold tracking-widest">LOGO</div>
               )}
               <div className="leading-tight">
                 <div className="text-[15px] font-bold tracking-tight text-black">{(company as any)?.companyName ?? "PT CONTOH SUKSES MAKMUR"}</div>
@@ -873,98 +914,247 @@ function PRBody({
           </div>
           <div className="mt-4 grid grid-cols-2 gap-4 text-[11px]">
             <div className="space-y-1">
-              <div className="flex"><span className="w-24 text-zinc-600">No. MR</span><span className="text-black">{pr.documentNo ?? (pr as any).mrNo ?? formatId(pr.id)}</span></div>
-              <div className="flex"><span className="w-24 text-zinc-600">Urgency</span><span className="text-black">{String((pr as any).urgency ?? "MEDIUM")}</span></div>
+              <div className="flex"><span className="w-28 shrink-0 text-zinc-600">MR No.</span><span className="font-medium text-black">{pr.documentNo ?? (pr as any).mrNo ?? formatId(pr.id)}</span></div>
+              <div className="flex"><span className="w-28 shrink-0 text-zinc-600">Requester</span><span className="text-black">{printCreatorName}</span></div>
+              <div className="flex"><span className="w-28 shrink-0 text-zinc-600">Requesting Dept.</span><span className="text-black">{deptLabel((pr as any).department)}</span></div>
             </div>
             <div className="space-y-1">
-              <div className="flex"><span className="w-24 text-zinc-600">Request Date</span><span className="text-black">{pr.requestDate ? new Date(pr.requestDate).toLocaleDateString("id-ID").replace(/\//g, "-") : ""}</span></div>
-              <div className="flex"><span className="w-24 text-zinc-600">Expected Date</span><span className="text-black">{pr.expectedDate ? new Date(pr.expectedDate).toLocaleDateString("id-ID").replace(/\//g, "-") : ""}</span></div>
-              <div className="flex"><span className="w-24 text-zinc-600">Currency</span><span className="text-black">{(pr as any).currency ?? baseCurrency ?? "IDR"}</span></div>
-            </div>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-6 border-t border-zinc-200 pt-4 text-[11px]">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-black">SHIP TO</div>
-              <div className="mt-2 font-medium text-black">{warehouse?.name ?? warehouseName(pr.warehouseId)}</div>
-              <div className="mt-1 leading-snug text-zinc-600">{(warehouse as any)?.address ?? (company as any)?.address ?? ""}</div>
-              <div className="mt-2 space-y-0.5 text-zinc-600"><div>PIC : {(warehouse as any)?.pic ?? (warehouse as any)?.contactPerson ?? ""}</div><div>Telp : {(warehouse as any)?.phone ?? ""}</div></div>
-            </div>
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-black">REQUESTER</div>
-              <div className="mt-2 font-medium text-black">{(pr as any).createdByName ?? (pr as any).requesterName ?? ""}</div>
-              <div className="mt-1 leading-snug text-zinc-600">{(pr as any).department ? `Dept: ${(pr as any).department}` : ""}</div>
-              <div className="mt-2 space-y-0.5 text-zinc-600"><div>Notes : {(pr as any).notes ? String((pr as any).notes).slice(0, 80) : ""}</div></div>
+              <div className="flex"><span className="w-28 shrink-0 text-zinc-600">Date</span><span className="text-black">{printDashDate(pr.requestDate)}</span></div>
+              <div className="flex"><span className="w-28 shrink-0 text-zinc-600">Target Dept.</span><span className="text-black">{deptLabel((pr as any).toDepartment)}</span></div>
             </div>
           </div>
           <table className="mt-6 w-full border-collapse text-[11px]">
             <thead>
               <tr className="border-y border-zinc-200 bg-zinc-50">
                 <th className="px-2 py-2 text-center font-medium text-zinc-600 w-8">No</th>
-                <th className="px-2 py-2 text-left font-medium text-zinc-600">Item Name</th>
-                <th className="px-2 py-2 text-center font-medium text-zinc-600 w-16">Qty</th>
+                <th className="px-2 py-2 text-left font-medium text-zinc-600">Item Code</th>
+                <th className="px-2 py-2 text-center font-medium text-zinc-600 w-28">Required Date</th>
+                <th className="px-2 py-2 text-center font-medium text-zinc-600 w-24">QTY Request</th>
                 <th className="px-2 py-2 text-center font-medium text-zinc-600 w-16">UOM</th>
-                <th className="px-2 py-2 text-right font-medium text-zinc-600 w-28">Rate</th>
-                <th className="px-2 py-2 text-right font-medium text-zinc-600 w-32">Amount</th>
               </tr>
             </thead>
             <tbody className="text-[10px] text-black">
               {(pr.lines ?? []).map((l: any, idx: number) => {
                 const qty = Number(l.qty || 0);
-                const price = Number(l.unitPrice ?? 0);
-                const amt = qty * price;
                 const itemRec = (typeof items !== "undefined" ? (items as any).find((x: any) => x.id === l.itemId) : null) ?? null;
                 const uomRec = (typeof uoms !== "undefined" ? (uoms as any).find((x: any) => x.id === (l.uomId ?? "")) : null) ?? null;
+                const reqDate = (l as any).deliveryDate ?? pr.expectedDate;
                 return (
-                  <tr key={idx} className="hover:bg-zinc-50/50">
+                  <tr key={idx} className="border-b border-zinc-100">
                     <td className="px-2 py-2 text-center tabular-nums">{idx + 1}</td>
                     <td className="px-2 py-2">{itemRec ? `${itemRec.code}: ${itemRec.name}` : l.itemId}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{printDashDate(reqDate)}</td>
                     <td className="px-2 py-2 text-center tabular-nums">{formatNumber(qty)}</td>
-                    <td className="px-2 py-2 text-center tabular-nums">{uomRec?.name ?? "UOM"}</td>
-                    <td className="px-2 py-2 text-right tabular-nums">{sym((pr as any).currency || baseCurrency)} {formatNumber(price)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums">{sym((pr as any).currency || baseCurrency)} {formatNumber(amt)}</td>
+                    <td className="px-2 py-2 text-center tabular-nums">{uomRec?.name ?? ""}</td>
                   </tr>
                 );
               })}
+              {(pr.lines ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-2 py-6 text-center text-zinc-500">No items.</td>
+                </tr>
+              )}
             </tbody>
           </table>
-          <div className="mt-4 flex justify-end">
-            <div className="w-[280px] space-y-0 text-[11px]">
-              <div className="flex justify-between px-2 py-1.5 text-black"><span className="text-zinc-600">Subtotal</span><span className="tabular-nums font-medium text-black">{sym((pr as any).currency || baseCurrency)} {formatNumber(viewSubtotal)}</span></div>
-              <div className="flex justify-between px-2 py-1.5 text-black"><span className="text-zinc-600">Discount</span><span className="tabular-nums font-medium text-black">- {sym((pr as any).currency || baseCurrency)} {formatNumber(viewDiscountTotal + viewGlobalDiscountAmount)}</span></div>
-              <div className="flex justify-between px-2 py-1.5 text-black"><span className="text-zinc-600">{Number(viewTaxRate || 0) === 0 ? "Tax 0%" : `Tax (${Math.round(Number(viewTaxRate))}%)`}</span><span className="tabular-nums font-medium text-black">{sym((pr as any).currency || baseCurrency)} {formatNumber(viewTax)}</span></div>
-              <div className="flex justify-between px-2 py-1.5 text-black"><span className="text-zinc-600">Additional Charges</span><span className="tabular-nums font-medium text-black">{sym((pr as any).currency || baseCurrency)} {formatNumber(viewAdditionalChargesTotal)}</span></div>
-              <div className="flex justify-between border-t border-zinc-900 px-2 py-2 font-semibold text-black"><span>Grand Total</span><span className="tabular-nums">{sym((pr as any).currency || baseCurrency)} {formatNumber(viewGrandTotal)}</span></div>
-            </div>
-          </div>
           <div className="mt-6 border-t border-zinc-200 pt-3 text-[11px]">
             <div className="font-bold uppercase tracking-wide">Notes</div>
             <div className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-700">{(pr as any).notes?.trim() ? (pr as any).notes : pr.notes?.trim() ? pr.notes : ""}</div>
           </div>
-          <div className="mt-10 grid grid-cols-2 gap-8 text-center text-[11px]">
-            <div className="flex flex-col items-center">
-              <div className="font-semibold tracking-wide text-black">Prepared By</div>
-              <div className="mt-3 flex h-[64px] w-[180px] items-center justify-center">
-                {(pr as any).preparedSignature ? (
-                  <img src={(pr as any).preparedSignature} alt="Prepared signature" className="max-h-[64px] max-w-[180px] object-contain" />
-                ) : null}
+          {(() => {
+            const sigCells = [
+              {
+                key: "created",
+                label: "Created By",
+                sig: (pr as any).preparedSignature ?? null,
+                name: printCreatorName,
+                date: formatDdMmmYyyy(printCreatorDate),
+              },
+              ...printApprovalSteps.map((st: any, idx: number) => {
+                const isLast = idx === printApprovalSteps.length - 1;
+                const approverName = isLast ? ((pr as any).approvedByName ?? "") : "";
+                return {
+                  key: st.id ?? `step-${idx}`,
+                  label: isLast ? "Approved By" : "Checked By",
+                  sig: isLast ? (pr as any).approvedSignature : null,
+                  name: approverName || st.name || "",
+                  date: isLast
+                    ? ((pr as any).approvedSignedAt ? formatDdMmmYyyy((pr as any).approvedSignedAt) : (pr as any).status === "APPROVED" ? formatDdMmmYyyy((pr as any).updatedAt) : "")
+                    : "",
+                  sub: isLast && approverName && st.name ? st.name : "",
+                };
+              }),
+            ];
+            if (sigCells.length === 1) {
+              const only = sigCells[0];
+              return (
+                <div className="mt-10 flex justify-end text-center text-[11px]">
+                  <div className="flex w-full max-w-[180px] flex-col items-center">
+                    <div className="font-semibold tracking-wide text-black">{only.label}</div>
+                    <div className="mt-3 flex h-[64px] w-full items-center justify-center">
+                      {only.sig ? (
+                        <img src={only.sig} alt={`${only.label} signature`} className="max-h-[64px] max-w-[180px] object-contain" />
+                      ) : null}
+                    </div>
+                    <div className="h-px w-full bg-zinc-900" />
+                    <div className="mt-2 text-[10px] font-medium text-black">{only.name}</div>
+                    <div className="text-[10px] text-zinc-600">{only.date}</div>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="mt-10 grid gap-8 text-center text-[11px]" style={{ gridTemplateColumns: `repeat(${sigCells.length}, minmax(0, 1fr))` }}>
+                {sigCells.map((c: any) => (
+                  <div key={c.key} className="flex flex-col items-center">
+                    <div className="font-semibold tracking-wide text-black">{c.label}</div>
+                    <div className="mt-3 flex h-[64px] w-full max-w-[180px] items-center justify-center">
+                      {c.sig ? (
+                        <img src={c.sig} alt={`${c.label} signature`} className="max-h-[64px] max-w-[180px] object-contain" />
+                      ) : null}
+                    </div>
+                    <div className="h-px w-full max-w-[180px] bg-zinc-900" />
+                    <div className="mt-2 text-[10px] font-medium text-black">{c.name}</div>
+                    <div className="text-[10px] text-zinc-600">{[c.date, c.sub].filter(Boolean).join(" • ")}</div>
+                  </div>
+                ))}
               </div>
-              <div className="h-px w-[180px] bg-zinc-900" />
-              <div className="mt-2 text-[10px] font-medium text-black">{(pr as any).preparedByName ?? (pr as any).createdByName ?? ""}</div>
-              <div className="text-[10px] text-zinc-600">{formatDdMmmYyyy((pr as any).preparedSignedAt ?? pr.requestDate)}</div>
+            );
+          })()}
+        </div>
+        ) : (
+        <div className="mx-auto w-full max-w-[8.9in] bg-white font-mono text-black" style={{ fontSize: "11px", lineHeight: 1.4 }}>
+          {/* Header: logo + company | title */}
+          <div className="flex items-start justify-between gap-4 border-2 border-black px-3 py-2">
+            <div className="flex min-w-0 items-start gap-3">
+              {(company as any)?.logo ? (
+                <img src={(company as any).logo} alt="Logo" className="h-auto w-auto max-h-[64px] max-w-[200px] object-contain" />
+              ) : (
+                <div className="flex h-[52px] w-[120px] items-center justify-center border border-black text-[11px] font-bold tracking-widest">LOGO</div>
+              )}
+              <div className="min-w-0 leading-tight">
+                <div className="text-[14px] font-bold tracking-tight">{(company as any)?.companyName ?? "PT CONTOH SUKSES MAKMUR"}</div>
+                <div className="mt-0.5 max-w-[4.5in] whitespace-pre-wrap break-words text-[10px] leading-snug">{(company as any)?.address ?? "Jl. Industri Raya No. 45, Jakarta Selatan 12345"}</div>
+                <div className="mt-0.5 text-[10px]">
+                  {[
+                    `Telp. ${(company as any)?.phone ?? "+62 86746678829"}`,
+                    (company as any)?.email ?? "info@trijaya.co.id",
+                    (company as any)?.website ? String((company as any).website).replace(/^https?:\/\//, "") : "www.trijaya.co.id",
+                  ].join(" | ")}
+                </div>
+              </div>
             </div>
-            <div className="flex flex-col items-center">
-              <div className="font-semibold tracking-wide text-black">Approved By</div>
-              <div className="mt-3 flex h-[64px] w-[180px] items-center justify-center">
-                {(pr as any).approvedSignature ? (
-                  <img src={(pr as any).approvedSignature} alt="Approved signature" className="max-h-[64px] max-w-[180px] object-contain" />
-                ) : null}
-              </div>
-              <div className="h-px w-[180px] bg-zinc-900" />
-              <div className="mt-2 text-[10px] font-medium text-black">{(pr as any).approvedByName ?? ""}</div>
-              <div className="text-[10px] text-zinc-600">{(pr as any).approvedSignedAt ? formatDdMmmYyyy((pr as any).approvedSignedAt) : (pr as any).status === "APPROVED" ? formatDdMmmYyyy((pr as any).updatedAt) : ""}</div>
+            <div className="shrink-0 pt-1 text-right">
+              <div className="text-[15px] font-bold tracking-widest">MATERIAL</div>
+              <div className="text-[15px] font-bold tracking-widest">REQUEST</div>
             </div>
           </div>
+          {/* Meta: MR NO / DATE / REQUESTER / DEPT + TARGET DEPT */}
+          <div className="grid grid-cols-2 gap-x-6 border-2 border-t-0 border-black px-3 py-2 text-[11px]">
+            <div className="flex gap-2"><span className="w-[92px] shrink-0">MR NO</span><span className="shrink-0">:</span><span className="font-bold">{pr.documentNo ?? (pr as any).mrNo ?? formatId(pr.id)}</span></div>
+            <div className="flex gap-2"><span className="w-[92px] shrink-0">DATE</span><span className="shrink-0">:</span><span>{printReqDate(pr.requestDate)}</span></div>
+            <div className="flex gap-2"><span className="w-[92px] shrink-0">REQUESTER</span><span className="shrink-0">:</span><span className="truncate">{printCreatorName}</span></div>
+            <div className="flex gap-2"><span className="w-[92px] shrink-0">REQ DEPT</span><span className="shrink-0">:</span><span className="truncate">{deptLabel((pr as any).department)}</span></div>
+            <div className="col-span-2 flex gap-2"><span className="w-[92px] shrink-0">TARGET DEPT</span><span className="shrink-0">:</span><span className="truncate">{deptLabel((pr as any).toDepartment)}</span></div>
+          </div>
+          <table className="w-full border-collapse text-[11px]">
+            <thead>
+              <tr>
+                <th className="w-[36px] border-2 border-t-0 border-black px-1 py-1 text-center font-bold">No</th>
+                <th className="border-2 border-l-0 border-t-0 border-black px-2 py-1 text-left font-bold">Item Code</th>
+                <th className="w-[110px] border-2 border-l-0 border-t-0 border-black px-1 py-1 text-center font-bold">Required Date</th>
+                <th className="w-[100px] border-2 border-l-0 border-t-0 border-black px-1 py-1 text-center font-bold">QTY Request</th>
+                <th className="w-[64px] border-2 border-l-0 border-t-0 border-black px-1 py-1 text-center font-bold">UOM</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(pr.lines ?? []).map((l: any, idx: number) => {
+                const qty = Number(l.qty || 0);
+                const itemRec = (typeof items !== "undefined" ? (items as any).find((x: any) => x.id === l.itemId) : null) ?? null;
+                const uomRec = (typeof uoms !== "undefined" ? (uoms as any).find((x: any) => x.id === (l.uomId ?? "")) : null) ?? null;
+                const reqDate = (l as any).deliveryDate ?? pr.expectedDate;
+                return (
+                  <tr key={idx}>
+                    <td className="border-2 border-t-0 border-black px-1 py-1 text-center tabular-nums">{idx + 1}</td>
+                    <td className="border-2 border-l-0 border-t-0 border-black px-2 py-1">{itemRec ? `${itemRec.code}: ${itemRec.name}` : l.itemId}</td>
+                    <td className="border-2 border-l-0 border-t-0 border-black px-1 py-1 text-center tabular-nums">{printReqDate(reqDate)}</td>
+                    <td className="border-2 border-l-0 border-t-0 border-black px-1 py-1 text-right tabular-nums">{formatNumber(qty)}</td>
+                    <td className="border-2 border-l-0 border-t-0 border-black px-1 py-1 text-center">{uomRec?.name ?? ""}</td>
+                  </tr>
+                );
+              })}
+              {(pr.lines ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={5} className="border-2 border-t-0 border-black px-2 py-4 text-center">No items.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+          {/* Notes */}
+          <div className="border-2 border-t-0 border-black px-3 py-2 text-[11px]">
+            <div className="flex gap-2">
+              <span className="shrink-0 font-bold">NOTES:</span>
+              <span className="min-h-[28px] whitespace-pre-wrap break-words">{(pr as any).notes?.trim() ? (pr as any).notes : pr.notes?.trim() ? pr.notes : ""}</span>
+            </div>
+          </div>
+          {/* Signatures — dinamis mengikuti approval flow; 1 ttd saja rata kanan */}
+          {(() => {
+            const sigCells = [
+              {
+                key: "created",
+                label: "Created By",
+                sig: (pr as any).preparedSignature ?? null,
+                name: printCreatorName,
+                date: printSlashDate(printCreatorDate),
+              },
+              ...printApprovalSteps.map((st: any, idx: number) => {
+                const isLast = idx === printApprovalSteps.length - 1;
+                const approverName = isLast ? ((pr as any).approvedByName ?? "") : "";
+                const sig = isLast ? (pr as any).approvedSignature : null;
+                const signedRaw = isLast
+                  ? ((pr as any).approvedSignedAt ?? ((pr as any).status === "APPROVED" ? (pr as any).updatedAt : ""))
+                  : "";
+                return {
+                  key: st.id ?? `step-${idx}`,
+                  label: isLast ? "Approved By" : "Checked By",
+                  sig,
+                  name: approverName || st.name || "",
+                  date: printSlashDate(signedRaw),
+                  sub: approverName && st.name ? st.name : "",
+                };
+              }),
+            ];
+            if (sigCells.length === 1) {
+              const only = sigCells[0];
+              return (
+                <div className="mt-3 flex justify-end">
+                  <div className="w-[2.4in] border-2 border-black text-center">
+                    <div className="border-b-2 border-black py-1 text-[11px] font-bold">{only.label}</div>
+                    <div className="flex h-[72px] items-center justify-center px-2">
+                      {only.sig ? <img src={only.sig} alt={`${only.label} signature`} className="max-h-[68px] max-w-full object-contain" /> : null}
+                    </div>
+                    <div className="border-t border-black px-1 pt-1 text-[11px] font-bold">{only.name}</div>
+                    <div className="px-1 pb-1 text-[10px]">{only.date}</div>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="mt-3 grid text-center" style={{ gridTemplateColumns: `repeat(${sigCells.length}, minmax(0, 1fr))` }}>
+                {sigCells.map((c: any) => (
+                  <div key={c.key} className="border-2 border-l-0 border-black first:border-l-2">
+                    <div className="border-b-2 border-black py-1 text-[11px] font-bold">{c.label}</div>
+                    <div className="flex h-[72px] items-center justify-center px-2">
+                      {c.sig ? <img src={c.sig} alt={`${c.label} signature`} className="max-h-[68px] max-w-full object-contain" /> : null}
+                    </div>
+                    <div className="border-t border-black px-1 pt-1 text-[11px] font-bold">{c.name}</div>
+                    <div className="px-1 pb-1 text-[10px]">{[c.date, c.sub].filter(Boolean).join(" | ")}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
+        )}
       </div>
     </>
   );
